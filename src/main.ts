@@ -1,4 +1,4 @@
-import { Editor, MarkdownFileInfo, MarkdownView, Plugin } from "obsidian";
+import { Editor, Plugin } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
 	HistoryLoggingSettings,
@@ -25,14 +25,12 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.addCommand({
 			id: "add-event-at-cursor",
 			name: "Add event to year tag under cursor",
-			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
-				if (ctx instanceof MarkdownView) addEventAtCursor(this, editor, ctx);
-			},
+			editorCallback: (editor: Editor) => addEventAtCursor(this, editor),
 		});
 	}
 
-	openSummary(id: string, tag: string, filePath?: string): void {
-		new SummaryModal(this.app, this, id, tag, filePath).open();
+	openSummary(id: string, tag: string): void {
+		new SummaryModal(this.app, this, id, tag).open();
 	}
 
 	async loadSettings(): Promise<void> {

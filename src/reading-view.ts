@@ -1,4 +1,3 @@
-import { MarkdownPostProcessorContext } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { EV_SYMBOL } from "./constants";
 
@@ -9,7 +8,7 @@ const CLOSE_RE = /^\s*\}/;
 // leaves `{ev <id> ` / ` }` as plain text around it. Fold those away and append
 // a clickable ⌛ symbol, mirroring the Live Preview treatment.
 export function createReadingProcessor(plugin: HistoryLoggingPlugin) {
-	return (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
+	return (el: HTMLElement) => {
 		const anchors = Array.from(el.querySelectorAll("a.tag"));
 		for (const a of anchors) {
 			const tag = a.textContent ?? "";
@@ -36,7 +35,7 @@ export function createReadingProcessor(plugin: HistoryLoggingPlugin) {
 			sym.addEventListener("click", (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				plugin.openSummary(id, tag, ctx.sourcePath);
+				plugin.openSummary(id, tag);
 			});
 			a.after(sym);
 		}

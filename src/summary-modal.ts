@@ -5,14 +5,12 @@ import { jumpToEv } from "./jump";
 // View / edit the markdown summary for a single event, backed by events.md.
 export class SummaryModal extends Modal {
 	private value = "";
-	private loaded = false;
 
 	constructor(
 		app: App,
 		private plugin: HistoryLoggingPlugin,
 		private id: string,
-		private tag: string,
-		private sourcePath?: string
+		private tag: string
 	) {
 		super(app);
 	}
@@ -20,7 +18,6 @@ export class SummaryModal extends Modal {
 	async onOpen(): Promise<void> {
 		const existing = await this.plugin.store.getEvent(this.id);
 		this.value = existing?.summary ?? "";
-		this.loaded = true;
 		this.render();
 	}
 
@@ -48,9 +45,6 @@ export class SummaryModal extends Modal {
 					await this.plugin.store.upsertEvent({
 						id: this.id,
 						tag: this.tag,
-						source: this.sourcePath
-							? `[[${this.sourcePath.replace(/\.md$/, "")}]]`
-							: undefined,
 						summary: this.value,
 					});
 					new Notice("Summary saved");

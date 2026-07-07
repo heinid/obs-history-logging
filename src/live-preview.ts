@@ -7,30 +7,16 @@ import {
 	WidgetType,
 } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
-import { MarkdownView } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { evRegex } from "./parser";
 import { EV_SYMBOL } from "./constants";
-
-function getFilePath(view: EditorView, plugin: HistoryLoggingPlugin): string {
-	let found = "";
-	plugin.app.workspace.iterateAllLeaves((leaf) => {
-		const mdView = leaf.view;
-		if (mdView instanceof MarkdownView) {
-			// @ts-ignore — Obsidian internal handle to the CM instance
-			if (mdView.editor?.cm === view) found = mdView.file?.path ?? "";
-		}
-	});
-	return found || (plugin.app.workspace.getActiveFile()?.path ?? "");
-}
 
 // The clickable ⌛ marker shown in place of the `{ev ... }` closing syntax.
 class EvSymbolWidget extends WidgetType {
 	constructor(
 		private plugin: HistoryLoggingPlugin,
 		private id: string,
-		private tag: string,
-		private filePath: string
+		private tag: string
 	) {
 		super();
 	}
@@ -43,7 +29,7 @@ class EvSymbolWidget extends WidgetType {
 		span.addEventListener("mousedown", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			this.plugin.openSummary(this.id, this.tag, this.filePath);
+			this.plugin.openSummary(this.id, this.tag);
 		});
 		return span;
 	}
@@ -62,7 +48,6 @@ function buildDecorations(
 	plugin: HistoryLoggingPlugin
 ): DecorationSet {
 	const builder = new RangeSetBuilder<Decoration>();
-	const filePath = getFilePath(view, plugin);
 	const sel = view.state.selection.ranges;
 
 	for (const { from, to } of view.visibleRanges) {
@@ -90,7 +75,7 @@ function buildDecorations(
 				tagEnd,
 				matchEnd,
 				Decoration.replace({
-					widget: new EvSymbolWidget(plugin, id, tag, filePath),
+					widget: new EvSymbolWidget(plugin, id, tag),
 				})
 			);
 		}

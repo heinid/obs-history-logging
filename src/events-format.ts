@@ -16,7 +16,7 @@ import { EventEntry } from "./types";
 
 export const EVENTS_HEADER = "# History Logging — events";
 
-const META_KEYS = new Set(["tag", "source", "updated"]);
+const META_KEYS = new Set(["tag", "updated"]);
 
 export function parseEventsFile(content: string): Map<string, EventEntry> {
 	const map = new Map<string, EventEntry>();
@@ -53,7 +53,7 @@ function parseEntryBlock(id: string, block: string): EventEntry {
 		}
 		const kv = /^(\w+):\s*(.*)$/.exec(line);
 		if (kv && META_KEYS.has(kv[1])) {
-			const key = kv[1] as "tag" | "source" | "updated";
+			const key = kv[1] as "tag" | "updated";
 			const val = kv[2].trim();
 			if (val) entry[key] = val;
 		} else {
@@ -74,7 +74,6 @@ export function serializeEventsFile(entries: Map<string, EventEntry>): string {
 		if (!e) continue;
 		parts.push(`## ${id}`);
 		if (e.tag) parts.push(`tag: ${e.tag}`);
-		if (e.source) parts.push(`source: ${e.source}`);
 		if (e.updated) parts.push(`updated: ${e.updated}`);
 		parts.push("");
 		parts.push(e.summary.trim());

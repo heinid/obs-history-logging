@@ -74,13 +74,12 @@ eq("unwrap", unwrapEv("x {ev k7f3a9x1 #ad/07/1/0 } y", "k7f3a9x1"), "x #ad/07/1/
 // events-format round-trip
 const m = new Map<string, EventEntry>();
 m.set("k7f3a9x1", {
-	id: "k7f3a9x1", tag: "#ad/07/1/0", source: "[[Note]]", updated: "2026-07-07",
+	id: "k7f3a9x1", tag: "#ad/07/1/0", updated: "2026-07-07",
 	summary: "奈良时代定都平城京。\n\n第二段。",
 });
 const ser = serializeEventsFile(m);
 const round = parseEventsFile(ser);
 eq("roundtrip tag", round.get("k7f3a9x1")?.tag, "#ad/07/1/0");
-eq("roundtrip source", round.get("k7f3a9x1")?.source, "[[Note]]");
 eq("roundtrip summary", round.get("k7f3a9x1")?.summary, "奈良时代定都平城京。\n\n第二段。");
 
 if (failures > 0) {

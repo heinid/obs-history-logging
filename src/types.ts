@@ -30,11 +30,9 @@ export interface EvMark {
 // One event record persisted in `events.md`, keyed by its `ev` id.
 export interface EventEntry {
 	id: string;
-	// Cached year tag the event is attached to (informational; the note is
-	// the source of truth for the actual inline tag).
+	// Human-readable label of the year tag this event is attached to. Purely
+	// for readability of events.md; the note's inline tag is authoritative.
 	tag?: string;
-	// Optional backlink used to speed up jump-to-source.
-	source?: string;
 	// ISO date the entry was last written.
 	updated?: string;
 	// Markdown summary / narrative body.

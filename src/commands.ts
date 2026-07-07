@@ -1,4 +1,4 @@
-import { Editor, MarkdownView, Notice } from "obsidian";
+import { Editor, Notice } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { generateId } from "./id";
 import { evIdsIn } from "./parser";
@@ -25,8 +25,7 @@ function tagAtCursor(
 // summary editor for the new event.
 export async function addEventAtCursor(
 	plugin: HistoryLoggingPlugin,
-	editor: Editor,
-	view: MarkdownView
+	editor: Editor
 ): Promise<void> {
 	const cursor = editor.getCursor();
 	const line = editor.getLine(cursor.line);
@@ -41,7 +40,7 @@ export async function addEventAtCursor(
 	if (/\{ev\s+[0-9a-z]{8}\s+$/.test(before)) {
 		const idMatch = /\{ev\s+([0-9a-z]{8})\s+$/.exec(before);
 		if (idMatch) {
-			plugin.openSummary(idMatch[1], hit.tag, view.file?.path);
+			plugin.openSummary(idMatch[1], hit.tag);
 			return;
 		}
 	}
@@ -55,5 +54,5 @@ export async function addEventAtCursor(
 		{ line: cursor.line, ch: hit.to }
 	);
 
-	plugin.openSummary(id, hit.tag, view.file?.path);
+	plugin.openSummary(id, hit.tag);
 }
