@@ -47,6 +47,12 @@ export function wrapTagAt(
 	return content.slice(0, start) + wrapped + content.slice(end);
 }
 
+// Strip every `{ev <id> #tag }` wrapper down to its bare `#tag`, for rendering
+// note text in the timeline without the raw event syntax showing.
+export function stripEvMarkers(text: string): string {
+	return text.replace(evRegex(), "$2");
+}
+
 // Remove the ev wrapper for a given id, leaving the bare tag behind.
 export function unwrapEv(content: string, id: string): string {
 	const re = new RegExp(

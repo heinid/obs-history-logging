@@ -76,6 +76,13 @@
 .hl-summary > :first-child {
 	margin-top: 0;
 }
+.hl-summary > :last-child {
+	margin-bottom: 0;
+}
+/* Rendered straight from the note (no written summary yet). */
+.hl-from-note {
+	color: var(--text-muted);
+}
 .hl-snippet {
 	color: var(--text-muted);
 	font-size: 0.9em;

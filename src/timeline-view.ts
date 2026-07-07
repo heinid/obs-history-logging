@@ -135,22 +135,14 @@ export class TimelineView extends ItemView {
 		head.createSpan({ cls: "hl-file", text: entry.fileName });
 
 		const body = card.createDiv({ cls: "hl-card-body" });
-		if (entry.summary && entry.summary.trim()) {
-			const md = body.createDiv({ cls: "hl-summary hl-clamp" });
-			MarkdownRenderer.render(
-				this.app,
-				entry.summary,
-				md,
-				entry.filePath,
-				this.plugin
-			);
-			md.addEventListener("click", (e) => {
-				if ((e.target as HTMLElement).tagName === "A") return;
-				md.toggleClass("hl-clamp", !md.hasClass("hl-clamp"));
-			});
-		} else {
-			body.createDiv({ cls: "hl-snippet", text: entry.snippet });
-		}
+		const source = entry.summary?.trim() ? entry.summary : entry.block;
+		const md = body.createDiv({ cls: "hl-summary hl-clamp" });
+		if (!entry.summary?.trim()) md.addClass("hl-from-note");
+		MarkdownRenderer.render(this.app, source, md, entry.filePath, this.plugin);
+		md.addEventListener("click", (e) => {
+			if ((e.target as HTMLElement).tagName === "A") return;
+			md.toggleClass("hl-clamp", !md.hasClass("hl-clamp"));
+		});
 
 		card.addEventListener("click", (e) => {
 			// Let links and the expandable summary handle their own clicks.

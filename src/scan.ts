@@ -1,7 +1,7 @@
 import { App, TFile } from "obsidian";
 import { DecodedYear } from "./types";
 import { parseYearTag, yearTagRegex } from "./year-tag";
-import { parseEvMarks } from "./parser";
+import { parseEvMarks, stripEvMarkers } from "./parser";
 import { DataStore } from "./data-store";
 
 // One occurrence of a year tag in the vault, decoded and enriched with its
@@ -16,7 +16,8 @@ export interface TimelineEntry {
 	decoded: DecodedYear;
 	evId?: string;
 	summary?: string;
-	snippet: string; // trimmed source line for context
+	snippet: string; // trimmed source line, for search haystack
+	block: string; // the surrounding paragraph, markdown-rendered in cards
 }
 
 function lineOf(content: string, index: number): number {
@@ -32,6 +33,28 @@ function lineTextAt(content: string, index: number): string {
 	let end = content.indexOf("\n", index);
 	if (end === -1) end = content.length;
 	return content.slice(start, end).trim();
+}
+
+// The whole paragraph (contiguous non-blank lines) around `index`, so the card
+// can render list items / multi-line markdown, not just the tag's own line.
+function blockTextAt(content: string, index: number): string {
+	const lines = content.split("\n");
+	let pos = 0;
+	let cur = 0;
+	for (let i = 0; i < lines.length; i++) {
+		const lineEnd = pos + lines[i].length;
+		if (index <= lineEnd) {
+			cur = i;
+			break;
+		}
+		pos = lineEnd + 1;
+	}
+	let start = cur;
+	while (start > 0 && lines[start - 1].trim() !== "" && !/^#{1,6}\s/.test(lines[start - 1]))
+		start--;
+	let end = cur;
+	while (end + 1 < lines.length && lines[end + 1].trim() !== "") end++;
+	return lines.slice(start, end + 1).join("\n").trim();
 }
 
 // Scan every markdown file (excluding the data folder) for year tags.
@@ -73,6 +96,7 @@ export async function scanVault(
 				evId,
 				summary: evId ? events.get(evId)?.summary : undefined,
 				snippet: lineTextAt(content, m.index),
+				block: stripEvMarkers(blockTextAt(content, m.index)),
 			});
 		}
 	}
