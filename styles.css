@@ -1,0 +1,20 @@
+/* Inline ⌛ event marker (Live Preview + reading mode) */
+.hl-ev-symbol {
+	cursor: pointer;
+	margin-left: 0.15em;
+	opacity: 0.75;
+	font-size: 0.9em;
+	user-select: none;
+}
+.hl-ev-symbol:hover {
+	opacity: 1;
+}
+
+/* Summary editor modal */
+.hl-summary-modal .hl-summary-textarea {
+	width: 100%;
+	min-height: 12em;
+	resize: vertical;
+	font-family: var(--font-text);
+	line-height: 1.5;
+}
