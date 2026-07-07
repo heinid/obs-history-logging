@@ -74,6 +74,25 @@ export function encodeYearTag(era: Era, magnitude: number): string {
 	return `#${era}/${head}/${tens}/${ones}`;
 }
 
+// Human-readable label for a decoded year, e.g. "710", "710 BC", "710s",
+// "8th c. AD". Used by the timeline view.
+export function describeYear(d: DecodedYear): string {
+	const suffix = d.era === "bc" ? " BC" : "";
+	if (d.precision === "year") return `${d.magnitude}${suffix}`;
+	if (d.precision === "decade") return `${d.magnitude}s${suffix}`;
+	// century: magnitude is the bucket start (e.g. 700 -> 8th century)
+	const century = Math.floor(d.magnitude / 100) + 1;
+	const ord =
+		century % 10 === 1 && century % 100 !== 11
+			? "st"
+			: century % 10 === 2 && century % 100 !== 12
+			? "nd"
+			: century % 10 === 3 && century % 100 !== 13
+			? "rd"
+			: "th";
+	return `${century}${ord} c.${suffix || " AD"}`;
+}
+
 // Truncate a year tag to a coarser bucket (for "same decade / century" search).
 export function truncateTag(tag: string, level: Precision): string | null {
 	const m = TAG_RE.exec(tag.trim());

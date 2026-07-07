@@ -16,6 +16,16 @@ export async function jumpToEv(app: App, id: string): Promise<boolean> {
 	return false;
 }
 
+// Open a specific file at a char offset (used by the timeline view).
+export async function jumpToLocation(
+	app: App,
+	filePath: string,
+	offset: number
+): Promise<void> {
+	const file = app.vault.getAbstractFileByPath(filePath);
+	if (file instanceof TFile) await openAt(app, file, offset);
+}
+
 async function openAt(app: App, file: TFile, offset: number): Promise<void> {
 	const leaf = app.workspace.getLeaf(false);
 	await leaf.openFile(file);

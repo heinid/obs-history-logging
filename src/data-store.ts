@@ -1,6 +1,12 @@
 import { App, TFile, normalizePath } from "obsidian";
 import { EventEntry } from "./types";
 import { parseEventsFile, serializeEventsFile } from "./events-format";
+import {
+	DEFAULT_PROFILE,
+	Profile,
+	parseProfilesFile,
+	serializeProfilesFile,
+} from "./profiles";
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
@@ -54,5 +60,24 @@ export class DataStore {
 	async removeEvent(id: string): Promise<void> {
 		const entries = await this.readEvents();
 		if (entries.delete(id)) await this.writeEvents(entries);
+	}
+
+	private profilesPath(): string {
+		return normalizePath(`${this.getFolder()}/profiles.md`);
+	}
+
+	async readProfiles(): Promise<Profile[]> {
+		const file = this.app.vault.getAbstractFileByPath(this.profilesPath());
+		if (!(file instanceof TFile)) return [DEFAULT_PROFILE];
+		return parseProfilesFile(await this.app.vault.read(file));
+	}
+
+	async writeProfiles(profiles: Profile[]): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeProfilesFile(profiles);
+		const path = this.profilesPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
 	}
 }
