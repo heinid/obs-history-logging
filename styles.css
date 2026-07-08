@@ -30,9 +30,133 @@
 	background: var(--background-primary);
 	z-index: 1;
 }
-.hl-timeline-search {
+.hl-bar-row {
+	display: flex;
+	width: 100%;
+	gap: 6px;
+	align-items: center;
+	min-width: 0;
+}
+/* Query builder: committed chips + a free-text draft in one box. */
+.hl-filter-box {
 	flex: 1;
 	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+	padding: 3px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-secondary);
+	cursor: text;
+}
+.hl-filter-box:focus-within {
+	border-color: var(--interactive-accent);
+}
+.hl-filter-icon {
+	display: inline-flex;
+	color: var(--text-faint);
+}
+.hl-filter-icon svg {
+	width: 0.9em;
+	height: 0.9em;
+}
+.hl-chips {
+	display: contents;
+}
+.hl-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 1px 6px;
+	border-radius: 1em;
+	background: var(--background-modifier-hover);
+	font-size: 0.85em;
+	white-space: nowrap;
+}
+.hl-chip-x {
+	display: inline-flex;
+	color: var(--text-faint);
+	cursor: pointer;
+}
+.hl-chip-x:hover {
+	color: var(--text-normal);
+}
+.hl-chip-x svg {
+	width: 0.8em;
+	height: 0.8em;
+}
+.hl-filter-input {
+	flex: 1;
+	min-width: 8em;
+	border: none;
+	background: transparent;
+	box-shadow: none;
+	padding: 2px 0;
+}
+.hl-filter-input:focus {
+	box-shadow: none;
+}
+.hl-count {
+	color: var(--text-faint);
+	font-size: 0.8em;
+	white-space: nowrap;
+}
+/* Era-system lens + fallback grouping: labelled, visually apart from the
+   filter — the lens renames the axis's segments, it never filters. */
+.hl-lens {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.hl-lens-icon {
+	display: inline-flex;
+	color: var(--text-faint);
+}
+.hl-lens-icon svg {
+	width: 0.9em;
+	height: 0.9em;
+}
+.hl-lens-label {
+	color: var(--text-faint);
+	font-size: 0.8em;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.hl-lens-select {
+	font-size: 0.9em;
+}
+.hl-bar-spacer {
+	flex: 1;
+}
+/* Saved-view menu button: bookmark + name + dirty dot. */
+.hl-view-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 8px;
+	font-size: 0.9em;
+	max-width: 16em;
+}
+.hl-view-icon,
+.hl-view-caret {
+	display: inline-flex;
+	color: var(--text-faint);
+}
+.hl-view-icon svg,
+.hl-view-caret svg {
+	width: 0.85em;
+	height: 0.85em;
+}
+.hl-view-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hl-view-dirty {
+	color: var(--interactive-accent);
+	font-weight: 700;
 }
 .hl-icon-btn {
 	padding: 4px 6px;

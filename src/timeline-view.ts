@@ -3,6 +3,7 @@ import {
 	ItemView,
 	MarkdownRenderer,
 	Notice,
+	ViewStateResult,
 	WorkspaceLeaf,
 	setIcon,
 } from "obsidian";
@@ -12,6 +13,7 @@ import { describeYear, parseYearTag, truncateTag } from "./year-tag";
 import { Profile } from "./profiles";
 import { EraSystem, eraAt } from "./eras";
 import { matchesQuery, parseQuery } from "./query";
+import { FilterBar } from "./filter-bar";
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
 import { stripEvMarkers, stripImages, stripTags } from "./parser";
@@ -23,10 +25,11 @@ export class TimelineView extends ItemView {
 	private entries: TimelineEntry[] = [];
 	private profiles: Profile[] = [];
 	private eraSystems: EraSystem[] = [];
-	private activeSystem = ""; // era-system lens name; "" = none (century fallback)
-	private activeProfile = 0;
-	private query = "";
-	private listEl!: HTMLElement;
+	// The bar IS the pane's definition: filter + lens + saved-view menu.
+	private bar: FilterBar;
+	private restored = false; // state came from the saved workspace layout
+	private initialised = false;
+	private listEl?: HTMLElement;
 	private cardEls = new Map<TimelineEntry, HTMLElement>();
 	// Cards in render order with their year sort keys, for year-aligned sync.
 	private cardIndex: { key: number; el: HTMLElement }[] = [];
@@ -38,6 +41,18 @@ export class TimelineView extends ItemView {
 
 	constructor(leaf: WorkspaceLeaf, private plugin: HistoryLoggingPlugin) {
 		super(leaf);
+		this.bar = new FilterBar(plugin, {
+			getProfiles: () => this.profiles,
+			getEraSystems: () => this.eraSystems,
+			setProfiles: (profiles) => {
+				this.profiles = profiles;
+				void this.plugin.store.writeProfiles(profiles);
+			},
+			onChange: () => {
+				this.renderList();
+				this.app.workspace.requestSaveLayout();
+			},
+		});
 	}
 
 	getViewType(): string {
@@ -54,12 +69,33 @@ export class TimelineView extends ItemView {
 		await this.refresh();
 	}
 
+	// Each pane's whole definition (filter, lens, grouping, loaded view, sync)
+	// persists with the workspace layout, so panes survive restarts as-is.
+	getState(): Record<string, unknown> {
+		return { ...this.bar.getState(), sync: this.syncEnabled };
+	}
+
+	async setState(
+		state: Record<string, unknown>,
+		result: ViewStateResult
+	): Promise<void> {
+		await super.setState(state, result);
+		if (state && typeof state === "object") {
+			if (this.bar.setState(state)) this.restored = true;
+			if (typeof state.sync === "boolean") this.syncEnabled = state.sync;
+			if (this.listEl) this.renderChrome();
+		}
+	}
+
 	// Re-scan the vault and rebuild everything.
 	async refresh(): Promise<void> {
 		this.profiles = await this.plugin.store.readProfiles();
 		this.eraSystems = await this.plugin.store.readEraSystems();
-		if (this.activeProfile >= this.profiles.length) this.activeProfile = 0;
-		this.syncSystemToProfile();
+		if (!this.initialised) {
+			this.initialised = true;
+			if (!this.restored && this.profiles.length)
+				this.bar.loadProfile(this.profiles[0]);
+		}
 		this.entries = await scanVault(
 			this.app,
 			this.plugin.store,
@@ -74,65 +110,27 @@ export class TimelineView extends ItemView {
 		root.addClass("hl-timeline");
 
 		const bar = root.createDiv({ cls: "hl-timeline-bar" });
+		this.bar.render(bar, (row) => {
+			const refreshBtn = new ButtonComponent(row);
+			refreshBtn.setTooltip("Rescan vault");
+			refreshBtn.buttonEl.addClass("hl-icon-btn");
+			setIcon(refreshBtn.buttonEl, "refresh-cw");
+			refreshBtn.onClick(() => this.refresh());
 
-		const profileSel = bar.createEl("select", { cls: "hl-profile-select" });
-		this.profiles.forEach((p, i) => {
-			profileSel.createEl("option", { text: p.name, value: String(i) });
-		});
-		profileSel.value = String(this.activeProfile);
-		profileSel.addEventListener("change", () => {
-			this.activeProfile = Number(profileSel.value);
-			this.syncSystemToProfile();
-			systemSel.value = this.activeSystem;
-			this.renderList();
-		});
-
-		// Era-system lens: renames the axis's segments (pure grouping, no filter).
-		const systemSel = bar.createEl("select", { cls: "hl-system-select" });
-		systemSel.createEl("option", { text: "No era system", value: "" });
-		this.eraSystems.forEach((s) => {
-			systemSel.createEl("option", { text: s.name, value: s.name });
-		});
-		systemSel.value = this.activeSystem;
-		systemSel.addEventListener("change", () => {
-			this.activeSystem = systemSel.value;
-			this.renderList();
-		});
-
-		const manageBtn = new ButtonComponent(bar);
-		manageBtn.setTooltip("Manage era systems");
-		manageBtn.buttonEl.addClass("hl-icon-btn");
-		setIcon(manageBtn.buttonEl, "settings-2");
-		manageBtn.onClick(() => void this.plugin.openEraManager());
-
-		const search = bar.createEl("input", {
-			cls: "hl-timeline-search",
-			attr: { type: "text", placeholder: 'Search  (AND / OR / -not / "phrase")' },
-		});
-		search.value = this.query;
-		search.addEventListener("input", () => {
-			this.query = search.value;
-			this.renderList();
-		});
-
-		const refreshBtn = new ButtonComponent(bar);
-		refreshBtn.setTooltip("Rescan vault");
-		refreshBtn.buttonEl.addClass("hl-icon-btn");
-		setIcon(refreshBtn.buttonEl, "refresh-cw");
-		refreshBtn.onClick(() => this.refresh());
-
-		// Year-sync toggle: linked panes scroll together, aligned by year.
-		const syncBtn = new ButtonComponent(bar);
-		syncBtn.setTooltip("Sync scrolling with other timelines (align by year)");
-		syncBtn.buttonEl.addClass("hl-icon-btn");
-		const paintSync = () => {
-			setIcon(syncBtn.buttonEl, this.syncEnabled ? "link" : "unlink");
-			syncBtn.buttonEl.toggleClass("hl-sync-on", this.syncEnabled);
-		};
-		paintSync();
-		syncBtn.onClick(() => {
-			this.syncEnabled = !this.syncEnabled;
+			// Year-sync toggle: linked panes scroll together, aligned by year.
+			const syncBtn = new ButtonComponent(row);
+			syncBtn.setTooltip("Sync scrolling with other timelines (align by year)");
+			syncBtn.buttonEl.addClass("hl-icon-btn");
+			const paintSync = () => {
+				setIcon(syncBtn.buttonEl, this.syncEnabled ? "link" : "unlink");
+				syncBtn.buttonEl.toggleClass("hl-sync-on", this.syncEnabled);
+			};
 			paintSync();
+			syncBtn.onClick(() => {
+				this.syncEnabled = !this.syncEnabled;
+				paintSync();
+				this.app.workspace.requestSaveLayout();
+			});
 		});
 
 		this.listEl = root.createDiv({ cls: "hl-timeline-list" });
@@ -142,32 +140,31 @@ export class TimelineView extends ItemView {
 
 	private renderList(): void {
 		const list = this.listEl;
+		if (!list) return;
 		list.empty();
 		this.cardEls.clear();
 		this.cardIndex = [];
 
-		const profile = this.profiles[this.activeProfile];
-		const basePq = parseQuery(profile.match);
-		const userPq = parseQuery(this.query);
-
+		const pq = parseQuery(this.bar.query());
 		const visible = this.entries.filter((e) => {
 			const hay = `${e.tag} ${e.snippet} ${e.summary ?? ""}`.toLowerCase();
-			return matchesQuery(hay, basePq) && matchesQuery(hay, userPq);
+			return matchesQuery(hay, pq);
 		});
+		this.bar.setCount(visible.length, this.entries.length);
 
 		if (visible.length === 0) {
 			list.createDiv({ cls: "hl-empty", text: "No dated notes match." });
 			return;
 		}
 
-		const system = this.activeSystem
-			? this.eraSystems.find((s) => s.name === this.activeSystem) ?? null
+		const system = this.bar.lens
+			? this.eraSystems.find((s) => s.name === this.bar.lens) ?? null
 			: null;
-		const grouped = !!system || profile.groupBy !== "none";
+		const grouped = !!system || this.bar.groupBy !== "none";
 
 		let lastGroup: string | null = null;
 		for (const entry of visible) {
-			const { label, sub } = this.groupLabel(entry, profile, system);
+			const { label, sub } = this.groupLabel(entry, system);
 			if (grouped && label !== lastGroup) {
 				const h = list.createEl("h3", { cls: "hl-group" });
 				h.createSpan({ text: label });
@@ -178,15 +175,8 @@ export class TimelineView extends ItemView {
 		}
 	}
 
-	// Resolve the active era-system to the profile's default, if it still exists.
-	private syncSystemToProfile(): void {
-		const want = this.profiles[this.activeProfile]?.eraSystem ?? "";
-		this.activeSystem = this.eraSystems.some((s) => s.name === want) ? want : "";
-	}
-
 	private groupLabel(
 		entry: TimelineEntry,
-		profile: Profile,
 		system: EraSystem | null
 	): { label: string; sub: string } {
 		if (system) {
@@ -195,8 +185,8 @@ export class TimelineView extends ItemView {
 			if (hit) return { label: hit.name, sub: hit.range };
 			return { label: describeYear(entry.decoded), sub: "" };
 		}
-		if (profile.groupBy === "none") return { label: "", sub: "" };
-		const truncated = truncateTag(entry.tag, profile.groupBy) ?? entry.tag;
+		if (this.bar.groupBy === "none") return { label: "", sub: "" };
+		const truncated = truncateTag(entry.tag, this.bar.groupBy) ?? entry.tag;
 		const gd = parseYearTag(truncated) ?? entry.decoded;
 		return { label: describeYear(gd), sub: "" };
 	}

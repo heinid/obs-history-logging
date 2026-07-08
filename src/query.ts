@@ -17,7 +17,7 @@ export interface ParsedQuery {
 	groups: ParsedGroup[];
 }
 
-function tokenise(raw: string): string[] {
+export function tokenise(raw: string): string[] {
 	const tokens: string[] = [];
 	let i = 0;
 	while (i < raw.length) {

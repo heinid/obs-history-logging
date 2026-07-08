@@ -75,15 +75,33 @@ editable boundary table, plus one-click import of bundled templates. A profile
 can set `eraSystem: <name>` as its default lens; anything a system doesn't cover
 falls back to its century heading.
 
+## Filter, lens, views
+
+The timeline's top bar is the pane's whole definition, in reading order:
+
+- **Filter** — a query builder: type terms (keywords / tags / `OR` / `-not` /
+  `"phrase"`) and press Enter to commit them as removable chips; the input's
+  text also filters live. What you see in the box is exactly what filters the
+  list — there is no hidden second layer.
+- **Lens** — the era-system dropdown, visually separate because it never
+  filters: it only renames the axis's segments. A **Group** dropdown picks the
+  fallback granularity (century / decade / none) where no lens applies.
+- **View** — a profile is a saved snapshot of the current filter + lens +
+  grouping. Load one from the bookmark menu, tweak anything (a dot marks
+  unsaved changes), then *Update*, *Save as new view…* or *Delete*. Views are
+  stored in `_chronology/profiles.md` (plain text, hand-editable).
+
+Each pane's state (filter, lens, grouping, loaded view, year-sync) persists
+with the Obsidian workspace layout.
+
 ## Tracks
 
-There are no preset tracks. A timeline is simply the result of a profile's
-free-form filter (keywords / tags / AND / OR / -not) combined with an
-era-system lens. `#histolog/<name>` is just an ordinary tag you can write —
-including inside ev markers, any number of them:
-`{ev k7f3a9x1 #ad/04/7/6 #histolog/ローマ史 #histolog/ヨーロッパ史 }` — and
-then filter on (`#histolog/日本史` in a profile's `match` or the search box),
-exactly like any other keyword.
+There are no preset tracks. A timeline is simply the result of a pane's
+free-form filter combined with an era-system lens. `#histolog/<name>` is just
+an ordinary tag you can write — including inside ev markers, any number of
+them: `{ev k7f3a9x1 #ad/04/7/6 #histolog/ローマ史 #histolog/ヨーロッパ史 }` —
+and then filter on (`#histolog/日本史` as a chip or in a saved view), exactly
+like any other keyword.
 
 Parallel comparison falls out naturally: run **Open another timeline (split
 pane)** to open more timelines side by side, give each its own profile filter
