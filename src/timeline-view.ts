@@ -207,8 +207,13 @@ export class TimelineView extends ItemView {
 	private removeTrack(i: number): void {
 		if (this.tracks.length <= 1) return;
 		const label = trackLabel(this.tracks[i], i);
+		if (this.active !== i) this.tracks[this.active] = this.bar.getTrack();
 		this.tracks.splice(i, 1);
-		this.activateTrack(Math.min(this.active > i ? this.active - 1 : this.active, this.tracks.length - 1));
+		if (this.active > i) this.active -= 1;
+		this.active = Math.min(this.active, this.tracks.length - 1);
+		this.bar.loadTrack(this.tracks[this.active]);
+		this.renderChrome();
+		this.app.workspace.requestSaveLayout();
 		new Notice(`Removed track "${label}".`);
 	}
 
