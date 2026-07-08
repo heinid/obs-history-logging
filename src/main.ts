@@ -28,7 +28,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 			(leaf: WorkspaceLeaf) => new TimelineView(leaf, this)
 		);
 		this.addRibbonIcon("history", "Open history timeline", () =>
-			this.activateTimeline()
+			this.activateTimeline("tab")
 		);
 
 		this.addCommand({
@@ -39,7 +39,12 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.addCommand({
 			id: "open-timeline",
 			name: "Open history timeline",
-			callback: () => this.activateTimeline(),
+			callback: () => this.activateTimeline("tab"),
+		});
+		this.addCommand({
+			id: "open-timeline-sidebar",
+			name: "Open history timeline in sidebar",
+			callback: () => this.activateTimeline("sidebar"),
 		});
 	}
 
@@ -47,14 +52,21 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.app.workspace.detachLeavesOfType(TIMELINE_VIEW_TYPE);
 	}
 
-	async activateTimeline(): Promise<void> {
+	// Open the timeline either as a full main-pane tab (default) or a narrow
+	// sidebar quick-peek. Reuses an existing leaf of the same kind if present.
+	async activateTimeline(where: "tab" | "sidebar" = "tab"): Promise<void> {
 		const { workspace } = this.app;
-		const existing = workspace.getLeavesOfType(TIMELINE_VIEW_TYPE);
-		if (existing.length > 0) {
-			workspace.revealLeaf(existing[0]);
+		const wantSidebar = where === "sidebar";
+		const existing = workspace
+			.getLeavesOfType(TIMELINE_VIEW_TYPE)
+			.find((l) => (l.getRoot() === workspace.rightSplit) === wantSidebar);
+		if (existing) {
+			workspace.revealLeaf(existing);
 			return;
 		}
-		const leaf = workspace.getRightLeaf(false);
+		const leaf = wantSidebar
+			? workspace.getRightLeaf(false)
+			: workspace.getLeaf("tab");
 		if (!leaf) return;
 		await leaf.setViewState({ type: TIMELINE_VIEW_TYPE, active: true });
 		workspace.revealLeaf(leaf);
