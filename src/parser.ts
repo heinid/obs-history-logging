@@ -1,14 +1,24 @@
 // Parse and manipulate the inline `{ev <id> #tag }` event syntax.
 //
 //   {ev k7f3a9x1 #ad/07/1/0 }
+//   {ev k7f3a9x1 #ad/07/1/0 #histolog/日本史 #histolog/仏教史 }
 //
-// Exactly one year tag per marker (one tag, one id). The opening keyword `ev`
-// keeps this grammar disjoint from the annotation plugin's `{;; ... }`.
+// Exactly one year tag per marker (one tag, one id), optionally followed by
+// any number of `#histolog/<track>` tags binding the event to tracks. The
+// opening keyword `ev` keeps this grammar disjoint from the annotation
+// plugin's `{;; ... }`.
 
 import { EvMark } from "./types";
 import { YEAR_TAG_SRC } from "./year-tag";
+import { tracksIn } from "./tracks";
 
-const EV_SRC = String.raw`\{ev\s+([0-9a-z]{8})\s+(` + YEAR_TAG_SRC + String.raw`)\s*\}`;
+const TRACKS_SRC = String.raw`((?:\s+#histolog\/[^\s#]+)*)`;
+const EV_SRC =
+	String.raw`\{ev\s+([0-9a-z]{8})\s+(` +
+	YEAR_TAG_SRC +
+	String.raw`)` +
+	TRACKS_SRC +
+	String.raw`\s*\}`;
 
 export function evRegex(): RegExp {
 	return new RegExp(EV_SRC, "g");
@@ -19,7 +29,13 @@ export function parseEvMarks(content: string): EvMark[] {
 	const out: EvMark[] = [];
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(content)) !== null) {
-		out.push({ id: m[1], tag: m[2], fullMatch: m[0], index: m.index });
+		out.push({
+			id: m[1],
+			tag: m[2],
+			tracks: tracksIn(m[3] ?? ""),
+			fullMatch: m[0],
+			index: m.index,
+		});
 	}
 	return out;
 }
@@ -47,10 +63,10 @@ export function wrapTagAt(
 	return content.slice(0, start) + wrapped + content.slice(end);
 }
 
-// Strip every `{ev <id> #tag }` wrapper down to its bare `#tag`, for rendering
+// Strip every `{ev <id> #tag }` wrapper down to its bare tags, for rendering
 // note text in the timeline without the raw event syntax showing.
 export function stripEvMarkers(text: string): string {
-	return text.replace(evRegex(), "$2");
+	return text.replace(evRegex(), "$2$3");
 }
 
 // Remove image embeds / links so a single-line card preview stays textual
@@ -68,10 +84,16 @@ export function stripTags(text: string): string {
 	return text.replace(/(^|\s)#[^\s#]+/g, "$1");
 }
 
-// Remove the ev wrapper for a given id, leaving the bare tag behind.
+// Remove the ev wrapper for a given id, leaving the bare tags behind.
 export function unwrapEv(content: string, id: string): string {
 	const re = new RegExp(
-		String.raw`\{ev\s+` + id + String.raw`\s+(` + YEAR_TAG_SRC + String.raw`)\s*\}`
+		String.raw`\{ev\s+` +
+			id +
+			String.raw`\s+(` +
+			YEAR_TAG_SRC +
+			String.raw`)` +
+			TRACKS_SRC +
+			String.raw`\s*\}`
 	);
-	return content.replace(re, "$1");
+	return content.replace(re, "$1$2");
 }

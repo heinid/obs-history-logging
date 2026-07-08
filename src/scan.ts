@@ -1,5 +1,5 @@
 import { App, TFile } from "obsidian";
-import { DecodedYear } from "./types";
+import { DecodedYear, EvMark } from "./types";
 import { parseYearTag, yearTagRegex } from "./year-tag";
 import { parseEvMarks, stripEvMarkers } from "./parser";
 import { dedupe, trackMatches, tracksIn } from "./tracks";
@@ -114,10 +114,10 @@ export async function scanVault(
 		const content = (await app.vault.cachedRead(file)).replace(/\r\n/g, "\n");
 		const fileTracks = fileTracksOf(content);
 
-		// Map char-offset of an event's inner tag -> its id.
-		const evTagIndex = new Map<number, string>();
+		// Map char-offset of an event's inner tag -> its marker.
+		const evTagIndex = new Map<number, EvMark>();
 		for (const mark of parseEvMarks(content)) {
-			evTagIndex.set(mark.index + mark.fullMatch.indexOf(mark.tag), mark.id);
+			evTagIndex.set(mark.index + mark.fullMatch.indexOf(mark.tag), mark);
 		}
 
 		const re = yearTagRegex();
@@ -125,9 +125,17 @@ export async function scanVault(
 		while ((m = re.exec(content)) !== null) {
 			const decoded = parseYearTag(m[0]);
 			if (!decoded) continue;
-			const evId = evTagIndex.get(m.index);
+			const mark = evTagIndex.get(m.index);
 			const block = blockAt(content, m.index);
 			const blockTracks = tracksIn(block.text);
+			// Track priority: bound inside the ev marker > elsewhere in the
+			// block > the file-wide standalone default.
+			const tracks =
+				mark && mark.tracks.length > 0
+					? mark.tracks
+					: blockTracks.length > 0
+						? blockTracks
+						: fileTracks;
 			entries.push({
 				filePath: file.path,
 				fileName: file.basename,
@@ -135,14 +143,12 @@ export async function scanVault(
 				offset: m.index,
 				tag: m[0],
 				decoded,
-				evId,
-				summary: evId ? events.get(evId)?.summary : undefined,
+				evId: mark?.id,
+				summary: mark ? events.get(mark.id)?.summary : undefined,
 				snippet: lineTextAt(content, m.index),
 				block: stripEvMarkers(block.text),
 				tagOrdinal: tagOrdinal(content, block.start, m.index, m[0]),
-				// A track tag in the block wins; otherwise any track tag elsewhere
-				// in the file applies file-wide.
-				tracks: blockTracks.length > 0 ? blockTracks : fileTracks,
+				tracks,
 			});
 		}
 	}

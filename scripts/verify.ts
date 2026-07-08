@@ -1,5 +1,5 @@
 import { parseYearTag, encodeYearTag, truncateTag } from "../src/year-tag";
-import { parseEvMarks, wrapTagAt, unwrapEv } from "../src/parser";
+import { parseEvMarks, stripEvMarkers, wrapTagAt, unwrapEv } from "../src/parser";
 import { generateId, isValidId } from "../src/id";
 import { parseEventsFile, serializeEventsFile } from "../src/events-format";
 import {
@@ -122,6 +122,22 @@ const eraRound = parseErasFile(serializeErasFile(systems));
 eq("eras roundtrip systems", eraRound.length, 2);
 eq("eras roundtrip boundary", eraRound[1].boundaries[1].name, "平安");
 eq("eras roundtrip label", eraRound[0].boundaries[1].yearLabel, "509 BC");
+
+// ev markers with bound tracks
+const evSrc = "x {ev abcd1234 #ad/04/7/6 #histolog/ローマ史 #histolog/ヨーロッパ史 } y {ev efgh5678 #bc/02/2/1 } z";
+const evMarks = parseEvMarks(evSrc);
+eq("ev tracks bound", evMarks[0].tracks, ["ローマ史", "ヨーロッパ史"]);
+eq("ev tracks none", evMarks[1].tracks, []);
+eq(
+	"stripEvMarkers keeps tracks",
+	stripEvMarkers(evSrc),
+	"x #ad/04/7/6 #histolog/ローマ史 #histolog/ヨーロッパ史 y #bc/02/2/1 z"
+);
+eq(
+	"unwrapEv keeps tracks",
+	unwrapEv(evSrc, "abcd1234"),
+	"x #ad/04/7/6 #histolog/ローマ史 #histolog/ヨーロッパ史 y {ev efgh5678 #bc/02/2/1 } z"
+);
 
 // tracks
 eq("tracksIn", tracksIn("x #histolog/日本史 y #histolog/中国史 #histolog/日本史"), ["日本史", "中国史"]);

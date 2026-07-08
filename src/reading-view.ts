@@ -15,18 +15,45 @@ export function createReadingProcessor(plugin: HistoryLoggingPlugin) {
 			if (!/^#(ad|bc)(\/\d+)+$/.test(tag)) continue;
 
 			const prev = a.previousSibling;
-			const next = a.nextSibling;
 			if (!prev || prev.nodeType !== Node.TEXT_NODE) continue;
+
+			// Bound `#histolog/<track>` tags render as their own anchors between
+			// the year tag and the closing `}` — fold them into the ⌛ too.
+			const fold: ChildNode[] = [];
+			let next = a.nextSibling;
+			while (next) {
+				if (next.nodeType === Node.TEXT_NODE) {
+					const t = next.textContent ?? "";
+					if (CLOSE_RE.test(t)) break;
+					if (t.trim() !== "") {
+						next = null;
+						break;
+					}
+					fold.push(next as ChildNode);
+					next = next.nextSibling;
+				} else if (
+					next instanceof HTMLElement &&
+					next.matches("a.tag") &&
+					(next.textContent ?? "").startsWith("#histolog/")
+				) {
+					fold.push(next as ChildNode);
+					next = next.nextSibling;
+				} else {
+					next = null;
+					break;
+				}
+			}
 			if (!next || next.nodeType !== Node.TEXT_NODE) continue;
 
 			const prevText = prev.textContent ?? "";
 			const nextText = next.textContent ?? "";
 			const open = OPEN_RE.exec(prevText);
-			if (!open || !CLOSE_RE.test(nextText)) continue;
+			if (!open) continue;
 
 			const id = open[1];
 			prev.textContent = prevText.slice(0, open.index);
 			next.textContent = nextText.replace(CLOSE_RE, "");
+			for (const n of fold) n.remove();
 
 			const sym = document.createElement("span");
 			sym.className = "hl-ev-symbol";

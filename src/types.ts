@@ -21,6 +21,8 @@ export interface DecodedYear {
 export interface EvMark {
 	id: string;
 	tag: string;
+	// Track names bound inside the marker (`#histolog/<track>` after the tag).
+	tracks: string[];
 	// The full matched text, e.g. `{ev k7f3a9x1 #ad/07/1/0 }`.
 	fullMatch: string;
 	// Character offset of the match start within the (LF-normalised) content.
