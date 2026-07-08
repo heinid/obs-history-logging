@@ -10,6 +10,7 @@ import { createReadingProcessor } from "./reading-view";
 import { addEventAtCursor } from "./commands";
 import { SummaryModal } from "./summary-modal";
 import { TIMELINE_VIEW_TYPE, TimelineView } from "./timeline-view";
+import { ERA_MANAGER_VIEW_TYPE, EraManagerView } from "./era-manager-view";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
@@ -26,6 +27,10 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.registerView(
 			TIMELINE_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new TimelineView(leaf, this)
+		);
+		this.registerView(
+			ERA_MANAGER_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new EraManagerView(leaf, this)
 		);
 		this.addRibbonIcon("history", "Open history timeline", () =>
 			this.activateTimeline("tab")
@@ -46,10 +51,16 @@ export default class HistoryLoggingPlugin extends Plugin {
 			name: "Open history timeline in sidebar",
 			callback: () => this.activateTimeline("sidebar"),
 		});
+		this.addCommand({
+			id: "manage-era-systems",
+			name: "Manage era systems",
+			callback: () => void this.openEraManager(),
+		});
 	}
 
 	onunload(): void {
 		this.app.workspace.detachLeavesOfType(TIMELINE_VIEW_TYPE);
+		this.app.workspace.detachLeavesOfType(ERA_MANAGER_VIEW_TYPE);
 	}
 
 	// Open the timeline either as a full main-pane tab (default) or a narrow
@@ -70,6 +81,27 @@ export default class HistoryLoggingPlugin extends Plugin {
 		if (!leaf) return;
 		await leaf.setViewState({ type: TIMELINE_VIEW_TYPE, active: true });
 		workspace.revealLeaf(leaf);
+	}
+
+	// Open the era-system manager as a main-pane tab (reuse if already open).
+	async openEraManager(): Promise<void> {
+		const { workspace } = this.app;
+		const existing = workspace.getLeavesOfType(ERA_MANAGER_VIEW_TYPE)[0];
+		if (existing) {
+			workspace.revealLeaf(existing);
+			return;
+		}
+		const leaf = workspace.getLeaf("tab");
+		await leaf.setViewState({ type: ERA_MANAGER_VIEW_TYPE, active: true });
+		workspace.revealLeaf(leaf);
+	}
+
+	// Rescan every open timeline so era-system edits show up immediately.
+	async refreshTimelines(): Promise<void> {
+		for (const leaf of this.app.workspace.getLeavesOfType(TIMELINE_VIEW_TYPE)) {
+			const view = leaf.view;
+			if (view instanceof TimelineView) await view.refresh();
+		}
 	}
 
 	openSummary(id: string, tag: string, onSaved?: () => void): void {

@@ -21,6 +21,7 @@
 }
 .hl-timeline-bar {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 6px;
 	align-items: center;
 	padding: 6px 4px 10px;
@@ -187,6 +188,115 @@
 	100% {
 		background-color: transparent;
 	}
+}
+
+/* Era-system manager view */
+.hl-eramgr {
+	display: flex;
+	gap: 16px;
+	height: 100%;
+	overflow: hidden;
+}
+.hl-eramgr-sidebar {
+	flex: 0 0 200px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	overflow-y: auto;
+	border-right: 1px solid var(--background-modifier-border);
+	padding-right: 12px;
+}
+.hl-eramgr-title {
+	font-weight: 600;
+	color: var(--text-muted);
+	font-size: 0.85em;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-bottom: 4px;
+}
+.hl-eramgr-sysrow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 5px 8px;
+	border-radius: 6px;
+	cursor: pointer;
+}
+.hl-eramgr-sysrow:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-eramgr-sysrow.is-active {
+	background: var(--background-modifier-active-hover);
+	font-weight: 600;
+}
+.hl-eramgr-sysname {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hl-eramgr-del {
+	opacity: 0;
+}
+.hl-eramgr-sysrow:hover .hl-eramgr-del {
+	opacity: 0.7;
+}
+.hl-eramgr-add {
+	margin-top: 4px;
+	width: 100%;
+	text-align: left;
+}
+.hl-eramgr-main {
+	flex: 1;
+	min-width: 0;
+	overflow-y: auto;
+	max-width: 40em;
+}
+.hl-eramgr-header {
+	margin-bottom: 12px;
+}
+.hl-eramgr-nameinput {
+	font-size: 1.4em;
+	font-weight: 600;
+	width: 100%;
+	border: none;
+	background: transparent;
+	padding: 2px 0;
+}
+.hl-eramgr-nameinput:focus {
+	border-bottom: 1px solid var(--interactive-accent);
+}
+.hl-eramgr-coverage {
+	color: var(--text-faint);
+	font-size: 0.85em;
+	margin-top: 2px;
+}
+.hl-eramgr-table {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.hl-eramgr-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 0;
+}
+.hl-eramgr-year {
+	flex: 0 0 8em;
+	font-family: var(--font-monospace);
+}
+.hl-eramgr-year.is-invalid {
+	border-color: var(--text-error);
+	color: var(--text-error);
+}
+.hl-eramgr-eraname {
+	flex: 1;
+	min-width: 0;
+}
+.hl-eramgr-addrow {
+	margin-top: 8px;
 }
 
 /* Summary editor modal */

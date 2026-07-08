@@ -9,7 +9,7 @@ import type HistoryLoggingPlugin from "./main";
 import { TimelineEntry, scanVault } from "./scan";
 import { describeYear, parseYearTag, truncateTag } from "./year-tag";
 import { Profile } from "./profiles";
-import { Era, eraFor } from "./eras";
+import { EraSystem, eraAt } from "./eras";
 import { matchesQuery, parseQuery } from "./query";
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
@@ -21,7 +21,8 @@ export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
 export class TimelineView extends ItemView {
 	private entries: TimelineEntry[] = [];
 	private profiles: Profile[] = [];
-	private eras: Era[] = [];
+	private eraSystems: EraSystem[] = [];
+	private activeSystem = ""; // era-system lens name; "" = none (century fallback)
 	private activeProfile = 0;
 	private query = "";
 	private listEl!: HTMLElement;
@@ -47,8 +48,9 @@ export class TimelineView extends ItemView {
 	// Re-scan the vault and rebuild everything.
 	async refresh(): Promise<void> {
 		this.profiles = await this.plugin.store.readProfiles();
-		this.eras = await this.plugin.store.readEras();
+		this.eraSystems = await this.plugin.store.readEraSystems();
 		if (this.activeProfile >= this.profiles.length) this.activeProfile = 0;
+		this.syncSystemToProfile();
 		this.entries = await scanVault(
 			this.app,
 			this.plugin.store,
@@ -71,8 +73,28 @@ export class TimelineView extends ItemView {
 		profileSel.value = String(this.activeProfile);
 		profileSel.addEventListener("change", () => {
 			this.activeProfile = Number(profileSel.value);
+			this.syncSystemToProfile();
+			systemSel.value = this.activeSystem;
 			this.renderList();
 		});
+
+		// Era-system lens: renames the axis's segments (pure grouping, no filter).
+		const systemSel = bar.createEl("select", { cls: "hl-system-select" });
+		systemSel.createEl("option", { text: "No era system", value: "" });
+		this.eraSystems.forEach((s) => {
+			systemSel.createEl("option", { text: s.name, value: s.name });
+		});
+		systemSel.value = this.activeSystem;
+		systemSel.addEventListener("change", () => {
+			this.activeSystem = systemSel.value;
+			this.renderList();
+		});
+
+		const manageBtn = new ButtonComponent(bar);
+		manageBtn.setTooltip("Manage era systems");
+		manageBtn.buttonEl.addClass("hl-icon-btn");
+		setIcon(manageBtn.buttonEl, "settings-2");
+		manageBtn.onClick(() => void this.plugin.openEraManager());
 
 		const search = bar.createEl("input", {
 			cls: "hl-timeline-search",
@@ -112,10 +134,15 @@ export class TimelineView extends ItemView {
 			return;
 		}
 
+		const system = this.activeSystem
+			? this.eraSystems.find((s) => s.name === this.activeSystem) ?? null
+			: null;
+		const grouped = !!system || profile.groupBy !== "none";
+
 		let lastGroup: string | null = null;
 		for (const entry of visible) {
-			const { label, sub } = this.groupLabel(entry, profile);
-			if (profile.groupBy !== "none" && label !== lastGroup) {
+			const { label, sub } = this.groupLabel(entry, profile, system);
+			if (grouped && label !== lastGroup) {
 				const h = list.createEl("h3", { cls: "hl-group" });
 				h.createSpan({ text: label });
 				if (sub) h.createSpan({ cls: "hl-group-range", text: sub });
@@ -125,17 +152,24 @@ export class TimelineView extends ItemView {
 		}
 	}
 
+	// Resolve the active era-system to the profile's default, if it still exists.
+	private syncSystemToProfile(): void {
+		const want = this.profiles[this.activeProfile]?.eraSystem ?? "";
+		this.activeSystem = this.eraSystems.some((s) => s.name === want) ? want : "";
+	}
+
 	private groupLabel(
 		entry: TimelineEntry,
-		profile: Profile
+		profile: Profile,
+		system: EraSystem | null
 	): { label: string; sub: string } {
-		if (profile.groupBy === "none") return { label: "", sub: "" };
-		if (profile.groupBy === "era") {
-			const era = eraFor(this.eras, entry.decoded.sortKey);
-			// Fall back to the century heading for anything outside a named era.
-			if (era) return { label: era.name, sub: era.range };
+		if (system) {
+			const hit = eraAt(system, entry.decoded.sortKey);
+			// Fall back to the century heading for years the system doesn't cover.
+			if (hit) return { label: hit.name, sub: hit.range };
 			return { label: describeYear(entry.decoded), sub: "" };
 		}
+		if (profile.groupBy === "none") return { label: "", sub: "" };
 		const truncated = truncateTag(entry.tag, profile.groupBy) ?? entry.tag;
 		const gd = parseYearTag(truncated) ?? entry.decoded;
 		return { label: describeYear(gd), sub: "" };

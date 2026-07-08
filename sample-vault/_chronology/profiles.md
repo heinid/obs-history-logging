@@ -3,8 +3,13 @@
 ## All
 groupBy: century
 
-## By era
-groupBy: era
+## 日本史 lens
+eraSystem: 日本史
+groupBy: century
+
+## ローマ史 lens
+eraSystem: ローマ史
+groupBy: century
 
 ## AD only (by decade)
 match: #ad

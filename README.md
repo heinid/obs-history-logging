@@ -43,22 +43,37 @@ you add one, the tag is wrapped inline:
 4. Click the ⌛ marker any time to view/edit the summary or jump back to the
    source.
 
-## Named eras
+## Era systems
 
-Optionally group the timeline by named historical spans instead of bare
-centuries. Define them in `_chronology/eras.md`:
+An *era system* is one civilization's complete, sequential chronology (Japan,
+China, Britain, Rome…). Picking a system from the timeline's era dropdown lays
+it over the shared BC/AD axis as a grouping **lens**: it renames the axis's
+segments (e.g. "1st c. BC" → "共和政ローマ"), but it does **not** filter which
+notes are shown — the same year read through the Japanese vs. Roman lens gives
+different context, and cross-domain notes stay visible.
+
+Systems live in `_chronology/eras.md`, one `##` per system. Each line under it
+is a boundary: `<year> <name>`, where the year (bare = AD, or add `BC`) is where
+that era begins; it runs until the next line. A system is therefore a clean
+partition of the axis — no gaps, no overlaps:
 
 ```
-## 共和政ローマ
-range: 509 BC – 27 BC
+## 日本史
+710 奈良時代
+794 平安時代
+1185 鎌倉時代
 
-## 奈良時代
-range: 710 – 794
+## ローマ史
+753 BC 王政ローマ
+509 BC 共和政ローマ
+27 BC ローマ帝国
 ```
 
-Then set a profile's `groupBy: era` in `profiles.md`. Each entry falls into the
-era whose range contains it (overlaps allowed — the narrowest match wins);
-anything outside every era falls back to its century heading.
+Add and edit systems by hand, or open **Manage era systems** (button in the
+timeline bar, or the command palette) for a page with a system list and an
+editable boundary table, plus one-click import of bundled templates. A profile
+can set `eraSystem: <name>` as its default lens; anything a system doesn't cover
+falls back to its century heading.
 
 ## Data & privacy
 

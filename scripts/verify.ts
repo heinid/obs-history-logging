@@ -2,7 +2,13 @@ import { parseYearTag, encodeYearTag, truncateTag } from "../src/year-tag";
 import { parseEvMarks, wrapTagAt, unwrapEv } from "../src/parser";
 import { generateId, isValidId } from "../src/id";
 import { parseEventsFile, serializeEventsFile } from "../src/events-format";
-import { parseAbsYear, parseErasFile, eraFor } from "../src/eras";
+import {
+	parseAbsYear,
+	formatAbsYear,
+	parseErasFile,
+	serializeErasFile,
+	eraAt,
+} from "../src/eras";
 import { EventEntry } from "../src/types";
 
 let failures = 0;
@@ -83,23 +89,38 @@ const round = parseEventsFile(ser);
 eq("roundtrip tag", round.get("k7f3a9x1")?.tag, "#ad/07/1/0");
 eq("roundtrip summary", round.get("k7f3a9x1")?.summary, "奈良时代定都平城京。\n\n第二段。");
 
-// eras
+// era systems
 eq("absyear ad", parseAbsYear("476 AD"), 476);
 eq("absyear bare ad", parseAbsYear("710"), 710);
 eq("absyear bc", parseAbsYear("509 BC"), -509);
 eq("absyear zero rejected", parseAbsYear("0"), null);
-const eras = parseErasFile(
-	"# eras\n## 共和政ローマ\nrange: 509 BC – 27 BC\n## 奈良時代\nrange: 710 – 794\n"
+eq("formatAbsYear ad", formatAbsYear(710), "710");
+eq("formatAbsYear bc", formatAbsYear(-509), "509 BC");
+
+const systems = parseErasFile(
+	"# era systems\n## ローマ史\n753 BC 王政ローマ\n509 BC 共和政ローマ\n27 BC ローマ帝国\n476 西ローマ滅亡後\n\n## 日本史\n710 奈良\n794 平安\n"
 );
-eq("eras parsed", eras.length, 2);
-eq("eras sorted earliest first", eras[0].name, "共和政ローマ");
-eq("era range keys", [eras[0].startKey, eras[0].endKey], [-509, -27]);
-// 500 BC exact -> sortKey -500, inside Republican Rome
-eq("eraFor bc point", eraFor(eras, parseYearTag("#bc/05/0/0")!.sortKey)?.name, "共和政ローマ");
-// 710 AD -> Nara
-eq("eraFor ad point", eraFor(eras, parseYearTag("#ad/07/1/0")!.sortKey)?.name, "奈良時代");
-// 600 AD -> no era
-eq("eraFor gap", eraFor(eras, parseYearTag("#ad/06/0/0")!.sortKey), null);
+eq("systems parsed", systems.length, 2);
+eq("system name", systems[0].name, "ローマ史");
+eq("boundaries sorted earliest first", systems[0].boundaries[0].name, "王政ローマ");
+eq("boundary keys", systems[0].boundaries.map((b) => b.startKey), [-753, -509, -27, 476]);
+
+// 500 BC -> inside 共和政ローマ (509 BC .. 28 BC)
+const rome = systems[0];
+eq("eraAt bc point", eraAt(rome, parseYearTag("#bc/05/0/0")!.sortKey)?.name, "共和政ローマ");
+eq("eraAt bc range", eraAt(rome, -500)?.range, "509 BC – 28 BC");
+// 800 AD -> after last boundary, still in 西ローマ滅亡後 (open-ended)
+eq("eraAt open end", eraAt(rome, 800)?.name, "西ローマ滅亡後");
+// 900 BC -> before first boundary -> outside coverage
+eq("eraAt before first", eraAt(rome, -900), null);
+// Japan: 750 AD -> 奈良
+eq("eraAt japan", eraAt(systems[1], parseYearTag("#ad/07/5/0")!.sortKey)?.name, "奈良");
+
+// serialize round-trip
+const eraRound = parseErasFile(serializeErasFile(systems));
+eq("eras roundtrip systems", eraRound.length, 2);
+eq("eras roundtrip boundary", eraRound[1].boundaries[1].name, "平安");
+eq("eras roundtrip label", eraRound[0].boundaries[1].yearLabel, "509 BC");
 
 if (failures > 0) {
 	console.error(`\n${failures} failure(s)`);
