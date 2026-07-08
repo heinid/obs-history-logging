@@ -171,6 +171,85 @@
 	border-bottom: 1px solid var(--background-modifier-border);
 	color: var(--text-accent);
 }
+/* Multi-track comparison grid: shared time rows crossing track columns,
+   all inside one view under a single scrollbar. */
+.hl-timeline-list:has(.hl-multi-scroll) {
+	max-width: none;
+}
+.hl-multi-scroll {
+	overflow-x: auto;
+}
+.hl-multi-grid {
+	display: grid;
+	column-gap: 12px;
+	align-items: start;
+}
+.hl-track-head {
+	position: sticky;
+	top: 0;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 8px;
+	background: var(--background-primary);
+	border-bottom: 2px solid var(--background-modifier-border);
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.hl-track-head.hl-track-active {
+	color: var(--text-accent);
+	border-bottom-color: var(--interactive-accent);
+}
+.hl-track-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.hl-track-count {
+	font-size: 0.75em;
+	color: var(--text-faint);
+}
+.hl-track-x {
+	margin-left: auto;
+	visibility: hidden;
+}
+.hl-track-head:hover .hl-track-x {
+	visibility: visible;
+}
+/* A shared time-segment row label spans every column. */
+.hl-row-label {
+	grid-column: 1 / -1;
+}
+.hl-cell {
+	min-width: 0;
+	padding-bottom: 4px;
+}
+.hl-cell.hl-cell-active {
+	background: color-mix(in srgb, var(--interactive-accent) 4%, transparent);
+	border-radius: 6px;
+}
+/* A track's own era name (its lens), shown inside its column. */
+.hl-era-band {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	margin: 6px 0 2px;
+	padding: 1px 6px;
+	border-left: 3px solid var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
+	border-radius: 0 4px 4px 0;
+	font-size: 0.85em;
+	font-weight: 600;
+	color: var(--text-accent);
+}
+.hl-era-band .hl-group-range {
+	font-size: 0.85em;
+	font-weight: 400;
+	color: var(--text-faint);
+}
+
 /* Era range suffix on a named-era group heading, e.g. "509 BC – 27 BC". */
 .hl-group .hl-group-range {
 	margin-left: 8px;

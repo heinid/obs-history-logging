@@ -14,6 +14,7 @@ import { Profile } from "./profiles";
 import { EraSystem, eraAt } from "./eras";
 import { matchesQuery, parseQuery } from "./query";
 import { FilterBar } from "./filter-bar";
+import { TrackDef, renderTrackGrid, trackLabel } from "./track-grid";
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
 import { stripEvMarkers, stripImages, stripTags } from "./parser";
@@ -26,7 +27,11 @@ export class TimelineView extends ItemView {
 	private profiles: Profile[] = [];
 	private eraSystems: EraSystem[] = [];
 	// The bar IS the pane's definition: filter + lens + saved-view menu.
+	// With several tracks it edits whichever track is active; each track is
+	// one column of the in-view comparison grid.
 	private bar: FilterBar;
+	private tracks: TrackDef[] = [{ filter: "", lens: "", profile: "" }];
+	private active = 0;
 	private restored = false; // state came from the saved workspace layout
 	private initialised = false;
 	private listEl?: HTMLElement;
@@ -49,6 +54,7 @@ export class TimelineView extends ItemView {
 				void this.plugin.store.writeProfiles(profiles);
 			},
 			onChange: () => {
+				this.tracks[this.active] = this.bar.getTrack();
 				this.renderList();
 				this.app.workspace.requestSaveLayout();
 			},
@@ -72,7 +78,13 @@ export class TimelineView extends ItemView {
 	// Each pane's whole definition (filter, lens, grouping, loaded view, sync)
 	// persists with the workspace layout, so panes survive restarts as-is.
 	getState(): Record<string, unknown> {
-		return { ...this.bar.getState(), sync: this.syncEnabled };
+		this.tracks[this.active] = this.bar.getTrack();
+		return {
+			...this.bar.getState(),
+			tracks: this.tracks,
+			active: this.active,
+			sync: this.syncEnabled,
+		};
 	}
 
 	async setState(
@@ -82,6 +94,22 @@ export class TimelineView extends ItemView {
 		await super.setState(state, result);
 		if (state && typeof state === "object") {
 			if (this.bar.setState(state)) this.restored = true;
+			if (Array.isArray(state.tracks) && state.tracks.length) {
+				this.tracks = state.tracks.map((t: Record<string, unknown>) => ({
+					filter: typeof t.filter === "string" ? t.filter : "",
+					lens: typeof t.lens === "string" ? t.lens : "",
+					profile: typeof t.profile === "string" ? t.profile : "",
+				}));
+				const a = state.active;
+				this.active =
+					typeof a === "number" && a >= 0 && a < this.tracks.length ? a : 0;
+				this.bar.loadTrack(this.tracks[this.active]);
+				this.restored = true;
+			} else {
+				// Legacy flat state (pre-tracks): treat it as a single track.
+				this.tracks = [this.bar.getTrack()];
+				this.active = 0;
+			}
 			if (typeof state.sync === "boolean") this.syncEnabled = state.sync;
 			if (this.listEl) this.renderChrome();
 		}
@@ -93,8 +121,10 @@ export class TimelineView extends ItemView {
 		this.eraSystems = await this.plugin.store.readEraSystems();
 		if (!this.initialised) {
 			this.initialised = true;
-			if (!this.restored && this.profiles.length)
+			if (!this.restored && this.profiles.length) {
 				this.bar.loadProfile(this.profiles[0]);
+				this.tracks[this.active] = this.bar.getTrack();
+			}
 		}
 		this.entries = await scanVault(
 			this.app,
@@ -111,6 +141,14 @@ export class TimelineView extends ItemView {
 
 		const bar = root.createDiv({ cls: "hl-timeline-bar" });
 		this.bar.render(bar, (row) => {
+			// Add a comparison column: the new track starts empty and becomes
+			// the one the bar edits.
+			const addBtn = new ButtonComponent(row);
+			addBtn.setTooltip("Add track (comparison column)");
+			addBtn.buttonEl.addClass("hl-icon-btn");
+			setIcon(addBtn.buttonEl, "columns");
+			addBtn.onClick(() => this.addTrack());
+
 			const refreshBtn = new ButtonComponent(row);
 			refreshBtn.setTooltip("Rescan vault");
 			refreshBtn.buttonEl.addClass("hl-icon-btn");
@@ -138,12 +176,65 @@ export class TimelineView extends ItemView {
 		this.renderList();
 	}
 
+	setTracks(tracks: TrackDef[], active = 0): void {
+		if (!tracks.length) return;
+		this.tracks = tracks;
+		this.active = Math.min(active, tracks.length - 1);
+		this.bar.loadTrack(this.tracks[this.active]);
+		if (this.listEl) this.renderChrome();
+		this.app.workspace.requestSaveLayout();
+	}
+
+	getTracks(): TrackDef[] {
+		this.tracks[this.active] = this.bar.getTrack();
+		return this.tracks;
+	}
+
+	private addTrack(): void {
+		this.tracks[this.active] = this.bar.getTrack();
+		this.tracks.push({ filter: "", lens: "", profile: "" });
+		this.activateTrack(this.tracks.length - 1);
+	}
+
+	private activateTrack(i: number): void {
+		this.tracks[this.active] = this.bar.getTrack();
+		this.active = i;
+		this.bar.loadTrack(this.tracks[i]);
+		this.renderChrome();
+		this.app.workspace.requestSaveLayout();
+	}
+
+	private removeTrack(i: number): void {
+		if (this.tracks.length <= 1) return;
+		const label = trackLabel(this.tracks[i], i);
+		this.tracks.splice(i, 1);
+		this.activateTrack(Math.min(this.active > i ? this.active - 1 : this.active, this.tracks.length - 1));
+		new Notice(`Removed track "${label}".`);
+	}
+
 	private renderList(): void {
 		const list = this.listEl;
 		if (!list) return;
 		list.empty();
 		this.cardEls.clear();
 		this.cardIndex = [];
+
+		if (this.tracks.length > 1) {
+			const counts = renderTrackGrid({
+				list,
+				entries: this.entries,
+				tracks: this.tracks,
+				active: this.active,
+				groupBy: this.bar.groupBy,
+				eraSystems: this.eraSystems,
+				renderCard: (parent, entry) => this.renderCard(parent, entry),
+				onActivate: (i) => this.activateTrack(i),
+				onRemove: (i) => this.removeTrack(i),
+			});
+			this.bar.setCount(counts[this.active], this.entries.length);
+			this.cardIndex.sort((a, b) => a.key - b.key);
+			return;
+		}
 
 		const pq = parseQuery(this.bar.query());
 		const visible = this.entries.filter((e) => {

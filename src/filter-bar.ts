@@ -73,6 +73,19 @@ export class FilterBar {
 		return touched;
 	}
 
+	// A track is the per-column slice of the bar's state (filter + lens +
+	// loaded view); the shared groupBy stays on the bar.
+	getTrack(): { filter: string; lens: string; profile: string } {
+		return { filter: this.query(), lens: this.lens, profile: this.profileName };
+	}
+
+	loadTrack(t: { filter: string; lens: string; profile: string }): void {
+		this.chips = tokenise(t.filter);
+		this.draft = "";
+		this.lens = this.resolveLens(t.lens);
+		this.profileName = t.profile;
+	}
+
 	loadProfile(p: Profile): void {
 		this.chips = tokenise(p.match);
 		this.draft = "";
@@ -311,7 +324,7 @@ export class FilterBar {
 		menu.addSeparator();
 		menu.addItem((i) =>
 			i
-				.setTitle("Save layout (all panes)…")
+				.setTitle("Save layout (this view's tracks)…")
 				.setIcon("layout")
 				.onClick(() => this.plugin.saveLayoutInteractive())
 		);

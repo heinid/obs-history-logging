@@ -66,7 +66,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "save-timeline-layout",
-			name: "Save timeline layout (all panes)",
+			name: "Save timeline layout (this view's tracks)",
 			callback: () => this.saveLayoutInteractive(),
 		});
 		this.addCommand({
@@ -125,20 +125,29 @@ export default class HistoryLoggingPlugin extends Plugin {
 		}
 	}
 
-	// Snapshot every open timeline pane's state under a name in layouts.md —
-	// a whole parallel-comparison desk becomes one reopenable unit.
+	// Snapshot the active timeline's tracks under a name in layouts.md — a
+	// whole comparison grid (N tracks, one view) becomes one reopenable unit.
 	saveLayoutInteractive(): void {
-		const panes = this.timelinePanes();
-		if (!panes.length) {
-			new Notice("No timeline panes are open.");
+		const view = this.activeTimeline();
+		if (!view) {
+			new Notice("No timeline is open.");
 			return;
 		}
+		const state = view.getState();
+		const groupBy = typeof state.groupBy === "string" ? state.groupBy : "century";
+		const panes: LayoutPane[] = view.getTracks().map((t) => ({
+			filter: t.filter,
+			lens: t.lens,
+			profile: t.profile,
+			groupBy,
+			sync: view.syncEnabled,
+		}));
 		new NameModal(this.app, "Save layout as", "", (name) => {
 			void (async () => {
 				const layouts = await this.store.readLayouts();
 				const rest = layouts.filter((l) => l.name !== name);
 				await this.store.writeLayouts([...rest, { name, panes }]);
-				new Notice(`Layout "${name}" saved (${panes.length} panes).`);
+				new Notice(`Layout "${name}" saved (${panes.length} tracks).`);
 			})();
 		}).open();
 	}
@@ -152,32 +161,36 @@ export default class HistoryLoggingPlugin extends Plugin {
 		new LayoutSuggestModal(this, layouts).open();
 	}
 
-	private timelinePanes(): LayoutPane[] {
-		const panes: LayoutPane[] = [];
+	private activeTimeline(): TimelineView | null {
+		const active = this.app.workspace.getActiveViewOfType(TimelineView);
+		if (active) return active;
 		for (const leaf of this.app.workspace.getLeavesOfType(TIMELINE_VIEW_TYPE)) {
-			const view = leaf.view;
-			if (view instanceof TimelineView)
-				panes.push(view.getState() as unknown as LayoutPane);
+			if (leaf.view instanceof TimelineView) return leaf.view;
 		}
-		return panes;
+		return null;
 	}
 
-	// Replace the current timeline panes with the layout's, split side by side.
+	// Open a layout as ONE timeline tab whose columns are the saved tracks —
+	// the comparison lives inside a single view, not across split panes.
 	async applyLayout(layout: TimelineLayout): Promise<void> {
 		const { workspace } = this.app;
-		workspace.detachLeavesOfType(TIMELINE_VIEW_TYPE);
-		let leaf: WorkspaceLeaf | null = null;
-		for (const pane of layout.panes) {
-			leaf = leaf
-				? workspace.createLeafBySplit(leaf, "vertical")
-				: workspace.getLeaf("tab");
-			await leaf.setViewState({
-				type: TIMELINE_VIEW_TYPE,
-				active: true,
-				state: pane as unknown as Record<string, unknown>,
-			});
-		}
-		if (leaf) workspace.revealLeaf(leaf);
+		const tracks = layout.panes.map((p) => ({
+			filter: p.filter,
+			lens: p.lens,
+			profile: p.profile,
+		}));
+		const leaf = workspace.getLeaf("tab");
+		await leaf.setViewState({
+			type: TIMELINE_VIEW_TYPE,
+			active: true,
+			state: {
+				tracks,
+				active: 0,
+				groupBy: layout.panes[0]?.groupBy ?? "century",
+				sync: layout.panes.some((p) => p.sync),
+			},
+		});
+		workspace.revealLeaf(leaf);
 	}
 
 	// Open the era-system manager as a main-pane tab (reuse if already open).
@@ -228,7 +241,7 @@ class LayoutSuggestModal extends FuzzySuggestModal<TimelineLayout> {
 	}
 
 	getItemText(l: TimelineLayout): string {
-		return `${l.name} (${l.panes.length} panes)`;
+		return `${l.name} (${l.panes.length} tracks)`;
 	}
 
 	onChooseItem(l: TimelineLayout): void {

@@ -96,11 +96,19 @@ with the Obsidian workspace layout.
 
 ## Layouts
 
-A layout is a saved multi-pane desk: every open timeline pane's state, as one
-named unit. **Save layout (all panes)…** snapshots the current panes;
-**Open saved layout…** closes the timeline panes and reopens the saved set
-side by side. Both live in the view (bookmark) menu and the command palette.
-Layouts are stored in `_chronology/layouts.md` (plain text, hand-editable).
+One timeline view can hold several **tracks** — columns inside the same tab,
+each with its own filter and lens. The rows are shared time segments (century
+or decade, via the Group control), so every column stays exactly year-aligned
+under a single scrollbar; a track's own era names (its lens) appear as bands
+inside its column. Add a column with the columns button in the bar; click a
+column header to edit that track's filter/lens in the bar; hover a header for
+its remove button.
+
+A layout is a saved comparison grid: the view's tracks, as one named unit.
+**Save layout…** snapshots the active timeline's tracks; **Open saved
+layout…** opens a new timeline tab with the saved tracks. Both live in the
+view (bookmark) menu and the command palette. Layouts are stored in
+`_chronology/layouts.md` (plain text, hand-editable).
 
 ## Tracks
 
