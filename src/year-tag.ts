@@ -80,8 +80,12 @@ export function describeYear(d: DecodedYear): string {
 	const suffix = d.era === "bc" ? " BC" : "";
 	if (d.precision === "year") return `${d.magnitude}${suffix}`;
 	if (d.precision === "decade") return `${d.magnitude}s${suffix}`;
-	// century: magnitude is the bucket start (e.g. 700 -> 8th century)
-	const century = Math.floor(d.magnitude / 100) + 1;
+	// Century number. AD: the 700s are the 8th century (floor+1). BC has no year
+	// zero, so the 1200s BC are the 12th century BC (read the leading digits).
+	const century =
+		d.era === "bc"
+			? Math.max(1, Math.floor(d.magnitude / 100))
+			: Math.floor(d.magnitude / 100) + 1;
 	const ord =
 		century % 10 === 1 && century % 100 !== 11
 			? "st"

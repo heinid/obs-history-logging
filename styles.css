@@ -116,9 +116,9 @@
 .hl-card.hl-has-summary {
 	border-left: 3px solid var(--interactive-accent);
 }
-/* Expandable cards hint that the body toggles. */
-.hl-card.hl-expandable .hl-card-body {
-	cursor: pointer;
+/* Card text stays selectable / copyable; a clean click still toggles expand. */
+.hl-card-body {
+	user-select: text;
 }
 /* Subtle expand chevron, always visible on expandable cards. */
 .hl-chevron {
@@ -152,6 +152,26 @@
 }
 .hl-content > :last-child {
 	margin-bottom: 0;
+}
+/* The exact year tag a card is about, emphasised inside its expanded block. */
+.hl-content.hl-context a.tag.hl-target-tag {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+/* Flash the jump target in the editor, then fade back to a normal selection. */
+.cm-selectionBackground.hl-flash {
+	animation: hl-flash 1.2s ease-out;
+}
+@keyframes hl-flash {
+	0%,
+	40% {
+		background-color: var(--text-highlight-bg);
+	}
+	100% {
+		background-color: transparent;
+	}
 }
 
 /* Summary editor modal */

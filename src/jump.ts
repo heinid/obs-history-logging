@@ -16,24 +16,55 @@ export async function jumpToEv(app: App, id: string): Promise<boolean> {
 	return false;
 }
 
-// Open a specific file at a char offset (used by the timeline view).
+// Open a specific file at a char offset (used by the timeline view). When
+// `length` is given, the range is selected and briefly flashed.
 export async function jumpToLocation(
 	app: App,
 	filePath: string,
-	offset: number
+	offset: number,
+	length = 0
 ): Promise<void> {
 	const file = app.vault.getAbstractFileByPath(filePath);
-	if (file instanceof TFile) await openAt(app, file, offset);
+	if (file instanceof TFile) await openAt(app, file, offset, length);
 }
 
-async function openAt(app: App, file: TFile, offset: number): Promise<void> {
+async function openAt(
+	app: App,
+	file: TFile,
+	offset: number,
+	length = 0
+): Promise<void> {
 	const leaf = app.workspace.getLeaf(false);
 	await leaf.openFile(file);
 	const view = leaf.view;
-	if (view instanceof MarkdownView) {
-		const editor = view.editor;
-		const pos = editor.offsetToPos(offset);
-		editor.setCursor(pos);
-		editor.scrollIntoView({ from: pos, to: pos }, true);
+	if (!(view instanceof MarkdownView)) return;
+	const editor = view.editor;
+	const from = editor.offsetToPos(offset);
+	const to = editor.offsetToPos(offset + length);
+	if (length > 0) {
+		editor.setSelection(from, to);
+		flashRange(view);
+	} else {
+		editor.setCursor(from);
 	}
+	editor.scrollIntoView({ from, to }, true);
+}
+
+// Briefly highlight the current selection in the editor so the jump target
+// is obvious, then let it settle back to a normal selection.
+function flashRange(view: MarkdownView): void {
+	const cm = (view.editor as unknown as { cm?: EditorFlashView }).cm;
+	if (!cm?.dom) return;
+	const run = () => {
+		const sel = cm.dom.querySelector(".cm-selectionBackground");
+		if (!(sel instanceof HTMLElement)) return;
+		sel.classList.add("hl-flash");
+		window.setTimeout(() => sel.classList.remove("hl-flash"), 1200);
+	};
+	// Let the editor paint the selection first.
+	window.setTimeout(run, 30);
+}
+
+interface EditorFlashView {
+	dom: HTMLElement;
 }

@@ -18,6 +18,7 @@ export interface TimelineEntry {
 	summary?: string;
 	snippet: string; // trimmed source line, for search haystack
 	block: string; // the surrounding paragraph, markdown-rendered in cards
+	tagOrdinal: number; // 0-based index of this tag among identical tags in the block
 }
 
 function lineOf(content: string, index: number): number {
@@ -37,24 +38,48 @@ function lineTextAt(content: string, index: number): string {
 
 // The whole paragraph (contiguous non-blank lines) around `index`, so the card
 // can render list items / multi-line markdown, not just the tag's own line.
-function blockTextAt(content: string, index: number): string {
+// Returns the block text and the char offset of its first line in `content`.
+function blockAt(content: string, index: number): { text: string; start: number } {
 	const lines = content.split("\n");
-	let pos = 0;
-	let cur = 0;
+	const lineStart: number[] = [];
+	let acc = 0;
+	for (const ln of lines) {
+		lineStart.push(acc);
+		acc += ln.length + 1;
+	}
+	let cur = lines.length - 1;
 	for (let i = 0; i < lines.length; i++) {
-		const lineEnd = pos + lines[i].length;
-		if (index <= lineEnd) {
+		if (index < lineStart[i] + lines[i].length + 1) {
 			cur = i;
 			break;
 		}
-		pos = lineEnd + 1;
 	}
 	let start = cur;
 	while (start > 0 && lines[start - 1].trim() !== "" && !/^#{1,6}\s/.test(lines[start - 1]))
 		start--;
 	let end = cur;
 	while (end + 1 < lines.length && lines[end + 1].trim() !== "") end++;
-	return lines.slice(start, end + 1).join("\n").trim();
+	return {
+		text: lines.slice(start, end + 1).join("\n").trim(),
+		start: lineStart[start],
+	};
+}
+
+// 0-based index of the tag occurrence at `index` among identical year tags from
+// `blockStart` up to it — so the expanded card can highlight the right one even
+// when a paragraph repeats the same tag.
+function tagOrdinal(
+	content: string,
+	blockStart: number,
+	index: number,
+	tag: string
+): number {
+	const slice = content.slice(blockStart, index);
+	const re = yearTagRegex();
+	let m: RegExpExecArray | null;
+	let n = 0;
+	while ((m = re.exec(slice)) !== null) if (m[0] === tag) n++;
+	return n;
 }
 
 // Scan every markdown file (excluding the data folder) for year tags.
@@ -86,6 +111,7 @@ export async function scanVault(
 			const decoded = parseYearTag(m[0]);
 			if (!decoded) continue;
 			const evId = evTagIndex.get(m.index);
+			const block = blockAt(content, m.index);
 			entries.push({
 				filePath: file.path,
 				fileName: file.basename,
@@ -96,7 +122,8 @@ export async function scanVault(
 				evId,
 				summary: evId ? events.get(evId)?.summary : undefined,
 				snippet: lineTextAt(content, m.index),
-				block: stripEvMarkers(blockTextAt(content, m.index)),
+				block: stripEvMarkers(block.text),
+				tagOrdinal: tagOrdinal(content, block.start, m.index, m[0]),
 			});
 		}
 	}

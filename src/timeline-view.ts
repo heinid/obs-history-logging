@@ -157,7 +157,12 @@ export class TimelineView extends ItemView {
 		openBtn.setAttr("aria-label", "Open note");
 		openBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			jumpToLocation(this.app, entry.filePath, entry.offset);
+			void jumpToLocation(
+				this.app,
+				entry.filePath,
+				entry.offset,
+				entry.tag.length
+			);
 		});
 
 		// Collapsed preview: the summary if written, else the tag's own line
@@ -208,7 +213,10 @@ export class TimelineView extends ItemView {
 		card.addClass("hl-expandable");
 		card.addEventListener("click", (e) => {
 			const t = e.target as HTMLElement;
+			// Leave links, buttons and active text selections alone — the body
+			// stays selectable/copyable, only a clean click toggles expansion.
 			if (t.tagName === "A" || t.closest("button")) return;
+			if ((window.getSelection()?.toString() ?? "") !== "") return;
 			expanded = !expanded;
 			paint();
 		});
@@ -226,11 +234,33 @@ export class TimelineView extends ItemView {
 		content.className = "";
 		if (expanded) {
 			content.addClass("hl-content", "hl-context");
-			MarkdownRenderer.render(this.app, full, content, entry.filePath, this.plugin);
+			void MarkdownRenderer.render(
+				this.app,
+				full,
+				content,
+				entry.filePath,
+				this.plugin
+			).then(() => this.highlightTargetTag(content, entry));
 			return;
 		}
 		content.addClass("hl-content", "hl-summary", "hl-clamp");
 		if (!hasSummary) content.addClass("hl-from-note");
-		MarkdownRenderer.render(this.app, preview, content, entry.filePath, this.plugin);
+		void MarkdownRenderer.render(
+			this.app,
+			preview,
+			content,
+			entry.filePath,
+			this.plugin
+		);
+	}
+
+	// Emphasise the exact year tag this card is about within the expanded block,
+	// picking the right occurrence when the paragraph repeats the same tag.
+	private highlightTargetTag(content: HTMLElement, entry: TimelineEntry): void {
+		const matches = Array.from(
+			content.querySelectorAll<HTMLElement>("a.tag")
+		).filter((el) => (el.textContent ?? "").trim() === entry.tag);
+		const target = matches[entry.tagOrdinal] ?? matches[0];
+		target?.addClass("hl-target-tag");
 	}
 }
