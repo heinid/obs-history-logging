@@ -72,8 +72,8 @@ export default class HistoryLoggingPlugin extends Plugin {
 		workspace.revealLeaf(leaf);
 	}
 
-	openSummary(id: string, tag: string): void {
-		new SummaryModal(this.app, this, id, tag).open();
+	openSummary(id: string, tag: string, onSaved?: () => void): void {
+		new SummaryModal(this.app, this, id, tag, onSaved).open();
 	}
 
 	async loadSettings(): Promise<void> {

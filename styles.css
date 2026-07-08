@@ -39,10 +39,30 @@
 	margin: 4px 0;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 6px;
-	cursor: pointer;
 }
 .hl-card:hover {
 	background: var(--background-modifier-hover);
+}
+/* Per-card action buttons, revealed on hover / focus. */
+.hl-card-actions {
+	display: flex;
+	gap: 2px;
+	margin-left: 6px;
+	opacity: 0;
+	transition: opacity 0.12s ease;
+}
+.hl-card:hover .hl-card-actions,
+.hl-card:focus-within .hl-card-actions {
+	opacity: 1;
+}
+.hl-card-actions .hl-icon-btn {
+	padding: 2px 4px;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+}
+.hl-card-actions .hl-icon-btn:hover {
+	color: var(--text-normal);
 }
 .hl-card-head {
 	display: flex;
@@ -69,7 +89,7 @@
 }
 .hl-summary.hl-clamp {
 	display: -webkit-box;
-	-webkit-line-clamp: 3;
+	-webkit-line-clamp: 4;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
 }
@@ -90,6 +110,49 @@
 .hl-empty {
 	color: var(--text-faint);
 	padding: 12px 4px;
+}
+
+/* Expandable full-block context */
+.hl-expand {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 4px;
+	padding: 2px 4px;
+	background: transparent;
+	box-shadow: none;
+	border: none;
+	color: var(--text-muted);
+	font-size: 0.8em;
+	cursor: pointer;
+}
+.hl-expand:hover {
+	color: var(--text-normal);
+}
+.hl-expand-icon {
+	display: inline-flex;
+}
+.hl-expand-icon svg {
+	width: 0.9em;
+	height: 0.9em;
+}
+.hl-card-context {
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: 0.95em;
+}
+.hl-card-context img {
+	max-width: 100%;
+	height: auto;
+	border-radius: 4px;
+}
+.hl-card-context > :first-child {
+	margin-top: 0;
+}
+.hl-card-context > :last-child {
+	margin-bottom: 0;
 }
 
 /* Summary editor modal */

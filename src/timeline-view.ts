@@ -12,6 +12,8 @@ import { Profile } from "./profiles";
 import { matchesQuery, parseQuery } from "./query";
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
+import { stripEvMarkers, stripImages } from "./parser";
+import { addEventForEntry } from "./commands";
 
 export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
 
@@ -134,21 +136,80 @@ export class TimelineView extends ItemView {
 		if (entry.evId) head.createSpan({ cls: "hl-ev-symbol", text: EV_SYMBOL });
 		head.createSpan({ cls: "hl-file", text: entry.fileName });
 
-		const body = card.createDiv({ cls: "hl-card-body" });
-		const source = entry.summary?.trim() ? entry.summary : entry.block;
-		const md = body.createDiv({ cls: "hl-summary hl-clamp" });
-		if (!entry.summary?.trim()) md.addClass("hl-from-note");
-		MarkdownRenderer.render(this.app, source, md, entry.filePath, this.plugin);
-		md.addEventListener("click", (e) => {
-			if ((e.target as HTMLElement).tagName === "A") return;
-			md.toggleClass("hl-clamp", !md.hasClass("hl-clamp"));
+		// Per-card actions (revealed on hover): write/edit summary in place, and
+		// an explicit jump — so clicking the card body never navigates by accident.
+		const actions = head.createDiv({ cls: "hl-card-actions" });
+		const hasSummary = !!entry.summary?.trim();
+		const editBtn = actions.createEl("button", { cls: "hl-icon-btn" });
+		setIcon(editBtn, hasSummary || entry.evId ? "pencil" : "plus");
+		editBtn.setAttr(
+			"aria-label",
+			hasSummary || entry.evId ? "Edit summary" : "Add summary"
+		);
+		editBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			void addEventForEntry(this.plugin, entry, () => this.refresh());
+		});
+		const openBtn = actions.createEl("button", { cls: "hl-icon-btn" });
+		setIcon(openBtn, "arrow-up-right");
+		openBtn.setAttr("aria-label", "Open note");
+		openBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			jumpToLocation(this.app, entry.filePath, entry.offset);
 		});
 
-		card.addEventListener("click", (e) => {
-			// Let links and the expandable summary handle their own clicks.
-			const t = e.target as HTMLElement;
-			if (t.tagName === "A" || t.closest(".hl-summary")) return;
-			jumpToLocation(this.app, entry.filePath, entry.offset);
+		// Body: a written summary, else the tag's own line (images / ev syntax
+		// stripped), clamped to a generous cap.
+		const body = card.createDiv({ cls: "hl-card-body" });
+		const preview = hasSummary
+			? entry.summary!
+			: stripImages(stripEvMarkers(entry.snippet)).trim() || "*(no text)*";
+		const md = body.createDiv({ cls: "hl-summary hl-clamp" });
+		if (!hasSummary) md.addClass("hl-from-note");
+		MarkdownRenderer.render(this.app, preview, md, entry.filePath, this.plugin);
+
+		// Expand to the full surrounding block (images included), lazily rendered.
+		const full = stripEvMarkers(entry.block).trim();
+		this.addExpander(card, entry, preview, full);
+	}
+
+	// Add a "Show context" toggle when the surrounding block has more than the
+	// preview line. The block is rendered on first expand.
+	private addExpander(
+		card: HTMLElement,
+		entry: TimelineEntry,
+		preview: string,
+		full: string
+	): void {
+		const previewText = stripImages(preview).replace(/\s+/g, " ").trim();
+		const fullText = stripImages(full).replace(/\s+/g, " ").trim();
+		const hasImage = full !== stripImages(full);
+		if (!full || (fullText === previewText && !hasImage)) return;
+
+		const more = card.createDiv({ cls: "hl-card-context" });
+		more.hide();
+		let built = false;
+
+		const toggle = card.createEl("button", { cls: "hl-expand" });
+		const icon = toggle.createSpan({ cls: "hl-expand-icon" });
+		setIcon(icon, "chevron-down");
+		const label = toggle.createSpan({ text: "Show context" });
+		toggle.addEventListener("click", (e) => {
+			e.stopPropagation();
+			const show = !more.isShown();
+			if (show && !built) {
+				MarkdownRenderer.render(
+					this.app,
+					full,
+					more,
+					entry.filePath,
+					this.plugin
+				);
+				built = true;
+			}
+			more.toggle(show);
+			setIcon(icon, show ? "chevron-up" : "chevron-down");
+			label.setText(show ? "Hide context" : "Show context");
 		});
 	}
 }

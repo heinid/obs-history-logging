@@ -53,6 +53,14 @@ export function stripEvMarkers(text: string): string {
 	return text.replace(evRegex(), "$2");
 }
 
+// Remove image embeds / links so a single-line card preview stays textual
+// (a note's inline map or figure shouldn't blow up the timeline row).
+export function stripImages(text: string): string {
+	return text
+		.replace(/!\[\[[^\]]*\]\]/g, "")
+		.replace(/!\[[^\]]*\]\([^)]*\)/g, "");
+}
+
 // Remove the ev wrapper for a given id, leaving the bare tag behind.
 export function unwrapEv(content: string, id: string): string {
 	const re = new RegExp(

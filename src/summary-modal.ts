@@ -10,7 +10,8 @@ export class SummaryModal extends Modal {
 		app: App,
 		private plugin: HistoryLoggingPlugin,
 		private id: string,
-		private tag: string
+		private tag: string,
+		private onSaved?: () => void
 	) {
 		super(app);
 	}
@@ -48,6 +49,7 @@ export class SummaryModal extends Modal {
 						summary: this.value,
 					});
 					new Notice("Summary saved");
+					this.onSaved?.();
 					this.close();
 				})
 		);
