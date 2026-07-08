@@ -142,6 +142,13 @@ export function renderTrackGrid(opts: {
 		head.createSpan({ cls: "hl-track-count", text: String(perTrack[i].length) });
 		head.setAttr("aria-label", "Edit this track's filter and lens in the bar");
 		head.addEventListener("click", () => opts.onActivate(i));
+		// Middle-click a head to close its track, like a browser tab.
+		head.addEventListener("auxclick", (e) => {
+			if (e.button === 1 && tracks.length > 1) {
+				e.preventDefault();
+				opts.onRemove(i);
+			}
+		});
 		if (tracks.length > 1) {
 			const x = head.createEl("button", { cls: "hl-icon-btn hl-track-x" });
 			setIcon(x, "x");
@@ -162,7 +169,6 @@ export function renderTrackGrid(opts: {
 		for (let ti = 0; ti < tracks.length; ti++) {
 			const cell = grid.createDiv({ cls: "hl-cell" });
 			cell.setAttr("data-track", String(ti));
-			cell.toggleClass("hl-cell-active", ti === opts.active);
 			// Clicking anywhere in a column focuses its track in the bar.
 			cell.addEventListener("click", () => opts.onActivate(ti));
 			const sys = systems[ti];

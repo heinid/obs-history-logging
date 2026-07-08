@@ -233,10 +233,6 @@
 	min-width: 0;
 	padding-bottom: 4px;
 }
-.hl-cell.hl-cell-active {
-	background: color-mix(in srgb, var(--interactive-accent) 4%, transparent);
-	border-radius: 6px;
-}
 /* A track's own era name (its lens), shown inside its column. */
 .hl-era-band {
 	display: flex;

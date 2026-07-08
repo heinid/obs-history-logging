@@ -40,6 +40,7 @@ export class TimelineView extends ItemView {
 	// Era-start anchors per track, feeding the floating era navigator.
 	private eraAnchors: EraAnchor[][] = [];
 	private navEl?: HTMLElement;
+	private navSizer?: ResizeObserver;
 	private navItems: { anchor: EraAnchor; el: HTMLElement }[] = [];
 	private cardEls = new Map<TimelineEntry, HTMLElement>();
 	// Cards in render order with their year sort keys, for year-aligned sync.
@@ -79,6 +80,10 @@ export class TimelineView extends ItemView {
 
 	async onOpen(): Promise<void> {
 		await this.refresh();
+	}
+
+	async onClose(): Promise<void> {
+		this.navSizer?.disconnect();
 	}
 
 	// Each pane's whole definition (filter, lens, grouping, loaded view, sync)
@@ -232,7 +237,6 @@ export class TimelineView extends ItemView {
 			const t = Number(el.getAttr("data-track"));
 			if (el.hasClass("hl-track-head"))
 				el.toggleClass("hl-track-active", t === this.active);
-			else el.toggleClass("hl-cell-active", t === this.active);
 		}
 	}
 
@@ -288,27 +292,59 @@ export class TimelineView extends ItemView {
 			return;
 		}
 
+		// Lens and grouping are decoupled, as in the grid: headings stay the
+		// neutral century/decade sections, the lens adds era bands (the full
+		// skeleton, counts included) interleaved at their starting years.
 		const system = this.bar.lens
 			? this.eraSystems.find((s) => s.name === this.bar.lens) ?? null
 			: null;
-		const grouped = !!system || this.bar.groupBy !== "none";
+		const grouped = this.bar.groupBy !== "none";
 
 		const anchors: EraAnchor[] = [];
+		const eraCounts = new Map<string, number>();
+		if (system)
+			for (const e of visible) {
+				const name = eraAt(system, e.decoded.sortKey)?.name;
+				if (name) eraCounts.set(name, (eraCounts.get(name) ?? 0) + 1);
+			}
+		let nextBoundary = 0;
+		const emitBands = (upTo: number): void => {
+			if (!system) return;
+			while (
+				nextBoundary < system.boundaries.length &&
+				system.boundaries[nextBoundary].startKey <= upTo
+			) {
+				const hit = eraAt(system, system.boundaries[nextBoundary].startKey);
+				nextBoundary++;
+				if (!hit) continue;
+				const count = eraCounts.get(hit.name) ?? 0;
+				const band = list.createDiv({ cls: "hl-era-band" });
+				band.toggleClass("hl-era-empty", count === 0);
+				band.createSpan({ cls: "hl-era-name", text: hit.name });
+				band.createSpan({ cls: "hl-era-count", text: `(${count})` });
+				band.createSpan({ cls: "hl-group-range", text: hit.range });
+				anchors.push({ name: hit.name, range: hit.range, count, el: band });
+			}
+		};
+
 		let lastGroup: string | null = null;
 		for (const entry of visible) {
-			const { label, sub } = this.groupLabel(entry, system);
-			if (grouped && label !== lastGroup) {
-				const h = list.createEl("h3", { cls: "hl-group" });
-				h.createSpan({ text: label });
-				if (sub) h.createSpan({ cls: "hl-group-range", text: sub });
-				if (system && sub)
-					anchors.push({ name: label, range: sub, count: 0, el: h });
-				lastGroup = label;
+			if (grouped) {
+				const { label } = this.groupLabel(entry, null);
+				if (label !== lastGroup) {
+					const h = list.createEl("h3", { cls: "hl-group" });
+					h.createSpan({ text: label });
+					// Without a lens the section headings are the navigator's
+					// table of contents.
+					if (!system) anchors.push({ name: label, range: "", count: 0, el: h });
+					lastGroup = label;
+				}
 			}
-			if (system && anchors.length && lastGroup === anchors[anchors.length - 1].name)
-				anchors[anchors.length - 1].count++;
+			if (!system && anchors.length) anchors[anchors.length - 1].count++;
+			emitBands(entry.decoded.sortKey);
 			this.renderCard(list, entry);
 		}
+		emitBands(Infinity);
 		this.trackCounts = [visible.length];
 		this.eraAnchors = [anchors];
 		this.renderEraNav();
@@ -328,9 +364,19 @@ export class TimelineView extends ItemView {
 		this.navItems = [];
 		const anchors = this.eraAnchors[this.active] ?? [];
 		if (!anchors.length || !this.listEl) return;
-		const wrap = this.listEl.createDiv({ cls: "hl-era-nav-wrap" });
-		this.listEl.prepend(wrap);
-		wrap.style.width = `${this.contentEl.clientWidth}px`;
+		// The wrap lives directly under the bar in the scroller root, outside
+		// the (possibly centered) list column, so the panel hugs the pane's
+		// visible corner in every layout.
+		const wrap = createDiv({ cls: "hl-era-nav-wrap" });
+		(this.barHost ?? this.contentEl).insertAdjacentElement("afterend", wrap);
+		// The wrap tracks the pane's visible width (it can settle late, e.g.
+		// right after a reload, and changes with the window and splits).
+		const sizeWrap = () =>
+			(wrap.style.width = `${this.contentEl.clientWidth}px`);
+		sizeWrap();
+		this.navSizer?.disconnect();
+		this.navSizer = new ResizeObserver(sizeWrap);
+		this.navSizer.observe(this.contentEl);
 		this.navEl = wrap;
 		const nav = wrap.createDiv({ cls: "hl-era-nav" });
 		if (this.tracks.length > 1)
@@ -374,15 +420,13 @@ export class TimelineView extends ItemView {
 			this.tracks.length > 1 ? this.tracks[this.active].lens : this.bar.lens;
 		const system = this.eraSystems.find((s) => s.name === lens) ?? null;
 
-		let bestTop = Infinity;
+		// Base: the last section heading / era band above the reading line.
 		let current: string | null = null;
-		for (const { anchor } of this.navItems) {
-			const r = anchor.el.getBoundingClientRect();
-			if (r.bottom >= line && r.top < bestTop) {
-				bestTop = r.top;
-				current = anchor.name;
-			}
-		}
+		for (const { anchor } of this.navItems)
+			if (anchor.el.getBoundingClientRect().top <= line) current = anchor.name;
+		// With a lens, an entry sitting on the line is more precise than the
+		// band positions: its year decides (and clears the highlight when the
+		// system doesn't cover it).
 		if (system) {
 			for (const { key, el } of this.cardIndex) {
 				if (this.tracks.length > 1) {
@@ -392,7 +436,7 @@ export class TimelineView extends ItemView {
 				}
 				const r = el.getBoundingClientRect();
 				if (r.bottom < line) continue;
-				if (r.top < bestTop) current = eraAt(system, key)?.name ?? null;
+				if (r.top <= line) current = eraAt(system, key)?.name ?? null;
 				break;
 			}
 		}
