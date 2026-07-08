@@ -14,7 +14,7 @@ import { Profile } from "./profiles";
 import { EraSystem, eraAt } from "./eras";
 import { matchesQuery, parseQuery } from "./query";
 import { FilterBar } from "./filter-bar";
-import { TrackDef, renderTrackGrid, trackLabel } from "./track-grid";
+import { EraAnchor, TrackDef, renderTrackGrid, trackLabel } from "./track-grid";
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
 import { stripEvMarkers, stripImages, stripTags } from "./parser";
@@ -35,6 +35,12 @@ export class TimelineView extends ItemView {
 	private restored = false; // state came from the saved workspace layout
 	private initialised = false;
 	private listEl?: HTMLElement;
+	private barHost?: HTMLElement;
+	private trackCounts: number[] = [];
+	// Era-start anchors per track, feeding the floating era navigator.
+	private eraAnchors: EraAnchor[][] = [];
+	private navEl?: HTMLElement;
+	private navItems: { anchor: EraAnchor; el: HTMLElement }[] = [];
 	private cardEls = new Map<TimelineEntry, HTMLElement>();
 	// Cards in render order with their year sort keys, for year-aligned sync.
 	private cardIndex: { key: number; el: HTMLElement }[] = [];
@@ -140,6 +146,7 @@ export class TimelineView extends ItemView {
 		root.addClass("hl-timeline");
 
 		const bar = root.createDiv({ cls: "hl-timeline-bar" });
+		this.barHost = bar;
 		this.bar.render(bar, (row) => {
 			// Add a comparison column: the new track starts empty and becomes
 			// the one the bar edits.
@@ -193,15 +200,37 @@ export class TimelineView extends ItemView {
 	private addTrack(): void {
 		this.tracks[this.active] = this.bar.getTrack();
 		this.tracks.push({ filter: "", lens: "", profile: "" });
-		this.activateTrack(this.tracks.length - 1);
+		this.active = this.tracks.length - 1;
+		this.bar.loadTrack(this.tracks[this.active]);
+		this.renderChrome();
+		this.app.workspace.requestSaveLayout();
 	}
 
+	// Focus a track without rebuilding the grid, so clicking around a column
+	// (which also expands/collapses cards) never loses scroll or expansion.
 	private activateTrack(i: number): void {
+		if (i === this.active) return;
 		this.tracks[this.active] = this.bar.getTrack();
 		this.active = i;
 		this.bar.loadTrack(this.tracks[i]);
-		this.renderChrome();
+		if (this.barHost) this.bar.render(this.barHost);
+		this.bar.setCount(this.trackCounts[i] ?? 0, this.entries.length);
+		this.paintActiveTrack();
+		this.renderEraNav();
 		this.app.workspace.requestSaveLayout();
+	}
+
+	private paintActiveTrack(): void {
+		const list = this.listEl;
+		if (!list) return;
+		for (const el of Array.from(
+			list.querySelectorAll<HTMLElement>("[data-track]")
+		)) {
+			const t = Number(el.getAttr("data-track"));
+			if (el.hasClass("hl-track-head"))
+				el.toggleClass("hl-track-active", t === this.active);
+			else el.toggleClass("hl-cell-active", t === this.active);
+		}
 	}
 
 	private removeTrack(i: number): void {
@@ -225,7 +254,7 @@ export class TimelineView extends ItemView {
 		this.cardIndex = [];
 
 		if (this.tracks.length > 1) {
-			const counts = renderTrackGrid({
+			const { counts, eraAnchors } = renderTrackGrid({
 				list,
 				entries: this.entries,
 				tracks: this.tracks,
@@ -236,8 +265,11 @@ export class TimelineView extends ItemView {
 				onActivate: (i) => this.activateTrack(i),
 				onRemove: (i) => this.removeTrack(i),
 			});
+			this.trackCounts = counts;
+			this.eraAnchors = eraAnchors;
 			this.bar.setCount(counts[this.active], this.entries.length);
 			this.cardIndex.sort((a, b) => a.key - b.key);
+			this.renderEraNav();
 			return;
 		}
 
@@ -258,6 +290,7 @@ export class TimelineView extends ItemView {
 			: null;
 		const grouped = !!system || this.bar.groupBy !== "none";
 
+		const anchors: EraAnchor[] = [];
 		let lastGroup: string | null = null;
 		for (const entry of visible) {
 			const { label, sub } = this.groupLabel(entry, system);
@@ -265,10 +298,59 @@ export class TimelineView extends ItemView {
 				const h = list.createEl("h3", { cls: "hl-group" });
 				h.createSpan({ text: label });
 				if (sub) h.createSpan({ cls: "hl-group-range", text: sub });
+				if (system && sub) anchors.push({ name: label, range: sub, el: h });
 				lastGroup = label;
 			}
 			this.renderCard(list, entry);
 		}
+		this.trackCounts = [visible.length];
+		this.eraAnchors = [anchors];
+		this.renderEraNav();
+	}
+
+	// Floating era navigator: the active track's table of contents. Lists the
+	// eras (its lens) that actually have content; click one to jump to where it
+	// starts, and the era under the viewport top stays highlighted on scroll.
+	private renderEraNav(): void {
+		this.navEl?.remove();
+		this.navEl = undefined;
+		this.navItems = [];
+		const anchors = this.eraAnchors[this.active] ?? [];
+		if (!anchors.length || !this.listEl) return;
+		const wrap = this.listEl.createDiv({ cls: "hl-era-nav-wrap" });
+		this.listEl.prepend(wrap);
+		this.navEl = wrap;
+		const nav = wrap.createDiv({ cls: "hl-era-nav" });
+		if (this.tracks.length > 1)
+			nav.createDiv({
+				cls: "hl-era-nav-title",
+				text: trackLabel(this.tracks[this.active], this.active),
+			});
+		for (const anchor of anchors) {
+			const item = nav.createDiv({ cls: "hl-era-nav-item" });
+			item.createSpan({ text: anchor.name });
+			if (anchor.range)
+				item.createSpan({ cls: "hl-group-range", text: anchor.range });
+			item.addEventListener("click", () => {
+				const box = this.contentEl.getBoundingClientRect();
+				this.contentEl.scrollTop +=
+					anchor.el.getBoundingClientRect().top - box.top - 90;
+			});
+			this.navItems.push({ anchor, el: item });
+		}
+		this.paintNavCurrent();
+	}
+
+	private paintNavCurrent(): void {
+		if (!this.navItems.length) return;
+		const top = this.contentEl.getBoundingClientRect().top + 100;
+		let current = -1;
+		this.navItems.forEach(({ anchor }, i) => {
+			if (anchor.el.getBoundingClientRect().top <= top) current = i;
+		});
+		this.navItems.forEach(({ el }, i) =>
+			el.toggleClass("hl-era-nav-current", i === current)
+		);
 	}
 
 	private groupLabel(
@@ -462,6 +544,7 @@ export class TimelineView extends ItemView {
 
 	// Broadcast this pane's topmost visible year to the other synced panes.
 	private onScroll(): void {
+		this.paintNavCurrent();
 		if (!this.syncEnabled || Date.now() < this.suppressSyncUntil) return;
 		const top = this.contentEl.getBoundingClientRect().top;
 		const first = this.cardIndex.find(

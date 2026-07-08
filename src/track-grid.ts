@@ -28,6 +28,13 @@ export function trackEntries(
 	});
 }
 
+// A jump target for the era navigator: where an era starts in a column.
+export interface EraAnchor {
+	name: string;
+	range: string;
+	el: HTMLElement;
+}
+
 // Renders the multi-track comparison grid: shared time-segment rows (century
 // or decade) crossing per-track columns. Each row spans every column, so the
 // tracks stay exactly year-aligned under a single scrollbar; empty cells show
@@ -43,7 +50,7 @@ export function renderTrackGrid(opts: {
 	renderCard: (parent: HTMLElement, entry: TimelineEntry) => void;
 	onActivate: (i: number) => void;
 	onRemove: (i: number) => void;
-}): number[] {
+}): { counts: number[]; eraAnchors: EraAnchor[][] } {
 	const { list, tracks } = opts;
 	const gb = opts.groupBy === "none" ? "century" : opts.groupBy;
 
@@ -72,6 +79,7 @@ export function renderTrackGrid(opts: {
 
 	tracks.forEach((t, i) => {
 		const head = grid.createDiv({ cls: "hl-track-head" });
+		head.setAttr("data-track", String(i));
 		head.toggleClass("hl-track-active", i === opts.active);
 		head.createSpan({ cls: "hl-track-name", text: trackLabel(t, i) });
 		head.createSpan({ cls: "hl-track-count", text: String(perTrack[i].length) });
@@ -92,13 +100,17 @@ export function renderTrackGrid(opts: {
 		t.lens ? opts.eraSystems.find((s) => s.name === t.lens) ?? null : null
 	);
 	const lastEra: (string | null)[] = tracks.map(() => null);
+	const eraAnchors: EraAnchor[][] = tracks.map(() => []);
 
 	for (const seg of segs) {
 		const row = grid.createEl("h3", { cls: "hl-group hl-row-label" });
 		row.createSpan({ text: seg.label });
 		for (let ti = 0; ti < tracks.length; ti++) {
 			const cell = grid.createDiv({ cls: "hl-cell" });
+			cell.setAttr("data-track", String(ti));
 			cell.toggleClass("hl-cell-active", ti === opts.active);
+			// Clicking anywhere in a column focuses its track in the bar.
+			cell.addEventListener("click", () => opts.onActivate(ti));
 			for (const e of seg.cells[ti]) {
 				const sys = systems[ti];
 				if (sys) {
@@ -106,16 +118,24 @@ export function renderTrackGrid(opts: {
 					const eraName = hit?.name ?? null;
 					if (eraName && eraName !== lastEra[ti]) {
 						const band = cell.createDiv({ cls: "hl-era-band" });
-						band.createSpan({ text: eraName });
+						band.createSpan({ cls: "hl-era-name", text: eraName });
 						if (hit?.range)
 							band.createSpan({ cls: "hl-group-range", text: hit.range });
+						eraAnchors[ti].push({
+							name: eraName,
+							range: hit?.range ?? "",
+							el: band,
+						});
 					}
 					lastEra[ti] = eraName;
 				}
 				opts.renderCard(cell, e);
 			}
+			// Colored rail while a track is inside an era, so the era reads as a
+			// continuous stretch down the column, not just a heading.
+			if (lastEra[ti]) cell.addClass("hl-in-era");
 		}
 	}
 
-	return perTrack.map((e) => e.length);
+	return { counts: perTrack.map((e) => e.length), eraAnchors };
 }
