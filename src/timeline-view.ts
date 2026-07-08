@@ -15,7 +15,6 @@ import { matchesQuery, parseQuery } from "./query";
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
 import { stripEvMarkers, stripImages, stripTags } from "./parser";
-import { UNTRACKED } from "./tracks";
 import { addEventForEntry } from "./commands";
 
 export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
@@ -29,9 +28,13 @@ export class TimelineView extends ItemView {
 	private query = "";
 	private listEl!: HTMLElement;
 	private cardEls = new Map<TimelineEntry, HTMLElement>();
-	// Track filter (which datasets are shown) — orthogonal to the era lens.
-	// Tracks whose pill is switched off; empty = show everything.
-	private hiddenTracks = new Set<string>();
+	// Cards in render order with their year sort keys, for year-aligned sync.
+	private cardIndex: { key: number; el: HTMLElement }[] = [];
+	// When on, this pane follows (and drives) the shared year position of the
+	// other synced timeline panes — parallel comparison falls out of opening
+	// several timelines with different profiles and linking them.
+	syncEnabled = false;
+	private suppressSyncUntil = 0;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: HistoryLoggingPlugin) {
 		super(leaf);
@@ -118,64 +121,36 @@ export class TimelineView extends ItemView {
 		setIcon(refreshBtn.buttonEl, "refresh-cw");
 		refreshBtn.onClick(() => this.refresh());
 
-		this.renderTrackBar(root);
+		// Year-sync toggle: linked panes scroll together, aligned by year.
+		const syncBtn = new ButtonComponent(bar);
+		syncBtn.setTooltip("Sync scrolling with other timelines (align by year)");
+		syncBtn.buttonEl.addClass("hl-icon-btn");
+		const paintSync = () => {
+			setIcon(syncBtn.buttonEl, this.syncEnabled ? "link" : "unlink");
+			syncBtn.buttonEl.toggleClass("hl-sync-on", this.syncEnabled);
+		};
+		paintSync();
+		syncBtn.onClick(() => {
+			this.syncEnabled = !this.syncEnabled;
+			paintSync();
+		});
 
 		this.listEl = root.createDiv({ cls: "hl-timeline-list" });
+		this.registerDomEvent(root, "scroll", () => this.onScroll());
 		this.renderList();
-	}
-
-	// One toggle pill per track (plus “No track” when untracked entries exist).
-	// Pills filter which entries are shown — the track dimension — while the era
-	// dropdown only relabels groups. Hidden when the vault has no tracks at all.
-	private renderTrackBar(root: HTMLElement): void {
-		const tracks = this.allTracks();
-		const hasUntracked = this.entries.some((e) => e.tracks.length === 0);
-		if (tracks.length === 0) return;
-
-		const bar = root.createDiv({ cls: "hl-track-bar" });
-		const names = hasUntracked ? [...tracks, UNTRACKED] : tracks;
-		for (const name of names) {
-			const pill = bar.createEl("button", {
-				cls: "hl-track-pill",
-				text: name === UNTRACKED ? "No track" : name,
-			});
-			if (name === UNTRACKED) pill.addClass("hl-track-pill-untracked");
-			const paint = () =>
-				pill.toggleClass("is-off", this.hiddenTracks.has(name));
-			paint();
-			pill.addEventListener("click", () => {
-				if (this.hiddenTracks.has(name)) this.hiddenTracks.delete(name);
-				else this.hiddenTracks.add(name);
-				paint();
-				this.renderList();
-			});
-		}
-	}
-
-	private allTracks(): string[] {
-		const out: string[] = [];
-		for (const e of this.entries)
-			for (const t of e.tracks) if (!out.includes(t)) out.push(t);
-		return out.sort((a, b) => a.localeCompare(b));
-	}
-
-	private passesTrackFilter(e: TimelineEntry): boolean {
-		if (this.hiddenTracks.size === 0) return true;
-		if (e.tracks.length === 0) return !this.hiddenTracks.has(UNTRACKED);
-		return e.tracks.some((t) => !this.hiddenTracks.has(t));
 	}
 
 	private renderList(): void {
 		const list = this.listEl;
 		list.empty();
 		this.cardEls.clear();
+		this.cardIndex = [];
 
 		const profile = this.profiles[this.activeProfile];
 		const basePq = parseQuery(profile.match);
 		const userPq = parseQuery(this.query);
 
 		const visible = this.entries.filter((e) => {
-			if (!this.passesTrackFilter(e)) return false;
 			const hay = `${e.tag} ${e.snippet} ${e.summary ?? ""}`.toLowerCase();
 			return matchesQuery(hay, basePq) && matchesQuery(hay, userPq);
 		});
@@ -232,13 +207,12 @@ export class TimelineView extends ItemView {
 		const card = parent.createDiv({ cls: "hl-card" });
 		card.addClass(hasSummary ? "hl-has-summary" : "hl-no-summary");
 		this.cardEls.set(entry, card);
+		this.cardIndex.push({ key: entry.decoded.sortKey, el: card });
 
 		const head = card.createDiv({ cls: "hl-card-head" });
 		head.createSpan({ cls: "hl-year", text: describeYear(entry.decoded) });
 		head.createSpan({ cls: "hl-tag", text: entry.tag });
 		if (entry.evId) head.createSpan({ cls: "hl-ev-symbol", text: EV_SYMBOL });
-		for (const t of entry.tracks)
-			head.createSpan({ cls: "hl-track-badge", text: t });
 		head.createSpan({ cls: "hl-file", text: entry.fileName });
 
 		// Per-card actions (revealed on hover): write/edit summary in place, and
@@ -398,5 +372,28 @@ export class TimelineView extends ItemView {
 		card.scrollIntoView({ behavior: "smooth", block: "center" });
 		card.addClass("hl-flash-card");
 		window.setTimeout(() => card.removeClass("hl-flash-card"), 1300);
+	}
+
+	// Broadcast this pane's topmost visible year to the other synced panes.
+	private onScroll(): void {
+		if (!this.syncEnabled || Date.now() < this.suppressSyncUntil) return;
+		const top = this.contentEl.getBoundingClientRect().top;
+		const first = this.cardIndex.find(
+			(c) => c.el.getBoundingClientRect().bottom > top
+		);
+		if (first) this.plugin.broadcastYear(this, first.key);
+	}
+
+	// Scroll so the first card at/after `key` sits at the top of the pane.
+	alignToYear(key: number): void {
+		if (!this.syncEnabled) return;
+		const target =
+			this.cardIndex.find((c) => c.key >= key) ??
+			this.cardIndex[this.cardIndex.length - 1];
+		if (!target) return;
+		this.suppressSyncUntil = Date.now() + 200;
+		const box = this.contentEl.getBoundingClientRect();
+		this.contentEl.scrollTop +=
+			target.el.getBoundingClientRect().top - box.top - 8;
 	}
 }

@@ -37,41 +37,9 @@
 .hl-icon-btn {
 	padding: 4px 6px;
 }
-/* Track filter pills (which datasets are shown) — orthogonal to the era lens. */
-.hl-track-bar {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	max-width: 46em;
-	margin-inline: auto;
-	padding: 0 4px 8px;
-}
-.hl-track-pill {
-	padding: 2px 10px;
-	border-radius: 999px;
-	font-size: 0.82em;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	border: 1px solid transparent;
-	box-shadow: none;
-	cursor: pointer;
-}
-.hl-track-pill.is-off {
-	background: transparent;
-	color: var(--text-muted);
-	border-color: var(--background-modifier-border);
-}
-.hl-track-pill-untracked:not(.is-off) {
-	background: var(--background-modifier-active-hover);
-	color: var(--text-normal);
-}
-/* Track badge on a card, naming its dataset(s). */
-.hl-track-badge {
-	padding: 0 6px;
-	border-radius: 999px;
-	font-size: 0.78em;
-	background: var(--background-modifier-active-hover);
-	color: var(--text-muted);
+/* Year-sync toggle: lit while this pane is linked to the others. */
+.hl-icon-btn.hl-sync-on {
+	color: var(--interactive-accent);
 }
 .hl-group {
 	margin: 14px 0 6px;

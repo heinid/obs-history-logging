@@ -77,24 +77,18 @@ falls back to its century heading.
 
 ## Tracks
 
-`#histolog/<track>` tags classify entries into *tracks* (datasets/columns —
-日本史, 中国史, 科学史…), the filtering dimension, orthogonal to the era-system
-lens. Placement, from most to least specific:
+There are no preset tracks. A timeline is simply the result of a profile's
+free-form filter (keywords / tags / AND / OR / -not) combined with an
+era-system lens. `#histolog/<name>` is just an ordinary tag you can write —
+including inside ev markers, any number of them:
+`{ev k7f3a9x1 #ad/04/7/6 #histolog/ローマ史 #histolog/ヨーロッパ史 }` — and
+then filter on (`#histolog/日本史` in a profile's `match` or the search box),
+exactly like any other keyword.
 
-1. **Bound in the ev marker** — any number of track tags after the year tag:
-   `{ev k7f3a9x1 #ad/04/7/6 #histolog/ローマ史 #histolog/ヨーロッパ史 }`.
-2. **In the block** — a track tag anywhere in the entry's paragraph.
-3. **File-wide** — a track tag standing alone (in a block with no year tag,
-   e.g. a `#histolog/日本史` line at the top of a note) is the default for
-   blocks with no track of their own.
-
-Entries without any track are "No track". Filtering itself is free-form: use
-the track pills, or the search box (keywords / tags / AND / OR / -not) — they
-compose.
-
-When the vault has tracks, the timeline shows a row of toggle pills under the
-top bar — switch tracks off/on to filter which entries are shown. Cards carry a
-small badge naming their track(s).
+Parallel comparison falls out naturally: run **Open another timeline (split
+pane)** to open more timelines side by side, give each its own profile filter
+and era system, and press each pane's link button to sync their scrolling
+aligned by year.
 
 ## Data & privacy
 

@@ -1,8 +1,6 @@
-// Track classification: `#histolog/<track>` tags assign an entry to one or
-// more tracks (datasets/columns) — orthogonal to the era-system lens, which
-// only renames the axis's segments. A track tag inside a dated block
-// classifies that block; a track tag standing alone (in a block without any
-// year tag) declares a file-wide default for blocks with no track of their own.
+// `#histolog/<name>` tags are ordinary tags with no special machinery — just a
+// convenient namespace to write in ev markers or blocks and filter on via a
+// profile's match or the search box, like any other keyword.
 
 export const TRACK_TAG_PREFIX = "#histolog/";
 
@@ -29,6 +27,3 @@ export function dedupe(names: string[]): string[] {
 	for (const n of names) if (!out.includes(n)) out.push(n);
 	return out;
 }
-
-// Sentinel shown in the UI for entries with no track tag at all.
-export const UNTRACKED = "";
