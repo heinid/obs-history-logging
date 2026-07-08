@@ -345,12 +345,13 @@ export class TimelineView extends ItemView {
 			if (anchor.range)
 				item.createSpan({ cls: "hl-group-range", text: anchor.range });
 			item.addEventListener("click", () => {
+				// Land the band around a third of the way down the viewport — a
+				// natural eye position, clear of the bar and sticky column heads.
 				const box = this.contentEl.getBoundingClientRect();
 				this.contentEl.scrollTop +=
 					anchor.el.getBoundingClientRect().top -
 					box.top -
-					this.barHeight() -
-					16;
+					Math.max(this.barHeight() + 60, box.height * 0.3);
 				anchor.el.addClass("hl-flash-band");
 				window.setTimeout(() => anchor.el.removeClass("hl-flash-band"), 1300);
 			});
@@ -359,16 +360,44 @@ export class TimelineView extends ItemView {
 		this.paintNavCurrent();
 	}
 
+	// Highlight the era the reader is actually looking at: take the active
+	// track's topmost element around the reading line (a third down the
+	// viewport) — an entry resolves through its year, an era band through its
+	// name — so gaps and uncovered years clear the highlight instead of
+	// leaving a stale one. Client-rect coordinates stay consistent under
+	// Obsidian's zoom.
 	private paintNavCurrent(): void {
 		if (!this.navItems.length) return;
-		const top =
-			this.contentEl.getBoundingClientRect().top + this.barHeight() + 40;
-		let current = -1;
-		this.navItems.forEach(({ anchor }, i) => {
-			if (anchor.el.getBoundingClientRect().top <= top) current = i;
-		});
-		this.navItems.forEach(({ el }, i) =>
-			el.toggleClass("hl-era-nav-current", i === current)
+		const box = this.contentEl.getBoundingClientRect();
+		const line = box.top + Math.max(this.barHeight() + 60, box.height * 0.35);
+		const lens =
+			this.tracks.length > 1 ? this.tracks[this.active].lens : this.bar.lens;
+		const system = this.eraSystems.find((s) => s.name === lens) ?? null;
+
+		let bestTop = Infinity;
+		let current: string | null = null;
+		for (const { anchor } of this.navItems) {
+			const r = anchor.el.getBoundingClientRect();
+			if (r.bottom >= line && r.top < bestTop) {
+				bestTop = r.top;
+				current = anchor.name;
+			}
+		}
+		if (system) {
+			for (const { key, el } of this.cardIndex) {
+				if (this.tracks.length > 1) {
+					const cell = el.closest("[data-track]");
+					if (!cell || Number(cell.getAttr("data-track")) !== this.active)
+						continue;
+				}
+				const r = el.getBoundingClientRect();
+				if (r.bottom < line) continue;
+				if (r.top < bestTop) current = eraAt(system, key)?.name ?? null;
+				break;
+			}
+		}
+		this.navItems.forEach(({ anchor, el }) =>
+			el.toggleClass("hl-era-nav-current", current !== null && anchor.name === current)
 		);
 	}
 
