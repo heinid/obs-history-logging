@@ -11,6 +11,13 @@
 }
 
 /* Timeline view */
+/* Constrain content to a readable line length, left-aligned so a future
+   year-axis / era band can grow in the left gutter. In parallel mode the wide
+   pane is filled by adding more track columns, not by widening the cards. */
+.hl-timeline-list,
+.hl-timeline-bar {
+	max-width: 46em;
+}
 .hl-timeline-bar {
 	display: flex;
 	gap: 6px;
