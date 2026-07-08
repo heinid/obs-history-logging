@@ -176,6 +176,26 @@
 	font-weight: 600;
 }
 
+/* Other year tags in an expanded block jump to their own card on the timeline. */
+.hl-content.hl-context a.tag.hl-sibling-tag {
+	cursor: pointer;
+	text-decoration: underline dotted;
+	text-underline-offset: 2px;
+}
+/* Flash a card after scrolling to it from a sibling year tag. */
+.hl-card.hl-flash-card {
+	animation: hl-card-flash 1.2s ease-out;
+}
+@keyframes hl-card-flash {
+	0%,
+	40% {
+		background-color: var(--text-highlight-bg);
+	}
+	100% {
+		background-color: transparent;
+	}
+}
+
 /* Flash the jump target in the editor, then fade back to a normal selection. */
 .cm-selectionBackground.hl-flash {
 	animation: hl-flash 1.2s ease-out;

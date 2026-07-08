@@ -2,6 +2,7 @@ import {
 	ButtonComponent,
 	ItemView,
 	MarkdownRenderer,
+	Notice,
 	WorkspaceLeaf,
 	setIcon,
 } from "obsidian";
@@ -26,6 +27,7 @@ export class TimelineView extends ItemView {
 	private activeProfile = 0;
 	private query = "";
 	private listEl!: HTMLElement;
+	private cardEls = new Map<TimelineEntry, HTMLElement>();
 
 	constructor(leaf: WorkspaceLeaf, private plugin: HistoryLoggingPlugin) {
 		super(leaf);
@@ -119,6 +121,7 @@ export class TimelineView extends ItemView {
 	private renderList(): void {
 		const list = this.listEl;
 		list.empty();
+		this.cardEls.clear();
 
 		const profile = this.profiles[this.activeProfile];
 		const basePq = parseQuery(profile.match);
@@ -180,6 +183,7 @@ export class TimelineView extends ItemView {
 
 		const card = parent.createDiv({ cls: "hl-card" });
 		card.addClass(hasSummary ? "hl-has-summary" : "hl-no-summary");
+		this.cardEls.set(entry, card);
 
 		const head = card.createDiv({ cls: "hl-card-head" });
 		head.createSpan({ cls: "hl-year", text: describeYear(entry.decoded) });
@@ -288,7 +292,7 @@ export class TimelineView extends ItemView {
 				content,
 				entry.filePath,
 				this.plugin
-			).then(() => this.highlightTargetTag(content, entry));
+			).then(() => this.wireBlockTags(content, entry));
 			return;
 		}
 		content.addClass("hl-content", "hl-summary", "hl-clamp");
@@ -302,13 +306,47 @@ export class TimelineView extends ItemView {
 		);
 	}
 
-	// Emphasise the exact year tag this card is about within the expanded block,
-	// picking the right occurrence when the paragraph repeats the same tag.
-	private highlightTargetTag(content: HTMLElement, entry: TimelineEntry): void {
-		const matches = Array.from(
-			content.querySelectorAll<HTMLElement>("a.tag")
-		).filter((el) => (el.textContent ?? "").trim() === entry.tag);
-		const target = matches[entry.tagOrdinal] ?? matches[0];
-		target?.addClass("hl-target-tag");
+	// Within an expanded block: emphasise the exact year tag this card is about,
+	// and make every other year tag a shortcut that scrolls to its own card —
+	// the same block's other moments on the timeline. Ordinals disambiguate
+	// repeated tags in one paragraph.
+	private wireBlockTags(content: HTMLElement, entry: TimelineEntry): void {
+		const seen = new Map<string, number>();
+		for (const el of Array.from(content.querySelectorAll<HTMLElement>("a.tag"))) {
+			const text = (el.textContent ?? "").trim();
+			if (!parseYearTag(text)) continue;
+			const ord = seen.get(text) ?? 0;
+			seen.set(text, ord + 1);
+			if (text === entry.tag && ord === entry.tagOrdinal) {
+				el.addClass("hl-target-tag");
+				continue;
+			}
+			el.addClass("hl-sibling-tag");
+			el.setAttr("aria-label", "Go to this year's entry");
+			el.addEventListener("click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const sib = this.entries.find(
+					(s) =>
+						s.filePath === entry.filePath &&
+						s.block === entry.block &&
+						s.tag === text &&
+						s.tagOrdinal === ord
+				);
+				if (sib) this.scrollToEntry(sib);
+			});
+		}
+	}
+
+	// Scroll the timeline to another entry's card and flash it.
+	private scrollToEntry(target: TimelineEntry): void {
+		const card = this.cardEls.get(target);
+		if (!card) {
+			new Notice("That entry is hidden by the current filter.");
+			return;
+		}
+		card.scrollIntoView({ behavior: "smooth", block: "center" });
+		card.addClass("hl-flash-card");
+		window.setTimeout(() => card.removeClass("hl-flash-card"), 1300);
 	}
 }
