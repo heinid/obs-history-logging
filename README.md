@@ -75,6 +75,19 @@ editable boundary table, plus one-click import of bundled templates. A profile
 can set `eraSystem: <name>` as its default lens; anything a system doesn't cover
 falls back to its century heading.
 
+## Tracks
+
+`#histolog/<track>` tags classify entries into *tracks* (datasets/columns —
+日本史, 中国史, 科学史…), the filtering dimension, orthogonal to the era-system
+lens. A track tag inside a dated block classifies that block; a track tag
+standing alone (in a block with no year tag, e.g. a `#histolog/日本史` line at
+the top of a note) is the file-wide default for blocks with no track of their
+own. Entries without any track are "No track".
+
+When the vault has tracks, the timeline shows a row of toggle pills under the
+top bar — switch tracks off/on to filter which entries are shown. Cards carry a
+small badge naming their track(s).
+
 ## Data & privacy
 
 - All data (`events.md` and future rules/profiles) lives in a folder inside your

@@ -2,6 +2,7 @@ import { App, TFile } from "obsidian";
 import { DecodedYear } from "./types";
 import { parseYearTag, yearTagRegex } from "./year-tag";
 import { parseEvMarks, stripEvMarkers } from "./parser";
+import { dedupe, trackMatches, tracksIn } from "./tracks";
 import { DataStore } from "./data-store";
 
 // One occurrence of a year tag in the vault, decoded and enriched with its
@@ -19,6 +20,7 @@ export interface TimelineEntry {
 	snippet: string; // trimmed source line, for search haystack
 	block: string; // the surrounding paragraph, markdown-rendered in cards
 	tagOrdinal: number; // 0-based index of this tag among identical tags in the block
+	tracks: string[]; // #histolog/<track> classification; [] = untracked
 }
 
 function lineOf(content: string, index: number): number {
@@ -65,6 +67,18 @@ function blockAt(content: string, index: number): { text: string; start: number 
 	};
 }
 
+// File-wide default tracks: track tags standing alone, i.e. in a block that
+// contains no year tag (like a `#histolog/日本史` declaration line at the top).
+// Track tags inside dated blocks only classify their own block.
+function fileTracksOf(content: string): string[] {
+	const names: string[] = [];
+	for (const t of trackMatches(content)) {
+		const block = blockAt(content, t.index);
+		if (!yearTagRegex().test(block.text)) names.push(t.name);
+	}
+	return dedupe(names);
+}
+
 // 0-based index of the tag occurrence at `index` among identical year tags from
 // `blockStart` up to it — so the expanded card can highlight the right one even
 // when a paragraph repeats the same tag.
@@ -98,6 +112,7 @@ export async function scanVault(
 
 	for (const file of files) {
 		const content = (await app.vault.cachedRead(file)).replace(/\r\n/g, "\n");
+		const fileTracks = fileTracksOf(content);
 
 		// Map char-offset of an event's inner tag -> its id.
 		const evTagIndex = new Map<number, string>();
@@ -112,6 +127,7 @@ export async function scanVault(
 			if (!decoded) continue;
 			const evId = evTagIndex.get(m.index);
 			const block = blockAt(content, m.index);
+			const blockTracks = tracksIn(block.text);
 			entries.push({
 				filePath: file.path,
 				fileName: file.basename,
@@ -124,6 +140,9 @@ export async function scanVault(
 				snippet: lineTextAt(content, m.index),
 				block: stripEvMarkers(block.text),
 				tagOrdinal: tagOrdinal(content, block.start, m.index, m[0]),
+				// A track tag in the block wins; otherwise any track tag elsewhere
+				// in the file applies file-wide.
+				tracks: blockTracks.length > 0 ? blockTracks : fileTracks,
 			});
 		}
 	}

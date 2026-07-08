@@ -9,6 +9,7 @@ import {
 	serializeErasFile,
 	eraAt,
 } from "../src/eras";
+import { tracksIn, trackMatches } from "../src/tracks";
 import { EventEntry } from "../src/types";
 
 let failures = 0;
@@ -121,6 +122,14 @@ const eraRound = parseErasFile(serializeErasFile(systems));
 eq("eras roundtrip systems", eraRound.length, 2);
 eq("eras roundtrip boundary", eraRound[1].boundaries[1].name, "平安");
 eq("eras roundtrip label", eraRound[0].boundaries[1].yearLabel, "509 BC");
+
+// tracks
+eq("tracksIn", tracksIn("x #histolog/日本史 y #histolog/中国史 #histolog/日本史"), ["日本史", "中国史"]);
+eq("tracksIn none", tracksIn("no tags here #ad/07/1/0"), []);
+eq("tracksIn not-midword", tracksIn("foo#histolog/中国史"), []);
+const tm = trackMatches("a #histolog/ローマ史 b");
+eq("trackMatches index", tm[0].index, "a ".length);
+eq("trackMatches name", tm[0].name, "ローマ史");
 
 if (failures > 0) {
 	console.error(`\n${failures} failure(s)`);
