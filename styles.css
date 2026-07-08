@@ -172,21 +172,28 @@
 	color: var(--text-accent);
 }
 /* Multi-track comparison grid: shared time rows crossing track columns,
-   all inside one view under a single scrollbar. */
+   all inside one view under a single scrollbar. The view itself scrolls
+   horizontally when columns overflow, so sticky heads keep working; the bar
+   pins to the visible left edge. */
 .hl-timeline-list:has(.hl-multi-scroll) {
 	max-width: none;
 }
-.hl-multi-scroll {
+.hl-timeline:has(.hl-multi-grid) {
 	overflow-x: auto;
+}
+.hl-timeline:has(.hl-multi-grid) .hl-timeline-bar {
+	max-width: none;
+	margin-inline: 0;
+	width: 100%;
+	left: 0;
 }
 .hl-multi-grid {
 	display: grid;
 	column-gap: 12px;
-	align-items: start;
 }
 .hl-track-head {
 	position: sticky;
-	top: 0;
+	top: var(--hl-bar-h, 60px);
 	z-index: 3;
 	display: flex;
 	align-items: center;
@@ -261,19 +268,41 @@
 /* Expanded context stays bounded in the comparison grid, scrolling inside
    its card so one long block never blows up the shared row height. */
 .hl-multi-grid .hl-card.hl-expanded .hl-content.hl-context {
-	max-height: 40vh;
+	max-height: max(40vh, 280px);
 	overflow-y: auto;
+	overscroll-behavior: contain;
 }
-/* Floating era navigator: the active track's table of contents. */
+/* An era the track has no entries in — present for the full skeleton. */
+.hl-era-band.hl-era-empty {
+	opacity: 0.55;
+	font-weight: 400;
+}
+.hl-era-band .hl-era-count {
+	font-size: 0.8em;
+	font-weight: 400;
+	color: var(--text-faint);
+}
+/* Flash an era band after jumping to it from the navigator. */
+.hl-era-band.hl-flash-band,
+.hl-group.hl-flash-band {
+	animation: hl-card-flash 1.2s ease-out;
+}
+.hl-era-nav-item.hl-era-nav-empty {
+	color: var(--text-faint);
+}
+/* Floating era navigator: the active track's table of contents. The wrap
+   pins to the visible top-left corner (its width is set to the pane's visible
+   width from JS), so the panel stays put under horizontal scrolling too. */
 .hl-era-nav-wrap {
 	position: sticky;
 	top: 0;
+	left: 0;
 	height: 0;
 	z-index: 4;
 }
 .hl-era-nav {
 	position: absolute;
-	top: 44px;
+	top: calc(var(--hl-bar-h, 44px) + 6px);
 	right: 4px;
 	max-width: 200px;
 	max-height: 60vh;

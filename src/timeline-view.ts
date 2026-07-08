@@ -178,6 +178,9 @@ export class TimelineView extends ItemView {
 			});
 		});
 
+		// Sticky offsets (track heads, navigator) hang below the bar's height.
+		root.style.setProperty("--hl-bar-h", `${bar.offsetHeight}px`);
+
 		this.listEl = root.createDiv({ cls: "hl-timeline-list" });
 		this.registerDomEvent(root, "scroll", () => this.onScroll());
 		this.renderList();
@@ -298,9 +301,12 @@ export class TimelineView extends ItemView {
 				const h = list.createEl("h3", { cls: "hl-group" });
 				h.createSpan({ text: label });
 				if (sub) h.createSpan({ cls: "hl-group-range", text: sub });
-				if (system && sub) anchors.push({ name: label, range: sub, el: h });
+				if (system && sub)
+					anchors.push({ name: label, range: sub, count: 0, el: h });
 				lastGroup = label;
 			}
+			if (system && anchors.length && lastGroup === anchors[anchors.length - 1].name)
+				anchors[anchors.length - 1].count++;
 			this.renderCard(list, entry);
 		}
 		this.trackCounts = [visible.length];
@@ -308,9 +314,14 @@ export class TimelineView extends ItemView {
 		this.renderEraNav();
 	}
 
-	// Floating era navigator: the active track's table of contents. Lists the
-	// eras (its lens) that actually have content; click one to jump to where it
-	// starts, and the era under the viewport top stays highlighted on scroll.
+	private barHeight(): number {
+		return this.barHost?.offsetHeight ?? 60;
+	}
+
+	// Floating era navigator: the active track's complete table of contents —
+	// every era of its lens with its entry count, empty ones dimmed. Click one
+	// to jump to where it starts (the band flashes), and the era under the
+	// viewport top stays highlighted on scroll.
 	private renderEraNav(): void {
 		this.navEl?.remove();
 		this.navEl = undefined;
@@ -319,6 +330,7 @@ export class TimelineView extends ItemView {
 		if (!anchors.length || !this.listEl) return;
 		const wrap = this.listEl.createDiv({ cls: "hl-era-nav-wrap" });
 		this.listEl.prepend(wrap);
+		wrap.style.width = `${this.contentEl.clientWidth}px`;
 		this.navEl = wrap;
 		const nav = wrap.createDiv({ cls: "hl-era-nav" });
 		if (this.tracks.length > 1)
@@ -328,13 +340,19 @@ export class TimelineView extends ItemView {
 			});
 		for (const anchor of anchors) {
 			const item = nav.createDiv({ cls: "hl-era-nav-item" });
-			item.createSpan({ text: anchor.name });
+			item.toggleClass("hl-era-nav-empty", anchor.count === 0);
+			item.createSpan({ text: `${anchor.name} (${anchor.count})` });
 			if (anchor.range)
 				item.createSpan({ cls: "hl-group-range", text: anchor.range });
 			item.addEventListener("click", () => {
 				const box = this.contentEl.getBoundingClientRect();
 				this.contentEl.scrollTop +=
-					anchor.el.getBoundingClientRect().top - box.top - 90;
+					anchor.el.getBoundingClientRect().top -
+					box.top -
+					this.barHeight() -
+					16;
+				anchor.el.addClass("hl-flash-band");
+				window.setTimeout(() => anchor.el.removeClass("hl-flash-band"), 1300);
 			});
 			this.navItems.push({ anchor, el: item });
 		}
@@ -343,7 +361,8 @@ export class TimelineView extends ItemView {
 
 	private paintNavCurrent(): void {
 		if (!this.navItems.length) return;
-		const top = this.contentEl.getBoundingClientRect().top + 100;
+		const top =
+			this.contentEl.getBoundingClientRect().top + this.barHeight() + 40;
 		let current = -1;
 		this.navItems.forEach(({ anchor }, i) => {
 			if (anchor.el.getBoundingClientRect().top <= top) current = i;
@@ -461,6 +480,9 @@ export class TimelineView extends ItemView {
 			// stays selectable/copyable, only a clean click toggles expansion.
 			if (t.tagName === "A" || t.closest("button")) return;
 			if ((window.getSelection()?.toString() ?? "") !== "") return;
+			// The expanded block scrolls and selects freely (including its
+			// scrollbar); fold back from the card head or the padding around it.
+			if (expanded && t.closest(".hl-content.hl-context")) return;
 			expanded = !expanded;
 			paint();
 		});
@@ -540,6 +562,10 @@ export class TimelineView extends ItemView {
 		card.scrollIntoView({ behavior: "smooth", block: "center" });
 		card.addClass("hl-flash-card");
 		window.setTimeout(() => card.removeClass("hl-flash-card"), 1300);
+	}
+
+	onResize(): void {
+		if (this.navEl) this.navEl.style.width = `${this.contentEl.clientWidth}px`;
 	}
 
 	// Broadcast this pane's topmost visible year to the other synced panes.

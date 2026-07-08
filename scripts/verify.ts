@@ -1,4 +1,9 @@
-import { parseYearTag, encodeYearTag, truncateTag } from "../src/year-tag";
+import {
+	parseYearTag,
+	encodeYearTag,
+	truncateTag,
+	describeYear,
+} from "../src/year-tag";
 import { parseEvMarks, stripEvMarkers, wrapTagAt, unwrapEv } from "../src/parser";
 import { generateId, isValidId } from "../src/id";
 import { parseEventsFile, serializeEventsFile } from "../src/events-format";
@@ -44,6 +49,12 @@ eq("bc century 700s", parseYearTag("#bc/07"), {
 	era: "bc", magnitude: 700, sortKey: -799, precision: "century", span: [-799, -700],
 });
 eq("bad tag", parseYearTag("#foo/1"), null);
+
+// century labels: 100–199 BC is the 2nd century BC, 1–99 BC the 1st
+eq("label ad c8", describeYear(parseYearTag("#ad/07")!), "8th c. AD");
+eq("label bc c1", describeYear(parseYearTag("#bc/00")!), "1st c. BC");
+eq("label bc c2", describeYear(parseYearTag("#bc/01")!), "2nd c. BC");
+eq("label bc c13", describeYear(parseYearTag("#bc/12")!), "13th c. BC");
 
 // bc before ad ordering
 const bc = parseYearTag("#bc/07/1/0")!.sortKey;

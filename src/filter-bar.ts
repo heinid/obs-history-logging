@@ -4,6 +4,7 @@ import { GroupBy, Profile } from "./profiles";
 import { EraSystem } from "./eras";
 import { tokenise } from "./query";
 import { NameModal } from "./name-modal";
+import { TagSuggest } from "./tag-suggest";
 
 // The top bar reads as the pane's self-description, left to right:
 //   filter (query-builder chips + free text) → lens (era system) → view.
@@ -138,6 +139,7 @@ export class FilterBar {
 				this.emit();
 			}
 		});
+		new TagSuggest(this.plugin.app, this.inputEl);
 		box.addEventListener("click", () => this.inputEl.focus());
 		this.countEl = filterRow.createSpan({ cls: "hl-count" });
 		this.paintChips();
