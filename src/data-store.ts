@@ -8,6 +8,11 @@ import {
 	serializeProfilesFile,
 } from "./profiles";
 import { EraSystem, parseErasFile, serializeErasFile } from "./eras";
+import {
+	TimelineLayout,
+	parseLayoutsFile,
+	serializeLayoutsFile,
+} from "./layouts";
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
@@ -87,6 +92,25 @@ export class DataStore {
 		await this.ensureFolder();
 		const content = serializeErasFile(systems);
 		const path = this.erasPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
+	}
+
+	private layoutsPath(): string {
+		return normalizePath(`${this.getFolder()}/layouts.md`);
+	}
+
+	async readLayouts(): Promise<TimelineLayout[]> {
+		const file = this.app.vault.getAbstractFileByPath(this.layoutsPath());
+		if (!(file instanceof TFile)) return [];
+		return parseLayoutsFile(await this.app.vault.read(file));
+	}
+
+	async writeLayouts(layouts: TimelineLayout[]): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeLayoutsFile(layouts);
+		const path = this.layoutsPath();
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (file instanceof TFile) await this.app.vault.modify(file, content);
 		else await this.app.vault.create(path, content);

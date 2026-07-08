@@ -94,6 +94,14 @@ The timeline's top bar is the pane's whole definition, in reading order:
 Each pane's state (filter, lens, grouping, loaded view, year-sync) persists
 with the Obsidian workspace layout.
 
+## Layouts
+
+A layout is a saved multi-pane desk: every open timeline pane's state, as one
+named unit. **Save layout (all panes)…** snapshots the current panes;
+**Open saved layout…** closes the timeline panes and reopens the saved set
+side by side. Both live in the view (bookmark) menu and the command palette.
+Layouts are stored in `_chronology/layouts.md` (plain text, hand-editable).
+
 ## Tracks
 
 There are no preset tracks. A timeline is simply the result of a pane's

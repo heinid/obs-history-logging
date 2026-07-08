@@ -308,6 +308,19 @@ export class FilterBar {
 					})
 			);
 		}
+		menu.addSeparator();
+		menu.addItem((i) =>
+			i
+				.setTitle("Save layout (all panes)…")
+				.setIcon("layout")
+				.onClick(() => this.plugin.saveLayoutInteractive())
+		);
+		menu.addItem((i) =>
+			i
+				.setTitle("Open saved layout…")
+				.setIcon("layout-grid")
+				.onClick(() => void this.plugin.openLayoutInteractive())
+		);
 		menu.showAtMouseEvent(e);
 	}
 }

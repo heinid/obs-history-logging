@@ -10,6 +10,7 @@ import {
 	eraAt,
 } from "../src/eras";
 import { tracksIn, trackMatches } from "../src/tracks";
+import { parseLayoutsFile, serializeLayoutsFile } from "../src/layouts";
 import { EventEntry } from "../src/types";
 
 let failures = 0;
@@ -146,6 +147,18 @@ eq("tracksIn not-midword", tracksIn("foo#histolog/中国史"), []);
 const tm = trackMatches("a #histolog/ローマ史 b");
 eq("trackMatches index", tm[0].index, "a ".length);
 eq("trackMatches name", tm[0].name, "ローマ史");
+
+// layouts round-trip
+const layouts = parseLayoutsFile(
+	"# layouts\n## 東西対照\n### pane\nfilter: #histolog/日本史\nlens: 日本史\ngroupBy: century\nprofile: 日本史\nsync: true\n### pane\nfilter: #histolog/ローマ史\nlens: ローマ史\ngroupBy: century\nsync: true\n"
+);
+eq("layouts parsed", layouts.length, 1);
+eq("layout panes", layouts[0].panes.length, 2);
+eq("layout pane filter", layouts[0].panes[0].filter, "#histolog/日本史");
+eq("layout pane sync", layouts[0].panes[1].sync, true);
+eq("layout pane no profile", layouts[0].panes[1].profile, "");
+const layoutRound = parseLayoutsFile(serializeLayoutsFile(layouts));
+eq("layouts roundtrip", layoutRound, layouts);
 
 if (failures > 0) {
 	console.error(`\n${failures} failure(s)`);

@@ -1,4 +1,10 @@
-import { Editor, Plugin, WorkspaceLeaf } from "obsidian";
+import {
+	Editor,
+	FuzzySuggestModal,
+	Notice,
+	Plugin,
+	WorkspaceLeaf,
+} from "obsidian";
 import {
 	DEFAULT_SETTINGS,
 	HistoryLoggingSettings,
@@ -11,6 +17,8 @@ import { addEventAtCursor } from "./commands";
 import { SummaryModal } from "./summary-modal";
 import { TIMELINE_VIEW_TYPE, TimelineView } from "./timeline-view";
 import { ERA_MANAGER_VIEW_TYPE, EraManagerView } from "./era-manager-view";
+import { LayoutPane, TimelineLayout } from "./layouts";
+import { NameModal } from "./name-modal";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
@@ -55,6 +63,16 @@ export default class HistoryLoggingPlugin extends Plugin {
 			id: "open-timeline-sidebar",
 			name: "Open history timeline in sidebar",
 			callback: () => this.activateTimeline("sidebar"),
+		});
+		this.addCommand({
+			id: "save-timeline-layout",
+			name: "Save timeline layout (all panes)",
+			callback: () => this.saveLayoutInteractive(),
+		});
+		this.addCommand({
+			id: "open-timeline-layout",
+			name: "Open saved timeline layout",
+			callback: () => void this.openLayoutInteractive(),
 		});
 		this.addCommand({
 			id: "manage-era-systems",
@@ -107,6 +125,61 @@ export default class HistoryLoggingPlugin extends Plugin {
 		}
 	}
 
+	// Snapshot every open timeline pane's state under a name in layouts.md —
+	// a whole parallel-comparison desk becomes one reopenable unit.
+	saveLayoutInteractive(): void {
+		const panes = this.timelinePanes();
+		if (!panes.length) {
+			new Notice("No timeline panes are open.");
+			return;
+		}
+		new NameModal(this.app, "Save layout as", "", (name) => {
+			void (async () => {
+				const layouts = await this.store.readLayouts();
+				const rest = layouts.filter((l) => l.name !== name);
+				await this.store.writeLayouts([...rest, { name, panes }]);
+				new Notice(`Layout "${name}" saved (${panes.length} panes).`);
+			})();
+		}).open();
+	}
+
+	async openLayoutInteractive(): Promise<void> {
+		const layouts = await this.store.readLayouts();
+		if (!layouts.length) {
+			new Notice("No saved layouts. Save one first.");
+			return;
+		}
+		new LayoutSuggestModal(this, layouts).open();
+	}
+
+	private timelinePanes(): LayoutPane[] {
+		const panes: LayoutPane[] = [];
+		for (const leaf of this.app.workspace.getLeavesOfType(TIMELINE_VIEW_TYPE)) {
+			const view = leaf.view;
+			if (view instanceof TimelineView)
+				panes.push(view.getState() as unknown as LayoutPane);
+		}
+		return panes;
+	}
+
+	// Replace the current timeline panes with the layout's, split side by side.
+	async applyLayout(layout: TimelineLayout): Promise<void> {
+		const { workspace } = this.app;
+		workspace.detachLeavesOfType(TIMELINE_VIEW_TYPE);
+		let leaf: WorkspaceLeaf | null = null;
+		for (const pane of layout.panes) {
+			leaf = leaf
+				? workspace.createLeafBySplit(leaf, "vertical")
+				: workspace.getLeaf("tab");
+			await leaf.setViewState({
+				type: TIMELINE_VIEW_TYPE,
+				active: true,
+				state: pane as unknown as Record<string, unknown>,
+			});
+		}
+		if (leaf) workspace.revealLeaf(leaf);
+	}
+
 	// Open the era-system manager as a main-pane tab (reuse if already open).
 	async openEraManager(): Promise<void> {
 		const { workspace } = this.app;
@@ -138,5 +211,27 @@ export default class HistoryLoggingPlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+	}
+}
+
+class LayoutSuggestModal extends FuzzySuggestModal<TimelineLayout> {
+	constructor(
+		private plugin: HistoryLoggingPlugin,
+		private layouts: TimelineLayout[]
+	) {
+		super(plugin.app);
+		this.setPlaceholder("Open saved timeline layout…");
+	}
+
+	getItems(): TimelineLayout[] {
+		return this.layouts;
+	}
+
+	getItemText(l: TimelineLayout): string {
+		return `${l.name} (${l.panes.length} panes)`;
+	}
+
+	onChooseItem(l: TimelineLayout): void {
+		void this.plugin.applyLayout(l);
 	}
 }
