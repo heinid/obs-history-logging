@@ -8,7 +8,7 @@
 //   match: #ad
 //   groupBy: decade
 
-export type GroupBy = "century" | "decade" | "none";
+export type GroupBy = "era" | "century" | "decade" | "none";
 
 export interface Profile {
 	name: string;
@@ -25,7 +25,7 @@ export const DEFAULT_PROFILE: Profile = {
 };
 
 function isGroupBy(v: string): v is GroupBy {
-	return v === "century" || v === "decade" || v === "none";
+	return v === "era" || v === "century" || v === "decade" || v === "none";
 }
 
 export function parseProfilesFile(content: string): Profile[] {

@@ -42,6 +42,13 @@
 	border-bottom: 1px solid var(--background-modifier-border);
 	color: var(--text-accent);
 }
+/* Era range suffix on a named-era group heading, e.g. "509 BC – 27 BC". */
+.hl-group .hl-group-range {
+	margin-left: 8px;
+	font-size: 0.75em;
+	font-weight: 400;
+	color: var(--text-faint);
+}
 .hl-card {
 	padding: 6px 8px;
 	margin: 4px 0;

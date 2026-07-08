@@ -7,6 +7,7 @@ import {
 	parseProfilesFile,
 	serializeProfilesFile,
 } from "./profiles";
+import { Era, parseErasFile } from "./eras";
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
@@ -70,6 +71,16 @@ export class DataStore {
 		const file = this.app.vault.getAbstractFileByPath(this.profilesPath());
 		if (!(file instanceof TFile)) return [DEFAULT_PROFILE];
 		return parseProfilesFile(await this.app.vault.read(file));
+	}
+
+	private erasPath(): string {
+		return normalizePath(`${this.getFolder()}/eras.md`);
+	}
+
+	async readEras(): Promise<Era[]> {
+		const file = this.app.vault.getAbstractFileByPath(this.erasPath());
+		if (!(file instanceof TFile)) return [];
+		return parseErasFile(await this.app.vault.read(file));
 	}
 
 	async writeProfiles(profiles: Profile[]): Promise<void> {

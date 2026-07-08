@@ -43,6 +43,23 @@ you add one, the tag is wrapped inline:
 4. Click the ⌛ marker any time to view/edit the summary or jump back to the
    source.
 
+## Named eras
+
+Optionally group the timeline by named historical spans instead of bare
+centuries. Define them in `_chronology/eras.md`:
+
+```
+## 共和政ローマ
+range: 509 BC – 27 BC
+
+## 奈良時代
+range: 710 – 794
+```
+
+Then set a profile's `groupBy: era` in `profiles.md`. Each entry falls into the
+era whose range contains it (overlaps allowed — the narrowest match wins);
+anything outside every era falls back to its century heading.
+
 ## Data & privacy
 
 - All data (`events.md` and future rules/profiles) lives in a folder inside your

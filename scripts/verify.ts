@@ -2,6 +2,7 @@ import { parseYearTag, encodeYearTag, truncateTag } from "../src/year-tag";
 import { parseEvMarks, wrapTagAt, unwrapEv } from "../src/parser";
 import { generateId, isValidId } from "../src/id";
 import { parseEventsFile, serializeEventsFile } from "../src/events-format";
+import { parseAbsYear, parseErasFile, eraFor } from "../src/eras";
 import { EventEntry } from "../src/types";
 
 let failures = 0;
@@ -81,6 +82,24 @@ const ser = serializeEventsFile(m);
 const round = parseEventsFile(ser);
 eq("roundtrip tag", round.get("k7f3a9x1")?.tag, "#ad/07/1/0");
 eq("roundtrip summary", round.get("k7f3a9x1")?.summary, "奈良时代定都平城京。\n\n第二段。");
+
+// eras
+eq("absyear ad", parseAbsYear("476 AD"), 476);
+eq("absyear bare ad", parseAbsYear("710"), 710);
+eq("absyear bc", parseAbsYear("509 BC"), -509);
+eq("absyear zero rejected", parseAbsYear("0"), null);
+const eras = parseErasFile(
+	"# eras\n## 共和政ローマ\nrange: 509 BC – 27 BC\n## 奈良時代\nrange: 710 – 794\n"
+);
+eq("eras parsed", eras.length, 2);
+eq("eras sorted earliest first", eras[0].name, "共和政ローマ");
+eq("era range keys", [eras[0].startKey, eras[0].endKey], [-509, -27]);
+// 500 BC exact -> sortKey -500, inside Republican Rome
+eq("eraFor bc point", eraFor(eras, parseYearTag("#bc/05/0/0")!.sortKey)?.name, "共和政ローマ");
+// 710 AD -> Nara
+eq("eraFor ad point", eraFor(eras, parseYearTag("#ad/07/1/0")!.sortKey)?.name, "奈良時代");
+// 600 AD -> no era
+eq("eraFor gap", eraFor(eras, parseYearTag("#ad/06/0/0")!.sortKey), null);
 
 if (failures > 0) {
 	console.error(`\n${failures} failure(s)`);

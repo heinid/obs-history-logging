@@ -9,6 +9,7 @@ import type HistoryLoggingPlugin from "./main";
 import { TimelineEntry, scanVault } from "./scan";
 import { describeYear, parseYearTag, truncateTag } from "./year-tag";
 import { Profile } from "./profiles";
+import { Era, eraFor } from "./eras";
 import { matchesQuery, parseQuery } from "./query";
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
@@ -20,6 +21,7 @@ export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
 export class TimelineView extends ItemView {
 	private entries: TimelineEntry[] = [];
 	private profiles: Profile[] = [];
+	private eras: Era[] = [];
 	private activeProfile = 0;
 	private query = "";
 	private listEl!: HTMLElement;
@@ -45,6 +47,7 @@ export class TimelineView extends ItemView {
 	// Re-scan the vault and rebuild everything.
 	async refresh(): Promise<void> {
 		this.profiles = await this.plugin.store.readProfiles();
+		this.eras = await this.plugin.store.readEras();
 		if (this.activeProfile >= this.profiles.length) this.activeProfile = 0;
 		this.entries = await scanVault(
 			this.app,
@@ -111,20 +114,31 @@ export class TimelineView extends ItemView {
 
 		let lastGroup: string | null = null;
 		for (const entry of visible) {
-			const group = this.groupLabel(entry, profile);
-			if (profile.groupBy !== "none" && group !== lastGroup) {
-				list.createEl("h3", { cls: "hl-group", text: group });
-				lastGroup = group;
+			const { label, sub } = this.groupLabel(entry, profile);
+			if (profile.groupBy !== "none" && label !== lastGroup) {
+				const h = list.createEl("h3", { cls: "hl-group" });
+				h.createSpan({ text: label });
+				if (sub) h.createSpan({ cls: "hl-group-range", text: sub });
+				lastGroup = label;
 			}
 			this.renderCard(list, entry);
 		}
 	}
 
-	private groupLabel(entry: TimelineEntry, profile: Profile): string {
-		if (profile.groupBy === "none") return "";
+	private groupLabel(
+		entry: TimelineEntry,
+		profile: Profile
+	): { label: string; sub: string } {
+		if (profile.groupBy === "none") return { label: "", sub: "" };
+		if (profile.groupBy === "era") {
+			const era = eraFor(this.eras, entry.decoded.sortKey);
+			// Fall back to the century heading for anything outside a named era.
+			if (era) return { label: era.name, sub: era.range };
+			return { label: describeYear(entry.decoded), sub: "" };
+		}
 		const truncated = truncateTag(entry.tag, profile.groupBy) ?? entry.tag;
 		const gd = parseYearTag(truncated) ?? entry.decoded;
-		return describeYear(gd);
+		return { label: describeYear(gd), sub: "" };
 	}
 
 	private renderCard(parent: HTMLElement, entry: TimelineEntry): void {
