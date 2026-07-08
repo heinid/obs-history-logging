@@ -112,46 +112,45 @@
 	padding: 12px 4px;
 }
 
-/* Expandable full-block context */
-.hl-expand {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	margin-top: 4px;
-	padding: 2px 4px;
-	background: transparent;
-	box-shadow: none;
-	border: none;
-	color: var(--text-muted);
-	font-size: 0.8em;
+/* A written summary (digested understanding): accent spine. */
+.hl-card.hl-has-summary {
+	border-left: 3px solid var(--interactive-accent);
+}
+/* Expandable cards hint that the body toggles. */
+.hl-card.hl-expandable .hl-card-body {
 	cursor: pointer;
 }
-.hl-expand:hover {
-	color: var(--text-normal);
-}
-.hl-expand-icon {
+/* Subtle expand chevron, always visible on expandable cards. */
+.hl-chevron {
 	display: inline-flex;
+	align-items: center;
+	color: var(--text-faint);
+	order: 5;
 }
-.hl-expand-icon svg {
-	width: 0.9em;
-	height: 0.9em;
+.hl-chevron svg {
+	width: 0.85em;
+	height: 0.85em;
 }
-.hl-card-context {
-	margin-top: 6px;
-	padding-top: 6px;
-	border-top: 1px solid var(--background-modifier-border);
+.hl-card.hl-expandable:hover .hl-chevron {
+	color: var(--text-muted);
+}
+/* Expanded state: the raw source block, set apart from your own words. */
+.hl-content.hl-context {
+	margin-top: 2px;
+	padding-left: 8px;
+	border-left: 2px solid var(--background-modifier-border);
 	color: var(--text-muted);
 	font-size: 0.95em;
 }
-.hl-card-context img {
+.hl-content.hl-context img {
 	max-width: 100%;
 	height: auto;
 	border-radius: 4px;
 }
-.hl-card-context > :first-child {
+.hl-content > :first-child {
 	margin-top: 0;
 }
-.hl-card-context > :last-child {
+.hl-content > :last-child {
 	margin-bottom: 0;
 }
 

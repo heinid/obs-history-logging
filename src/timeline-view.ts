@@ -12,7 +12,7 @@ import { Profile } from "./profiles";
 import { matchesQuery, parseQuery } from "./query";
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
-import { stripEvMarkers, stripImages } from "./parser";
+import { stripEvMarkers, stripImages, stripTags } from "./parser";
 import { addEventForEntry } from "./commands";
 
 export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
@@ -128,7 +128,10 @@ export class TimelineView extends ItemView {
 	}
 
 	private renderCard(parent: HTMLElement, entry: TimelineEntry): void {
+		const hasSummary = !!entry.summary?.trim();
+
 		const card = parent.createDiv({ cls: "hl-card" });
+		card.addClass(hasSummary ? "hl-has-summary" : "hl-no-summary");
 
 		const head = card.createDiv({ cls: "hl-card-head" });
 		head.createSpan({ cls: "hl-year", text: describeYear(entry.decoded) });
@@ -137,9 +140,8 @@ export class TimelineView extends ItemView {
 		head.createSpan({ cls: "hl-file", text: entry.fileName });
 
 		// Per-card actions (revealed on hover): write/edit summary in place, and
-		// an explicit jump — so clicking the card body never navigates by accident.
+		// an explicit jump — so clicking the card body only expands, never navigates.
 		const actions = head.createDiv({ cls: "hl-card-actions" });
-		const hasSummary = !!entry.summary?.trim();
 		const editBtn = actions.createEl("button", { cls: "hl-icon-btn" });
 		setIcon(editBtn, hasSummary || entry.evId ? "pencil" : "plus");
 		editBtn.setAttr(
@@ -158,58 +160,77 @@ export class TimelineView extends ItemView {
 			jumpToLocation(this.app, entry.filePath, entry.offset);
 		});
 
-		// Body: a written summary, else the tag's own line (images / ev syntax
-		// stripped), clamped to a generous cap.
-		const body = card.createDiv({ cls: "hl-card-body" });
+		// Collapsed preview: the summary if written, else the tag's own line
+		// (ev syntax + images stripped, and tags stripped unless the setting is off).
+		let line = stripImages(stripEvMarkers(entry.snippet));
+		if (this.plugin.settings.hideTagsInPreview) line = stripTags(line);
 		const preview = hasSummary
 			? entry.summary!
-			: stripImages(stripEvMarkers(entry.snippet)).trim() || "*(no text)*";
-		const md = body.createDiv({ cls: "hl-summary hl-clamp" });
-		if (!hasSummary) md.addClass("hl-from-note");
-		MarkdownRenderer.render(this.app, preview, md, entry.filePath, this.plugin);
-
-		// Expand to the full surrounding block (images included), lazily rendered.
+			: line.replace(/\s+/g, " ").trim() || "*(no text)*";
+		// Expanded: the full surrounding block, raw (images + every tag).
 		const full = stripEvMarkers(entry.block).trim();
-		this.addExpander(card, entry, preview, full);
+
+		const norm = (s: string) =>
+			stripTags(stripImages(s)).replace(/\s+/g, " ").trim();
+		const hasImage = full !== stripImages(full);
+		const expandable =
+			!!full && (hasSummary || norm(full) !== norm(preview) || hasImage);
+
+		const body = card.createDiv({ cls: "hl-card-body" });
+		const content = body.createDiv();
+
+		if (expandable) {
+			const chevron = head.createSpan({ cls: "hl-chevron" });
+			this.wireExpand(card, content, chevron, entry, preview, hasSummary, full);
+		} else {
+			this.renderContent(content, entry, preview, hasSummary, false);
+		}
 	}
 
-	// Add a "Show context" toggle when the surrounding block has more than the
-	// preview line. The block is rendered on first expand.
-	private addExpander(
+	// Toggle a card between its collapsed preview and the full block in place,
+	// so expanding replaces (never stacks on) the preview and always folds back.
+	private wireExpand(
 		card: HTMLElement,
+		content: HTMLElement,
+		chevron: HTMLElement,
 		entry: TimelineEntry,
 		preview: string,
+		hasSummary: boolean,
 		full: string
 	): void {
-		const previewText = stripImages(preview).replace(/\s+/g, " ").trim();
-		const fullText = stripImages(full).replace(/\s+/g, " ").trim();
-		const hasImage = full !== stripImages(full);
-		if (!full || (fullText === previewText && !hasImage)) return;
-
-		const more = card.createDiv({ cls: "hl-card-context" });
-		more.hide();
-		let built = false;
-
-		const toggle = card.createEl("button", { cls: "hl-expand" });
-		const icon = toggle.createSpan({ cls: "hl-expand-icon" });
-		setIcon(icon, "chevron-down");
-		const label = toggle.createSpan({ text: "Show context" });
-		toggle.addEventListener("click", (e) => {
-			e.stopPropagation();
-			const show = !more.isShown();
-			if (show && !built) {
-				MarkdownRenderer.render(
-					this.app,
-					full,
-					more,
-					entry.filePath,
-					this.plugin
-				);
-				built = true;
-			}
-			more.toggle(show);
-			setIcon(icon, show ? "chevron-up" : "chevron-down");
-			label.setText(show ? "Hide context" : "Show context");
+		let expanded = false;
+		const paint = () => {
+			this.renderContent(content, entry, preview, hasSummary, expanded, full);
+			card.toggleClass("hl-expanded", expanded);
+			setIcon(chevron, expanded ? "chevron-up" : "chevron-down");
+		};
+		paint();
+		card.addClass("hl-expandable");
+		card.addEventListener("click", (e) => {
+			const t = e.target as HTMLElement;
+			if (t.tagName === "A" || t.closest("button")) return;
+			expanded = !expanded;
+			paint();
 		});
+	}
+
+	private renderContent(
+		content: HTMLElement,
+		entry: TimelineEntry,
+		preview: string,
+		hasSummary: boolean,
+		expanded: boolean,
+		full = ""
+	): void {
+		content.empty();
+		content.className = "";
+		if (expanded) {
+			content.addClass("hl-content", "hl-context");
+			MarkdownRenderer.render(this.app, full, content, entry.filePath, this.plugin);
+			return;
+		}
+		content.addClass("hl-content", "hl-summary", "hl-clamp");
+		if (!hasSummary) content.addClass("hl-from-note");
+		MarkdownRenderer.render(this.app, preview, content, entry.filePath, this.plugin);
 	}
 }

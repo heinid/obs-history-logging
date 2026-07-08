@@ -61,6 +61,13 @@ export function stripImages(text: string): string {
 		.replace(/!\[[^\]]*\]\([^)]*\)/g, "");
 }
 
+// Remove hashtag tokens (year + classification) so the collapsed preview is a
+// clean gist; the card header already shows the primary year tag, and the full
+// block (with every tag) is a click away.
+export function stripTags(text: string): string {
+	return text.replace(/(^|\s)#[^\s#]+/g, "$1");
+}
+
 // Remove the ev wrapper for a given id, leaving the bare tag behind.
 export function unwrapEv(content: string, id: string): string {
 	const re = new RegExp(
