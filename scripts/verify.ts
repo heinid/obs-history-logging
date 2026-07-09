@@ -71,6 +71,11 @@ eq("encode 50", encodeYearTag("bc", 50), "#bc/00/5/0");
 eq("truncate century", truncateTag("#ad/07/1/0", "century"), "#ad/07");
 eq("truncate decade", truncateTag("#ad/07/1/0", "decade"), "#ad/07/1");
 eq("truncate year", truncateTag("#ad/07/1/0", "year"), "#ad/07/1/0");
+eq("truncate flat year to century", truncateTag("#ad/1912", "century"), "#ad/19");
+eq("truncate flat year to decade", truncateTag("#ad/1912", "decade"), "#ad/19/1");
+eq("truncate two-seg year to century", truncateTag("#ad/19/12", "century"), "#ad/19");
+eq("truncate century tag stays", truncateTag("#ad/07", "century"), "#ad/07");
+eq("truncate too coarse", truncateTag("#ad/07", "decade"), null);
 
 // id
 const id = generateId();

@@ -95,12 +95,16 @@ export function describeYear(d: DecodedYear): string {
 }
 
 // Truncate a year tag to a coarser bucket (for "same decade / century" search).
+// Works on digits rather than segments so non-canonical spellings (e.g.
+// `#ad/1912` or `#ad/19/12`) still land in the right bucket.
 export function truncateTag(tag: string, level: Precision): string | null {
 	const m = TAG_RE.exec(tag.trim());
 	if (!m) return null;
 	const era = m[1];
-	const segs = m[2].split("/").filter((s) => s.length > 0);
-	const keep = level === "century" ? 1 : level === "decade" ? 2 : 3;
-	if (segs.length < keep) return null;
-	return `#${era}/${segs.slice(0, keep).join("/")}`;
+	const digits = m[2].replace(/\//g, "");
+	const keep = level === "century" ? 2 : level === "decade" ? 3 : 4;
+	if (digits.length < keep) return null;
+	const kept = digits.slice(0, keep);
+	const parts = [kept.slice(0, 2), ...kept.slice(2).split("")];
+	return `#${era}/${parts.join("/")}`;
 }
