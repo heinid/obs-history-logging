@@ -775,24 +775,29 @@
 .hl-le-container {
 	position: relative;
 }
+/* Borderless writing surface — text sits directly on the modal background,
+   so editing feels like touching the finished page rather than filling a
+   form field. */
 .hl-summary-editor .cm-editor,
 .hl-entity-notes .cm-editor {
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
-	background: var(--background-primary);
-	padding: 8px 10px;
-	line-height: 1.55;
+	border: none;
+	background: transparent;
+	padding: 4px 0;
+	line-height: 1.7;
 }
 /* CodeMirror defaults to a monospace scroller font — match the interface
    font inside these modal editors so they blend with the other controls. */
 .hl-le-container .cm-scroller {
 	font-family: var(--font-interface, var(--default-font));
 	font-size: var(--font-ui-medium);
-	line-height: 1.55;
+	line-height: 1.7;
 	overflow: auto;
 }
+.hl-summary-editor .cm-scroller {
+	font-size: calc(var(--font-ui-medium) * 1.06);
+}
 .hl-summary-editor .cm-editor {
-	min-height: 14em;
+	min-height: 12em;
 	max-height: 55vh;
 }
 .hl-summary-editor .cm-editor .cm-scroller {
@@ -807,7 +812,6 @@
 }
 .hl-le-container .cm-editor.cm-focused {
 	outline: none;
-	border-color: var(--interactive-accent);
 }
 .hl-le-container .cm-content {
 	caret-color: var(--caret-color, var(--text-normal));

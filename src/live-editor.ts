@@ -488,18 +488,43 @@ export class LiveEditor {
 			if (hint) row.createSpan({ cls: "hl-le-suggest-meta", text: hint });
 			return row;
 		};
+		// Entities whose label/alias matches the selection get a one-click row.
+		const lower = word.toLowerCase();
+		const matches = ann
+			.entities()
+			.map((ent) => ({
+				ent,
+				exact: ent.labels.some((l) => l.text.toLowerCase() === lower),
+				partial: ent.labels.some((l) => {
+					const t = l.text.toLowerCase();
+					return t.includes(lower) || lower.includes(t);
+				}),
+			}))
+			.filter((r) => r.exact || r.partial)
+			.sort((a, b) => Number(b.exact) - Number(a.exact))
+			.slice(0, 3);
+		for (const { ent } of matches) {
+			const row = mk("⇢", `链接到 ${displayName(ent)}`, ent.type || "");
+			const color = ann.typeColor(ent.type);
+			if (color) {
+				const meta = row.querySelector(".hl-le-suggest-meta");
+				(meta as HTMLElement | null)?.style.setProperty("color", color);
+			}
+			row.addEventListener("mousedown", (ev) => {
+				ev.preventDefault();
+				this.closePopover();
+				this.insertMarker(from, to, ent);
+			});
+		}
 		mk("＋", "新建词条", `“${word}”`).addEventListener("mousedown", (ev) => {
 			ev.preventDefault();
 			this.closePopover();
 			ann.onCreate(word, (ent) => this.insertMarker(from, to, ent));
 		});
-		mk("⧉", "链接到已有词条", `“${word}”`).addEventListener(
-			"mousedown",
-			(ev) => {
-				ev.preventDefault();
-				this.openLinkPicker(from, to, word, e.clientX, e.clientY);
-			}
-		);
+		mk("⧉", "链接到已有词条…", "").addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			this.openLinkPicker(from, to, word, e.clientX, e.clientY);
+		});
 	}
 
 	// Inline fuzzy picker over every entity, anchored at the selection — no
