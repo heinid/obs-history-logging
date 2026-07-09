@@ -21,9 +21,9 @@ import { LayoutPane, TimelineLayout } from "./layouts";
 import { NameModal } from "./name-modal";
 import {
 	DbTypeManagerModal,
-	EntityModal,
 	EntitySuggestModal,
 } from "./entity-modal";
+import { ENTITY_VIEW_TYPE, EntityView } from "./entity-view";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
@@ -44,6 +44,10 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.registerView(
 			ERA_MANAGER_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new EraManagerView(leaf, this)
+		);
+		this.registerView(
+			ENTITY_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new EntityView(leaf, this)
 		);
 		this.addRibbonIcon("history", "Open history timeline", () =>
 			this.activateTimeline("tab")
@@ -99,6 +103,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 	onunload(): void {
 		this.app.workspace.detachLeavesOfType(TIMELINE_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(ERA_MANAGER_VIEW_TYPE);
+		this.app.workspace.detachLeavesOfType(ENTITY_VIEW_TYPE);
 	}
 
 	// Open the timeline either as a full main-pane tab (default) or a narrow
@@ -229,12 +234,31 @@ export default class HistoryLoggingPlugin extends Plugin {
 	}
 
 	async openEntity(id: string): Promise<void> {
-		const entity = (await this.store.readEntities()).get(id);
-		if (!entity) {
-			new Notice(`No entity with id ${id} in entities.md`);
+		await this.openEntityView(id);
+	}
+
+	// Open (or focus) the full entity tab page for an id.
+	async openEntityView(id: string): Promise<void> {
+		const { workspace } = this.app;
+		const existing = workspace
+			.getLeavesOfType(ENTITY_VIEW_TYPE)
+			.find(
+				(l) =>
+					l.view instanceof EntityView &&
+					(l.view.getState() as { entityId?: string }).entityId === id
+			);
+		if (existing) {
+			workspace.revealLeaf(existing);
+			if (existing.view instanceof EntityView) await existing.view.refresh();
 			return;
 		}
-		new EntityModal(this.app, this, entity, false).open();
+		const leaf = workspace.getLeaf("tab");
+		await leaf.setViewState({
+			type: ENTITY_VIEW_TYPE,
+			active: true,
+			state: { entityId: id },
+		});
+		workspace.revealLeaf(leaf);
 	}
 
 	async browseEntities(): Promise<void> {
@@ -246,7 +270,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 			return;
 		}
 		new EntitySuggestModal(this.app, entities, (e) => {
-			new EntityModal(this.app, this, e, false).open();
+			void this.openEntityView(e.id);
 		}).open();
 	}
 

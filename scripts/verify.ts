@@ -32,6 +32,7 @@ import {
 	makeDbMarker,
 	dbMarkersToHtml,
 	aliasAtCursor,
+	aliasCandidates,
 } from "../src/db-marker";
 import {
 	wikipediaYearTitle,
@@ -262,6 +263,19 @@ eq("alias longest wins", aliasAtCursor("x Alexander the Great", dict)?.alias, "A
 eq("alias word boundary", aliasAtCursor("xAlexander", dict), null);
 eq("alias none", aliasAtCursor("罗马", dict), null);
 eq("alias not inside marker", aliasAtCursor("{db q3x8k2p1 希腊", dict), null);
+
+// multi-candidate completion (dropdown): prefix matches, ranking, boundaries
+eq("cand exact", aliasCandidates("公元前古希腊", dict)[0]?.alias, "希腊");
+eq("cand exact flag", aliasCandidates("公元前古希腊", dict)[0]?.exact, true);
+eq("cand prefix", aliasCandidates("古希", dict)[0]?.matched, "希");
+eq("cand prefix alias", aliasCandidates("古希", dict)[0]?.alias, "希腊");
+const alexCands = aliasCandidates("about Alexander", dict);
+eq("cand one per entity", alexCands.length, 1);
+eq("cand exact before prefix", alexCands[0].exact, true);
+eq("cand latin single char skipped", aliasCandidates("x A", dict), []);
+eq("cand word boundary", aliasCandidates("xAlexander", dict), []);
+eq("cand not inside marker", aliasCandidates("{db q3x8k2p1 希腊", dict), []);
+eq("cand none", aliasCandidates("罗马", dict), []);
 
 // ⌛ menu: wikipedia year pages + action URL templates
 const y1274 = parseYearTag("#ad/12/7/4")!;

@@ -80,12 +80,22 @@ their own chronology from every summary they are annotated in.
 
 ### Usage
 
-1. In an event's summary dialog, select a name and **right-click** — annotate
-   it as a new entity or link it to an existing one.
-2. While typing, known entity names are recognised (longest match across all
-   languages); press **Tab** to confirm and insert the marker. Every occurrence
-   is confirmed explicitly — nothing is auto-annotated.
-3. **Browse entities** / **Manage entity types** commands open the fuzzy entity
+1. The summary dialog is a live editor: markers fold to underlined words,
+   `**bold**` renders bold, and everything auto-saves as you type (no Save
+   button).
+2. Select a name and **right-click** — annotate it as a new entity or link it
+   to an existing one.
+3. While typing, known entity names (any language, aliases included) pop up in
+   a completion dropdown, with a "＋ 新建词条" item at the bottom; ↑↓ to choose,
+   **Tab**/**Enter** to confirm. Every occurrence is confirmed explicitly —
+   nothing is auto-annotated.
+4. Clicking an underlined entity opens its full tab page: headword + type,
+   per-language cards (spellings / transcription / pronunciation ▶), notes, and
+   its emergent chronology (every summary it appears in, sorted by year).
+5. The entity editor groups data by language cards; pronunciation audio can be
+   pasted into the field or dragged onto a card (stored as a vault attachment).
+   Preset languages come from settings (default `ja, zh, en`).
+6. **Browse entities** / **Manage entity types** commands open the fuzzy entity
    picker and the type list (rename / recolour / add / remove).
 
 ## Era systems

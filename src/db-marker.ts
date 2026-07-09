@@ -105,6 +105,75 @@ export function aliasAtCursor(
 	return best;
 }
 
+export interface AliasCandidate {
+	entity: EntityEntry;
+	alias: string;
+	// The fragment before the cursor that matches the alias (a prefix of it,
+	// possibly the whole alias). Replaced by the marker on confirm.
+	matched: string;
+	exact: boolean;
+}
+
+// Multi-candidate completion: every alias (any language) that starts with a
+// fragment the text before the cursor ends with. Longer matched fragments
+// rank first, exact matches before prefixes. Returns [] inside an unclosed
+// `{db …}` marker.
+export function aliasCandidates(
+	before: string,
+	entities: Iterable<EntityEntry>,
+	limit = 8
+): AliasCandidate[] {
+	const open = before.lastIndexOf("{db");
+	if (open >= 0 && before.indexOf("}", open) < 0) return [];
+	const out: AliasCandidate[] = [];
+	for (const entity of entities) {
+		let best: AliasCandidate | null = null;
+		for (const l of entity.labels) {
+			const alias = l.text;
+			if (!alias || alias.length < 2) continue;
+			// Longest suffix of `before` that is a prefix of `alias`.
+			let n = Math.min(alias.length, before.length);
+			for (; n > 0; n--)
+				if (before.endsWith(alias.slice(0, n))) break;
+			if (n === 0) continue;
+			const matched = alias.slice(0, n);
+			// A single Latin letter matches too much; CJK chars carry enough
+			// signal on their own.
+			if (matched.length < 2 && /^[\x00-\xff]+$/.test(matched)) continue;
+			// Word boundary for spaced scripts.
+			const prev = before[before.length - n - 1];
+			if (
+				prev !== undefined &&
+				/[A-Za-z0-9]/.test(prev) &&
+				/^[A-Za-z0-9]/.test(matched)
+			)
+				continue;
+			const cand: AliasCandidate = {
+				entity,
+				alias,
+				matched,
+				exact: n === alias.length,
+			};
+			if (
+				!best ||
+				cand.matched.length > best.matched.length ||
+				(cand.matched.length === best.matched.length &&
+					cand.exact &&
+					!best.exact)
+			)
+				best = cand;
+		}
+		if (best && (best.exact || best.matched.length >= 1)) out.push(best);
+	}
+	out.sort(
+		(a, b) =>
+			b.matched.length - a.matched.length ||
+			Number(b.exact) - Number(a.exact) ||
+			a.alias.length - b.alias.length
+	);
+	return out.slice(0, limit);
+}
+
 // All searchable text of an entity, for fuzzy pickers.
 export function entitySearchText(e: EntityEntry): string {
 	return [

@@ -12,8 +12,9 @@ export interface HistoryLoggingSettings {
 	// timeline's vertical extent stays proportional to real time (the
 	// multi-track grid always does this). Off = compact, events only.
 	fillEmptyPeriods: boolean;
-	// Language code preselected for new entity labels / readings.
-	defaultLabelLang: string;
+	// Ordered preset language codes for entity language cards; the first is
+	// the default for new entries.
+	entityLangs: string[];
 	// Wikipedia language edition for the ⌛ menu's year-page item.
 	wikiLang: string;
 	// User-defined ⌛ menu actions (name + URL template).
@@ -24,7 +25,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	dataFolder: "_chronology",
 	hideTagsInPreview: true,
 	fillEmptyPeriods: false,
-	defaultLabelLang: "zh",
+	entityLangs: ["ja", "zh", "en"],
 	wikiLang: "ja",
 	evActions: [],
 };
@@ -89,16 +90,22 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Default entity language")
+			.setName("Entity languages")
 			.setDesc(
-				"Language code preselected when adding labels / readings to an entity (e.g. zh, ja, en)."
+				"Ordered, comma-separated language codes for entity language cards (e.g. ja, zh, en). New codes can also be added on an entity directly."
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder("zh")
-					.setValue(this.plugin.settings.defaultLabelLang)
+					.setPlaceholder("ja, zh, en")
+					.setValue(this.plugin.settings.entityLangs.join(", "))
 					.onChange(async (value) => {
-						this.plugin.settings.defaultLabelLang = value.trim() || "zh";
+						const langs = value
+							.split(",")
+							.map((s) => s.trim().toLowerCase())
+							.filter((s) => s.length > 0);
+						this.plugin.settings.entityLangs = langs.length
+							? langs
+							: ["ja", "zh", "en"];
 						await this.plugin.saveSettings();
 					})
 			);

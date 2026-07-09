@@ -1,19 +1,23 @@
-import { App, Menu, Modal, Notice, Setting } from "obsidian";
+import { App, Modal, Notice } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { jumpToEv } from "./jump";
-import { EntityEntry, displayName } from "./db-format";
-import { AliasHit, aliasAtCursor, makeDbMarker } from "./db-marker";
+import { DbType, EntityEntry } from "./db-format";
 import { EntityModal, EntitySuggestModal } from "./entity-modal";
+import { LiveEditor } from "./live-editor";
 import { generateId } from "./id";
+import { describeYear, parseYearTag } from "./year-tag";
 
 // View / edit the markdown summary for a single event, backed by events.md.
-// The textarea is also the entity-annotation surface: select text and
-// right-click to turn it into a `{db …}` marker, and typing a known entity
-// name offers a Tab completion that confirms the occurrence.
+// A live CodeMirror editor renders `{db …}` markers folded and bold text
+// bold, hosts the entity completion dropdown and the right-click annotation
+// menu, and auto-saves on a debounce — there is no Save button.
 export class SummaryModal extends Modal {
-	private value = "";
 	private entities: EntityEntry[] = [];
-	private hint: AliasHit | null = null;
+	private types: DbType[] = [];
+	private editor?: LiveEditor;
+	private statusEl?: HTMLElement;
+	private saveTimer: number | null = null;
+	private dirty = false;
 
 	constructor(
 		app: App,
@@ -27,140 +31,101 @@ export class SummaryModal extends Modal {
 
 	async onOpen(): Promise<void> {
 		const existing = await this.plugin.store.getEvent(this.id);
-		this.value = existing?.summary ?? "";
 		this.entities = [...(await this.plugin.store.readEntities()).values()];
-		this.render();
+		this.types = await this.plugin.store.readDbTypes();
+		this.render(existing?.summary ?? "");
 	}
 
-	private render(): void {
+	private typeColor(name: string): string | null {
+		return this.types.find((t) => t.name === name)?.color ?? null;
+	}
+
+	private colorFor(id: string): string | null {
+		const e = this.entities.find((x) => x.id === id);
+		return e ? this.typeColor(e.type) ?? "" : null;
+	}
+
+	private render(value: string): void {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass("hl-summary-modal");
 
-		contentEl.createEl("h3", { text: `Event ${this.tag}` });
-
-		const textarea = contentEl.createEl("textarea", {
-			cls: "hl-summary-textarea",
+		const head = contentEl.createDiv({ cls: "hl-modal-head" });
+		const decoded = parseYearTag(this.tag);
+		head.createSpan({
+			cls: "hl-modal-year",
+			text: decoded ? describeYear(decoded) : this.tag,
 		});
-		textarea.value = this.value;
-		textarea.rows = 10;
-		textarea.placeholder = "Write your summary / narrative for this date…";
+		head.createSpan({ cls: "hl-modal-tag", text: this.tag });
 
-		const hintEl = contentEl.createDiv({ cls: "hl-db-hint" });
-		hintEl.hide();
-		const updateHint = (): void => {
-			this.value = textarea.value;
-			const before = textarea.value.slice(0, textarea.selectionStart);
-			this.hint = aliasAtCursor(before, this.entities);
-			if (!this.hint) {
-				hintEl.hide();
-				return;
-			}
-			hintEl.empty();
-			hintEl.createSpan({ cls: "hl-db-hint-alias", text: this.hint.alias });
-			hintEl.createSpan({
-				text: ` → ${displayName(this.hint.entity)} (${this.hint.entity.type})`,
-			});
-			hintEl.createSpan({ cls: "hl-db-hint-key", text: "Tab to annotate" });
-			hintEl.show();
-		};
-		textarea.addEventListener("input", updateHint);
-		textarea.addEventListener("keydown", (e) => {
-			if (e.key !== "Tab" || !this.hint) return;
-			e.preventDefault();
-			const end = textarea.selectionStart;
-			const start = end - this.hint.alias.length;
-			this.insertMarker(textarea, start, end, this.hint.entity);
-			this.hint = null;
-			hintEl.hide();
+		const editorEl = contentEl.createDiv({ cls: "hl-summary-editor" });
+		this.editor = new LiveEditor(editorEl, {
+			value,
+			placeholder: "Write your summary / narrative for this date…",
+			onChange: () => this.scheduleSave(),
+			colorFor: (id) => this.colorFor(id),
+			onOpenEntity: (id) => void this.plugin.openEntity(id),
+			annotate: {
+				entities: () => this.entities,
+				typeColor: (name) => this.typeColor(name),
+				onCreate: (word, apply) => this.createEntity(word, apply),
+				onLink: (apply) =>
+					new EntitySuggestModal(this.app, this.entities, apply).open(),
+			},
 		});
 
-		textarea.addEventListener("contextmenu", (e) => {
-			let start = textarea.selectionStart;
-			let end = textarea.selectionEnd;
-			if (start === end) return;
-			e.preventDefault();
-			const raw = textarea.value.slice(start, end);
-			start += raw.length - raw.trimStart().length;
-			end -= raw.length - raw.trimEnd().length;
-			const selected = raw.trim();
-			if (!selected || /[{}\n]/.test(selected)) return;
-			const menu = new Menu();
-			menu.addItem((item) =>
-				item
-					.setTitle(`Annotate "${selected}" as new entity…`)
-					.setIcon("plus")
-					.onClick(() => this.createEntity(textarea, start, end, selected))
-			);
-			menu.addItem((item) =>
-				item
-					.setTitle(`Link "${selected}" to existing entity…`)
-					.setIcon("link")
-					.onClick(() =>
-						new EntitySuggestModal(this.app, this.entities, (entity) =>
-							this.insertMarker(textarea, start, end, entity)
-						).open()
-					)
-			);
-			menu.showAtMouseEvent(e);
+		const foot = contentEl.createDiv({ cls: "hl-modal-foot" });
+		this.statusEl = foot.createSpan({ cls: "hl-modal-status" });
+		const jump = foot.createEl("button", {
+			cls: "hl-modal-foot-btn",
+			text: "↗ Jump to source",
+		});
+		jump.addEventListener("click", async () => {
+			const ok = await jumpToEv(this.app, this.id);
+			if (!ok) new Notice("Could not locate this event in the vault");
+			else this.close();
 		});
 
-		const controls = new Setting(contentEl);
-		controls.addButton((b) =>
-			b
-				.setButtonText("Save")
-				.setCta()
-				.onClick(async () => {
-					await this.plugin.store.upsertEvent({
-						id: this.id,
-						tag: this.tag,
-						summary: this.value,
-					});
-					new Notice("Summary saved");
-					this.onSaved?.();
-					this.close();
-				})
-		);
-		controls.addButton((b) =>
-			b.setButtonText("Jump to source").onClick(async () => {
-				const ok = await jumpToEv(this.app, this.id);
-				if (!ok) new Notice("Could not locate this event in the vault");
-				else this.close();
-			})
-		);
-		controls.addButton((b) =>
-			b.setButtonText("Cancel").onClick(() => this.close())
-		);
+		this.editor.focus();
 	}
 
-	// Replace [start, end) of the textarea with the entity marker and restore
-	// the cursor just after it.
-	private insertMarker(
-		textarea: HTMLTextAreaElement,
-		start: number,
-		end: number,
-		entity: EntityEntry
-	): void {
-		const word = textarea.value.slice(start, end);
-		const marker = makeDbMarker(entity.id, word);
-		textarea.value =
-			textarea.value.slice(0, start) + marker + textarea.value.slice(end);
-		this.value = textarea.value;
-		const pos = start + marker.length;
-		textarea.focus();
-		textarea.setSelectionRange(pos, pos);
+	private scheduleSave(): void {
+		this.dirty = true;
+		this.setStatus("typing");
+		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => void this.save(), 600);
 	}
 
-	private createEntity(
-		textarea: HTMLTextAreaElement,
-		start: number,
-		end: number,
-		word: string
-	): void {
+	private async save(): Promise<void> {
+		if (!this.dirty || !this.editor) return;
+		this.dirty = false;
+		await this.plugin.store.upsertEvent({
+			id: this.id,
+			tag: this.tag,
+			summary: this.editor.getValue(),
+		});
+		this.setStatus("saved");
+		this.onSaved?.();
+	}
+
+	private setStatus(state: "typing" | "saved"): void {
+		if (!this.statusEl) return;
+		this.statusEl.empty();
+		this.statusEl.createSpan({
+			cls: `hl-status-dot ${state === "saved" ? "is-saved" : "is-typing"}`,
+		});
+		this.statusEl.createSpan({
+			text: state === "saved" ? "已自动保存" : "输入中…",
+		});
+	}
+
+	private createEntity(word: string, apply: (e: EntityEntry) => void): void {
 		const entity: EntityEntry = {
 			id: generateId((id) => this.entities.some((e) => e.id === id)),
 			type: "",
-			labels: [{ lang: this.plugin.settings.defaultLabelLang, text: word }],
+			labels: [
+				{ lang: this.plugin.settings.entityLangs[0] ?? "zh", text: word },
+			],
 			readings: [],
 			audios: [],
 			tags: [],
@@ -168,11 +133,15 @@ export class SummaryModal extends Modal {
 		};
 		new EntityModal(this.app, this.plugin, entity, true, (saved) => {
 			this.entities.push(saved);
-			this.insertMarker(textarea, start, end, saved);
+			apply(saved);
+			this.editor?.refreshDecorations();
 		}).open();
 	}
 
 	onClose(): void {
+		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+		void this.save();
+		this.editor?.destroy();
 		this.contentEl.empty();
 	}
 }

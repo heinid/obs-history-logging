@@ -1,18 +1,81 @@
 import { App, FuzzySuggestModal, Modal, Notice, Setting, TFile } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
-import {
-	DbType,
-	EntityEntry,
-	displayName,
-} from "./db-format";
-import { entitySearchText, parseDbMarks, stripDbMarkers } from "./db-marker";
-import { parseYearTag } from "./year-tag";
+import { DbType, EntityEntry, displayName } from "./db-format";
+import { entitySearchText } from "./db-marker";
+import { LiveEditor } from "./live-editor";
 
-// View / edit one entity entry: type, multi-language labels, readings with
-// playable audio, free markdown body, and the list of event summaries the
-// entity appears in (its automatically-accumulated chronology).
+// One language's slice of an entity, edited as a card: spellings (comma =
+// aliases), transcription, and a pronunciation audio attachment.
+interface LangCard {
+	lang: string;
+	labels: string;
+	reading: string;
+	audio: string;
+}
+
+function toCards(e: EntityEntry, presetFirst: string[]): LangCard[] {
+	const order: string[] = [];
+	const seen = new Set<string>();
+	for (const l of [
+		...e.labels.map((x) => x.lang),
+		...e.readings.map((x) => x.lang),
+		...e.audios.map((x) => x.lang),
+	]) {
+		if (!seen.has(l)) {
+			seen.add(l);
+			order.push(l);
+		}
+	}
+	if (!order.length && presetFirst.length) order.push(presetFirst[0]);
+	return order.map((lang) => ({
+		lang,
+		labels: e.labels
+			.filter((x) => x.lang === lang)
+			.map((x) => x.text)
+			.join(", "),
+		reading: e.readings
+			.filter((x) => x.lang === lang)
+			.map((x) => x.text)
+			.join(", "),
+		audio: e.audios
+			.filter((x) => x.lang === lang)
+			.map((x) => x.link)
+			.join(", "),
+	}));
+}
+
+function fromCards(e: EntityEntry, cards: LangCard[]): void {
+	const split = (s: string): string[] =>
+		s
+			.split(/[,，]/)
+			.map((x) => x.trim())
+			.filter((x) => x.length > 0);
+	e.labels = [];
+	e.readings = [];
+	e.audios = [];
+	for (const c of cards) {
+		if (!c.lang) continue;
+		for (const t of split(c.labels)) e.labels.push({ lang: c.lang, text: t });
+		for (const t of split(c.reading))
+			e.readings.push({ lang: c.lang, text: t });
+		for (const t of split(c.audio)) e.audios.push({ lang: c.lang, link: t });
+	}
+}
+
+// Edit one entity entry: type pill, per-language cards, tag chips and free
+// markdown notes. Auto-saves on a debounce; audio attachments can be pasted
+// into or dropped onto a language card.
 export class EntityModal extends Modal {
 	private entity: EntityEntry;
+	private cards: LangCard[] = [];
+	private types: DbType[] = [];
+	private statusEl?: HTMLElement;
+	private headEl?: HTMLElement;
+	private saveTimer: number | null = null;
+	private dirty = false;
+	private everSaved = false;
+	private notified = false;
+	private notes?: LiveEditor;
 
 	constructor(
 		app: App,
@@ -22,234 +85,326 @@ export class EntityModal extends Modal {
 		private onSaved?: (e: EntityEntry) => void
 	) {
 		super(app);
-		// Deep-copy so Cancel discards edits.
 		this.entity = JSON.parse(JSON.stringify(entity)) as EntityEntry;
 	}
 
 	async onOpen(): Promise<void> {
-		await this.render();
+		this.types = await this.plugin.store.readDbTypes();
+		if (!this.entity.type) this.entity.type = this.types[0]?.name ?? "";
+		this.cards = toCards(this.entity, this.plugin.settings.entityLangs);
+		this.render();
 	}
 
-	private async render(): Promise<void> {
+	private typeColor(name: string): string | null {
+		return this.types.find((t) => t.name === name)?.color ?? null;
+	}
+
+	private render(): void {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass("hl-entity-modal");
 		const e = this.entity;
-		const types = await this.plugin.store.readDbTypes();
 
-		contentEl.createEl("h3", {
-			text: this.isNew ? "New entity" : displayName(e),
+		// Header: headword + type pill dropdown.
+		const head = contentEl.createDiv({ cls: "hl-modal-head" });
+		this.headEl = head.createSpan({ cls: "hl-modal-year" });
+		this.updateHeadword();
+		const pill = head.createEl("select", { cls: "hl-type-pill" });
+		for (const t of this.types) pill.createEl("option", { text: t.name, value: t.name });
+		if (e.type && !this.types.some((t) => t.name === e.type))
+			pill.createEl("option", { text: e.type, value: e.type });
+		pill.value = e.type;
+		const paintPill = (): void => {
+			const c = this.typeColor(pill.value);
+			pill.style.color = c ?? "";
+			pill.style.borderColor = c ?? "";
+		};
+		paintPill();
+		pill.addEventListener("change", () => {
+			e.type = pill.value;
+			paintPill();
+			this.scheduleSave();
 		});
 
-		new Setting(contentEl).setName("Type").addDropdown((d) => {
-			for (const t of types) d.addOption(t.name, t.name);
-			if (e.type && !types.some((t) => t.name === e.type))
-				d.addOption(e.type, e.type);
-			d.setValue(e.type || types[0]?.name || "");
-			e.type = d.getValue();
-			d.onChange((v) => (e.type = v));
+		const body = contentEl.createDiv({ cls: "hl-entity-body-wrap" });
+
+		body.createDiv({ cls: "hl-overline", text: "Languages" });
+		const cardsEl = body.createDiv();
+		const renderCards = (): void => {
+			cardsEl.empty();
+			this.cards.forEach((card, i) => this.renderCard(cardsEl, card, i, renderCards));
+			const addRow = cardsEl.createDiv({ cls: "hl-lang-add-row" });
+			for (const lang of this.plugin.settings.entityLangs) {
+				if (this.cards.some((c) => c.lang === lang)) continue;
+				const b = addRow.createEl("button", {
+					cls: "hl-ghost-btn",
+					text: `＋ ${lang.toUpperCase()}`,
+				});
+				b.addEventListener("click", () => {
+					this.cards.push({ lang, labels: "", reading: "", audio: "" });
+					renderCards();
+				});
+			}
+			const other = addRow.createEl("button", {
+				cls: "hl-ghost-btn",
+				text: "＋ …",
+			});
+			other.addEventListener("click", () => {
+				const input = addRow.createEl("input", {
+					type: "text",
+					cls: "hl-lang-new-input",
+				});
+				input.placeholder = "code";
+				input.focus();
+				const commit = (): void => {
+					const lang = input.value.trim().toLowerCase();
+					if (lang && !this.cards.some((c) => c.lang === lang))
+						this.cards.push({ lang, labels: "", reading: "", audio: "" });
+					renderCards();
+				};
+				input.addEventListener("keydown", (ev) => {
+					if (ev.key === "Enter") commit();
+					if (ev.key === "Escape") renderCards();
+				});
+				input.addEventListener("blur", commit);
+			});
+		};
+		renderCards();
+
+		body.createDiv({ cls: "hl-overline", text: "Tags" });
+		this.renderTags(body.createDiv({ cls: "hl-tag-chips" }));
+
+		body.createDiv({ cls: "hl-overline", text: "Notes" });
+		const notesEl = body.createDiv({ cls: "hl-entity-notes" });
+		this.notes = new LiveEditor(notesEl, {
+			value: e.body,
+			placeholder: "自由正文（markdown）…",
+			onChange: (v) => {
+				e.body = v;
+				this.scheduleSave();
+			},
 		});
 
-		// Labels: language + spelling rows. The first row is the display name.
-		contentEl.createEl("h5", { text: "Labels (language · spelling)" });
-		const labelsEl = contentEl.createDiv({ cls: "hl-entity-rows" });
-		const renderLabels = (): void => {
-			labelsEl.empty();
-			e.labels.forEach((label, i) => {
-				const row = labelsEl.createDiv({ cls: "hl-entity-row" });
-				const lang = row.createEl("input", { type: "text" });
-				lang.addClass("hl-entity-lang");
-				lang.placeholder = "lang";
-				lang.value = label.lang;
-				lang.addEventListener("input", () => (label.lang = lang.value.trim()));
-				const text = row.createEl("input", { type: "text" });
-				text.addClass("hl-entity-text");
-				text.placeholder = "spelling";
-				text.value = label.text;
-				text.addEventListener("input", () => (label.text = text.value));
-				const del = row.createEl("button", { text: "×", cls: "hl-row-del" });
-				del.addEventListener("click", () => {
-					e.labels.splice(i, 1);
-					renderLabels();
-				});
+		// Footer: save status, delete, open full page.
+		const foot = contentEl.createDiv({ cls: "hl-modal-foot" });
+		this.statusEl = foot.createSpan({ cls: "hl-modal-status" });
+		if (!this.isNew) {
+			const del = foot.createEl("button", {
+				cls: "hl-modal-foot-btn hl-danger",
+				text: "Delete",
 			});
-			const add = labelsEl.createEl("button", {
-				text: "+ label",
-				cls: "hl-row-add",
+			del.addEventListener("click", async () => {
+				await this.plugin.store.removeEntity(e.id);
+				this.dirty = false;
+				new Notice("Entity deleted (markers in summaries are kept).");
+				this.close();
 			});
-			add.addEventListener("click", () => {
-				e.labels.push({ lang: this.plugin.settings.defaultLabelLang, text: "" });
-				renderLabels();
-			});
-		};
-		renderLabels();
-
-		// Readings: language + transcription + optional audio attachment.
-		contentEl.createEl("h5", { text: "Readings (language · transcription)" });
-		const readingsEl = contentEl.createDiv({ cls: "hl-entity-rows" });
-		const renderReadings = (): void => {
-			readingsEl.empty();
-			e.readings.forEach((reading, i) => {
-				const row = readingsEl.createDiv({ cls: "hl-entity-row" });
-				const lang = row.createEl("input", { type: "text" });
-				lang.addClass("hl-entity-lang");
-				lang.placeholder = "lang";
-				lang.value = reading.lang;
-				lang.addEventListener(
-					"input",
-					() => (reading.lang = lang.value.trim())
-				);
-				const text = row.createEl("input", { type: "text" });
-				text.addClass("hl-entity-text");
-				text.placeholder = "transcription (kana / IPA / pinyin…)";
-				text.value = reading.text;
-				text.addEventListener("input", () => (reading.text = text.value));
-				const del = row.createEl("button", { text: "×", cls: "hl-row-del" });
-				del.addEventListener("click", () => {
-					e.readings.splice(i, 1);
-					renderReadings();
-				});
-			});
-			const add = readingsEl.createEl("button", {
-				text: "+ reading",
-				cls: "hl-row-add",
-			});
-			add.addEventListener("click", () => {
-				e.readings.push({
-					lang: this.plugin.settings.defaultLabelLang,
-					text: "",
-				});
-				renderReadings();
-			});
-		};
-		renderReadings();
-
-		contentEl.createEl("h5", { text: "Audio (language · [[attachment]])" });
-		const audiosEl = contentEl.createDiv({ cls: "hl-entity-rows" });
-		const renderAudios = (): void => {
-			audiosEl.empty();
-			e.audios.forEach((audio, i) => {
-				const row = audiosEl.createDiv({ cls: "hl-entity-row" });
-				const lang = row.createEl("input", { type: "text" });
-				lang.addClass("hl-entity-lang");
-				lang.placeholder = "lang";
-				lang.value = audio.lang;
-				lang.addEventListener("input", () => (audio.lang = lang.value.trim()));
-				const link = row.createEl("input", { type: "text" });
-				link.addClass("hl-entity-text");
-				link.placeholder = "[[pronunciation.mp3]]";
-				link.value = audio.link;
-				link.addEventListener("input", () => (audio.link = link.value.trim()));
-				const play = row.createEl("button", { text: "▶", cls: "hl-row-play" });
-				play.setAttr("aria-label", "Play audio");
-				play.addEventListener("click", () => this.playAudio(audio.link));
-				const del = row.createEl("button", { text: "×", cls: "hl-row-del" });
-				del.addEventListener("click", () => {
-					e.audios.splice(i, 1);
-					renderAudios();
-				});
-			});
-			const add = audiosEl.createEl("button", {
-				text: "+ audio",
-				cls: "hl-row-add",
-			});
-			add.addEventListener("click", () => {
-				e.audios.push({
-					lang: this.plugin.settings.defaultLabelLang,
-					link: "",
-				});
-				renderAudios();
-			});
-		};
-		renderAudios();
-
-		new Setting(contentEl).setName("Tags").addText((t) => {
-			t.setPlaceholder("comma, separated")
-				.setValue(e.tags.join(", "))
-				.onChange(
-					(v) =>
-						(e.tags = v
-							.split(",")
-							.map((s) => s.trim())
-							.filter((s) => s.length > 0))
-				);
+		}
+		const open = foot.createEl("button", {
+			cls: "hl-modal-foot-btn",
+			text: "↗ 打开词条页",
 		});
-
-		contentEl.createEl("h5", { text: "Notes" });
-		const body = contentEl.createEl("textarea", { cls: "hl-entity-body" });
-		body.rows = 5;
-		body.placeholder = "Free markdown narrative…";
-		body.value = e.body;
-		body.addEventListener("input", () => (e.body = body.value));
-
-		if (!this.isNew) await this.renderOccurrences(contentEl);
-
-		const controls = new Setting(contentEl);
-		controls.addButton((b) =>
-			b
-				.setButtonText("Save")
-				.setCta()
-				.onClick(async () => {
-					e.labels = e.labels.filter((l) => l.text.trim().length > 0);
-					e.readings = e.readings.filter((r) => r.text.trim().length > 0);
-					e.audios = e.audios.filter((a) => a.link.trim().length > 0);
-					if (!e.labels.length) {
-						new Notice("An entity needs at least one label.");
-						return;
-					}
-					await this.plugin.store.upsertEntity(e);
-					this.onSaved?.(e);
-					this.close();
-				})
-		);
-		if (!this.isNew)
-			controls.addButton((b) =>
-				b.setButtonText("Delete").onClick(async () => {
-					await this.plugin.store.removeEntity(e.id);
-					new Notice("Entity deleted (markers in summaries are kept).");
-					this.close();
-				})
-			);
-		controls.addButton((b) =>
-			b.setButtonText("Cancel").onClick(() => this.close())
-		);
+		open.addEventListener("click", async () => {
+			await this.flush();
+			this.close();
+			await this.plugin.openEntityView(e.id);
+		});
 	}
 
-	// Everywhere the entity was annotated, sorted chronologically — the
-	// entity's own emergent timeline.
-	private async renderOccurrences(parent: HTMLElement): Promise<void> {
-		const events = await this.plugin.store.readEvents();
-		const hits: { evId: string; tag: string; snippet: string; key: number }[] =
-			[];
-		for (const [evId, ev] of events) {
-			if (!parseDbMarks(ev.summary).some((m) => m.id === this.entity.id))
-				continue;
-			const key = ev.tag ? parseYearTag(ev.tag)?.sortKey ?? 0 : 0;
-			const snippet = stripDbMarkers(ev.summary)
-				.replace(/\s+/g, " ")
-				.trim()
-				.slice(0, 120);
-			hits.push({ evId, tag: ev.tag ?? "", snippet, key });
-		}
-		hits.sort((a, b) => a.key - b.key);
-		parent.createEl("h5", { text: `Occurrences (${hits.length})` });
-		const list = parent.createDiv({ cls: "hl-entity-occurrences" });
-		if (!hits.length) {
-			list.createDiv({
-				cls: "hl-entity-occ-empty",
-				text: "Not annotated in any event summary yet.",
+	private updateHeadword(): void {
+		if (!this.headEl) return;
+		const name = displayName(this.entity);
+		this.headEl.setText(name === this.entity.id ? "未命名" : name);
+		this.headEl.toggleClass("hl-placeholder", name === this.entity.id);
+	}
+
+	private renderCard(
+		parent: HTMLElement,
+		card: LangCard,
+		index: number,
+		rerender: () => void
+	): void {
+		const el = parent.createDiv({ cls: "hl-lang-card" });
+
+		const head = el.createDiv({ cls: "hl-lang-card-head" });
+		head.createSpan({ cls: "hl-lang-badge", text: card.lang.toUpperCase() });
+		const del = head.createEl("button", { cls: "hl-row-del", text: "✕" });
+		del.addEventListener("click", () => {
+			this.cards.splice(index, 1);
+			this.syncCards();
+			rerender();
+		});
+
+		const row = (label: string): HTMLInputElement => {
+			const r = el.createDiv({ cls: "hl-lang-row" });
+			r.createSpan({ cls: "hl-lang-row-label", text: label });
+			return r.createEl("input", { type: "text", cls: "hl-lang-row-input" });
+		};
+
+		const labels = row("词形");
+		labels.placeholder = "词形，逗号分隔=别名";
+		labels.value = card.labels;
+		labels.addEventListener("input", () => {
+			card.labels = labels.value;
+			this.syncCards();
+		});
+
+		const reading = row("音标");
+		reading.placeholder = "kana / IPA / pinyin…";
+		reading.value = card.reading;
+		reading.addEventListener("input", () => {
+			card.reading = reading.value;
+			this.syncCards();
+		});
+
+		const audioRow = el.createDiv({ cls: "hl-lang-row" });
+		audioRow.createSpan({ cls: "hl-lang-row-label", text: "发音" });
+		const audio = audioRow.createEl("input", {
+			type: "text",
+			cls: "hl-lang-row-input",
+		});
+		audio.placeholder = "[[audio.mp3]] — 可直接粘贴或拖入音频";
+		audio.value = card.audio;
+		audio.addEventListener("input", () => {
+			card.audio = audio.value;
+			this.syncCards();
+		});
+		const play = audioRow.createEl("button", {
+			cls: "hl-play-btn",
+			text: "▶",
+		});
+		play.setAttr("aria-label", "Play audio");
+		play.addEventListener("click", () => {
+			const first = card.audio.split(/[,，]/)[0]?.trim();
+			if (first) this.playAudio(first);
+		});
+
+		// Audio import: paste into the field or drop onto the card.
+		audio.addEventListener("paste", (ev) => {
+			const file = ev.clipboardData?.files?.[0];
+			if (file && file.type.startsWith("audio/")) {
+				ev.preventDefault();
+				void this.importAudio(file, card, audio);
+			}
+		});
+		el.addEventListener("dragover", (ev) => {
+			ev.preventDefault();
+			el.addClass("is-dragover");
+		});
+		el.addEventListener("dragleave", () => el.removeClass("is-dragover"));
+		el.addEventListener("drop", (ev) => {
+			el.removeClass("is-dragover");
+			const file = ev.dataTransfer?.files?.[0];
+			if (file && file.type.startsWith("audio/")) {
+				ev.preventDefault();
+				void this.importAudio(file, card, audio);
+			}
+		});
+	}
+
+	private async importAudio(
+		file: File,
+		card: LangCard,
+		input: HTMLInputElement
+	): Promise<void> {
+		const path = await this.app.fileManager.getAvailablePathForAttachment(
+			file.name
+		);
+		await this.app.vault.createBinary(path, await file.arrayBuffer());
+		const link = `[[${path}]]`;
+		card.audio = card.audio.trim() ? `${card.audio.trim()}, ${link}` : link;
+		input.value = card.audio;
+		this.syncCards();
+		new Notice(`音频已保存：${path}`);
+	}
+
+	private renderTags(host: HTMLElement): void {
+		host.empty();
+		this.entity.tags.forEach((tag, i) => {
+			const chip = host.createSpan({ cls: "hl-tag-chip", text: tag });
+			const x = chip.createSpan({ cls: "hl-tag-chip-x", text: "✕" });
+			x.addEventListener("click", () => {
+				this.entity.tags.splice(i, 1);
+				this.scheduleSave();
+				this.renderTags(host);
 			});
-			return;
+		});
+		const input = host.createEl("input", {
+			type: "text",
+			cls: "hl-tag-chip-input",
+		});
+		input.placeholder = this.entity.tags.length ? "" : "＋ tag";
+		const commit = (): void => {
+			const v = input.value.trim().replace(/[,，]$/, "").trim();
+			if (v && !this.entity.tags.includes(v)) {
+				this.entity.tags.push(v);
+				this.scheduleSave();
+				this.renderTags(host);
+				const next = host.querySelector("input");
+				(next as HTMLInputElement | null)?.focus();
+			} else input.value = "";
+		};
+		input.addEventListener("keydown", (ev) => {
+			if (ev.key === "Enter" || ev.key === ",") {
+				ev.preventDefault();
+				commit();
+			}
+			if (
+				ev.key === "Backspace" &&
+				!input.value &&
+				this.entity.tags.length
+			) {
+				this.entity.tags.pop();
+				this.scheduleSave();
+				this.renderTags(host);
+				(host.querySelector("input") as HTMLInputElement | null)?.focus();
+			}
+		});
+		input.addEventListener("blur", () => {
+			if (input.value.trim()) commit();
+		});
+	}
+
+	private syncCards(): void {
+		fromCards(this.entity, this.cards);
+		this.updateHeadword();
+		this.scheduleSave();
+	}
+
+	private scheduleSave(): void {
+		this.dirty = true;
+		this.setStatus("typing");
+		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => void this.save(), 600);
+	}
+
+	private async save(): Promise<void> {
+		if (!this.dirty) return;
+		if (!this.entity.labels.some((l) => l.text.trim())) return;
+		this.dirty = false;
+		await this.plugin.store.upsertEntity(this.entity);
+		this.everSaved = true;
+		this.setStatus("saved");
+	}
+
+	private async flush(): Promise<void> {
+		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+		await this.save();
+		if (this.everSaved && !this.notified) {
+			this.notified = true;
+			this.onSaved?.(this.entity);
 		}
-		for (const hit of hits) {
-			const row = list.createDiv({ cls: "hl-entity-occ" });
-			row.createSpan({ cls: "hl-tag", text: hit.tag });
-			row.createSpan({ cls: "hl-entity-occ-snippet", text: hit.snippet });
-			row.addEventListener("click", () => {
-				this.close();
-				this.plugin.openSummary(hit.evId, hit.tag);
-			});
-		}
+	}
+
+	private setStatus(state: "typing" | "saved"): void {
+		if (!this.statusEl) return;
+		this.statusEl.empty();
+		this.statusEl.createSpan({
+			cls: `hl-status-dot ${state === "saved" ? "is-saved" : "is-typing"}`,
+		});
+		this.statusEl.createSpan({
+			text: state === "saved" ? "已自动保存" : "输入中…",
+		});
 	}
 
 	private playAudio(link: string): void {
@@ -263,6 +418,8 @@ export class EntityModal extends Modal {
 	}
 
 	onClose(): void {
+		void this.flush();
+		this.notes?.destroy();
 		this.contentEl.empty();
 	}
 }
@@ -286,10 +443,7 @@ export class EntitySuggestModal extends FuzzySuggestModal<EntityEntry> {
 		return entitySearchText(e);
 	}
 
-	renderSuggestion(
-		item: { item: EntityEntry },
-		el: HTMLElement
-	): void {
+	renderSuggestion(item: { item: EntityEntry }, el: HTMLElement): void {
 		el.createSpan({ text: displayName(item.item) });
 		el.createSpan({
 			cls: "hl-entity-suggest-meta",
