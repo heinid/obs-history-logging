@@ -42,8 +42,10 @@ export interface EraAnchor {
 // bucket start on the absolute axis — never by display label — so two
 // different periods can never merge, and the tracks stay exactly year-aligned
 // under a single scrollbar. Each lensed track shows its civilization's FULL
-// era sequence: every era gets a band at its starting row, even when the
-// track has no entries there.
+// era sequence as a textbook-style gutter: one continuous rounded band per
+// era running down the column's left edge, its name written vertically —
+// present even when the track has no entries there. `relayout` repositions
+// the bands; call it whenever the grid's geometry changes.
 export function renderTrackGrid(opts: {
 	list: HTMLElement;
 	entries: TimelineEntry[];
@@ -54,7 +56,7 @@ export function renderTrackGrid(opts: {
 	renderCard: (parent: HTMLElement, entry: TimelineEntry) => void;
 	onActivate: (i: number) => void;
 	onRemove: (i: number) => void;
-}): { counts: number[]; eraAnchors: EraAnchor[][] } {
+}): { counts: number[]; eraAnchors: EraAnchor[][]; relayout: () => void } {
 	const { list, tracks } = opts;
 	const gb = opts.groupBy === "none" ? "century" : opts.groupBy;
 	const span = gb === "century" ? 100 : 10;
@@ -162,6 +164,12 @@ export function renderTrackGrid(opts: {
 
 	const nextBoundary = tracks.map(() => 0);
 	const eraAnchors: EraAnchor[][] = tracks.map(() => []);
+	// Where each era begins: the cell of the row containing its start year.
+	const gutters: {
+		ti: number;
+		startCell: HTMLElement;
+		el: HTMLElement;
+	}[] = [];
 
 	for (const seg of segs) {
 		const row = grid.createEl("h3", { cls: "hl-group hl-row-label" });
@@ -172,17 +180,22 @@ export function renderTrackGrid(opts: {
 			// Clicking anywhere in a column focuses its track in the bar.
 			cell.addEventListener("click", () => opts.onActivate(ti));
 			const sys = systems[ti];
+			if (sys) cell.addClass("hl-has-gutter");
 			const emitBand = (): void => {
 				if (!sys) return;
 				const b = sys.boundaries[nextBoundary[ti]];
 				const hit = eraAt(sys, b.startKey);
 				if (!hit) return;
 				const count = eraCounts[ti].get(hit.name) ?? 0;
-				const band = cell.createDiv({ cls: "hl-era-band" });
+				const band = grid.createDiv({ cls: "hl-era-gutter" });
 				band.toggleClass("hl-era-empty", count === 0);
-				band.createSpan({ cls: "hl-era-name", text: hit.name });
-				band.createSpan({ cls: "hl-era-count", text: `(${count})` });
-				band.createSpan({ cls: "hl-group-range", text: hit.range });
+				band.setAttr("aria-label", `${hit.name} ${hit.range} — ${count}`);
+				const label = band.createDiv({ cls: "hl-era-gutter-label" });
+				label.createSpan({ cls: "hl-era-name", text: hit.name });
+				if (count > 0)
+					label.createSpan({ cls: "hl-era-count", text: String(count) });
+				band.addEventListener("click", () => opts.onActivate(ti));
+				gutters.push({ ti, startCell: cell, el: band });
 				eraAnchors[ti].push({ name: hit.name, range: hit.range, count, el: band });
 			};
 			if (sys) {
@@ -203,14 +216,39 @@ export function renderTrackGrid(opts: {
 					emitBand();
 					nextBoundary[ti]++;
 				}
-				// Colored rail while a track is inside an era, so the era reads as
-				// a continuous stretch down the column, not just a heading.
-				if (eraAt(sys, seg.end)) cell.addClass("hl-in-era");
 			} else {
 				for (const e of seg.cells[ti]) opts.renderCard(cell, e);
 			}
 		}
 	}
 
-	return { counts: perTrack.map((e) => e.length), eraAnchors };
+	// Size and place the gutter bands: each era's band runs from the top of
+	// the row where it starts to the top of its successor's (the last one to
+	// the grid's bottom edge). Offsets are measured against the grid, so the
+	// bands survive horizontal scrolling; re-run whenever geometry changes
+	// (cards expanding, images loading, pane resizes).
+	const relayout = (): void => {
+		const perTi = new Map<number, typeof gutters>();
+		for (const g of gutters) {
+			const arr = perTi.get(g.ti) ?? [];
+			arr.push(g);
+			perTi.set(g.ti, arr);
+		}
+		for (const arr of perTi.values()) {
+			for (let i = 0; i < arr.length; i++) {
+				const g = arr[i];
+				const top = g.startCell.offsetTop;
+				const end =
+					i + 1 < arr.length
+						? arr[i + 1].startCell.offsetTop - 6
+						: grid.scrollHeight - 8;
+				g.el.style.left = `${g.startCell.offsetLeft}px`;
+				g.el.style.top = `${top}px`;
+				g.el.style.height = `${Math.max(end - top, 22)}px`;
+			}
+		}
+	};
+	relayout();
+
+	return { counts: perTrack.map((e) => e.length), eraAnchors, relayout };
 }

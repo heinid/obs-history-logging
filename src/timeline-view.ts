@@ -41,6 +41,8 @@ export class TimelineView extends ItemView {
 	private eraAnchors: EraAnchor[][] = [];
 	private navEl?: HTMLElement;
 	private navSizer?: ResizeObserver;
+	// Re-places the era gutter bands when the grid's geometry changes.
+	private gridSizer?: ResizeObserver;
 	private navItems: { anchor: EraAnchor; el: HTMLElement }[] = [];
 	private cardEls = new Map<TimelineEntry, HTMLElement>();
 	// Cards in render order with their year sort keys, for year-aligned sync.
@@ -84,6 +86,7 @@ export class TimelineView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.navSizer?.disconnect();
+		this.gridSizer?.disconnect();
 	}
 
 	// Each pane's whole definition (filter, lens, grouping, loaded view, sync)
@@ -260,8 +263,11 @@ export class TimelineView extends ItemView {
 		this.cardEls.clear();
 		this.cardIndex = [];
 
+		this.gridSizer?.disconnect();
+		this.gridSizer = undefined;
+
 		if (this.tracks.length > 1) {
-			const { counts, eraAnchors } = renderTrackGrid({
+			const { counts, eraAnchors, relayout } = renderTrackGrid({
 				list,
 				entries: this.entries,
 				tracks: this.tracks,
@@ -272,6 +278,11 @@ export class TimelineView extends ItemView {
 				onActivate: (i) => this.activateTrack(i),
 				onRemove: (i) => this.removeTrack(i),
 			});
+			const gridEl = list.querySelector<HTMLElement>(".hl-multi-grid");
+			if (gridEl) {
+				this.gridSizer = new ResizeObserver(() => relayout());
+				this.gridSizer.observe(gridEl);
+			}
 			this.trackCounts = counts;
 			this.eraAnchors = eraAnchors;
 			this.bar.setCount(counts[this.active], this.entries.length);
