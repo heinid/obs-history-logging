@@ -769,19 +769,29 @@
 	border-radius: 8px;
 	background: var(--background-primary);
 	padding: 8px 10px;
+	line-height: 1.55;
+}
+/* CodeMirror defaults to a monospace scroller font — use the theme's text
+   font inside these editors. */
+.hl-le-container .cm-scroller {
 	font-family: var(--font-text);
 	font-size: var(--font-text-size);
 	line-height: 1.55;
+	overflow: auto;
 }
 .hl-summary-editor .cm-editor {
 	min-height: 14em;
 	max-height: 55vh;
-	overflow-y: auto;
+}
+.hl-summary-editor .cm-editor .cm-scroller {
+	max-height: 55vh;
 }
 .hl-entity-notes .cm-editor {
 	min-height: 5em;
 	max-height: 30vh;
-	overflow-y: auto;
+}
+.hl-entity-notes .cm-editor .cm-scroller {
+	max-height: 30vh;
 }
 .hl-le-container .cm-editor.cm-focused {
 	outline: none;
@@ -796,9 +806,41 @@
 .hl-le-bold {
 	font-weight: 700;
 }
+.hl-le-italic {
+	font-style: italic;
+}
+.hl-le-strike {
+	text-decoration: line-through;
+	color: var(--text-muted);
+}
+.hl-le-code {
+	font-family: var(--font-monospace);
+	font-size: 0.9em;
+	background: var(--background-modifier-hover);
+	border-radius: 3px;
+	padding: 0 3px;
+}
+.hl-le-heading {
+	font-weight: 700;
+	color: var(--text-normal);
+}
+.hl-le-h1 {
+	font-size: 1.35em;
+}
+.hl-le-h2 {
+	font-size: 1.2em;
+}
+.hl-le-h3 {
+	font-size: 1.08em;
+}
+.hl-le-bullet {
+	color: var(--text-accent);
+	font-weight: 600;
+}
 
-/* Completion dropdown */
-.hl-le-suggest {
+/* Completion dropdown + inline popovers (right-click actions, link picker) */
+.hl-le-suggest,
+.hl-le-pop {
 	position: absolute;
 	z-index: 10;
 	min-width: 240px;
@@ -806,8 +848,84 @@
 	padding: 4px;
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
-	box-shadow: var(--shadow-s);
+	border-radius: 10px;
+	box-shadow: var(--shadow-l, 0 4px 24px rgba(0, 0, 0, 0.2));
+	animation: hl-pop-in 0.1s ease-out;
+}
+@keyframes hl-pop-in {
+	from {
+		opacity: 0;
+		transform: translateY(-3px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+.hl-le-pop-item {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	white-space: nowrap;
+	overflow: hidden;
+}
+.hl-le-pop-item:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-le-pop-icon {
+	color: var(--text-accent);
+	font-weight: 600;
+	flex: 0 0 1.1em;
+	text-align: center;
+}
+.hl-le-pop-label {
+	font-weight: 600;
+	color: var(--text-normal);
+}
+.hl-le-pop-empty {
+	padding: 8px 10px;
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+}
+.hl-le-linkpick-input {
+	width: 100%;
+	margin-bottom: 4px;
+	border: none;
+	background: var(--background-secondary);
+	border-radius: 6px;
+	box-shadow: none;
+	padding: 6px 10px;
+	font-size: var(--font-ui-small);
+}
+.hl-le-linkpick-input:focus {
+	box-shadow: 0 0 0 1.5px var(--interactive-accent) inset;
+}
+.hl-le-suggest-hint {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 5px 10px 3px;
+	margin-top: 2px;
+	border-top: 1px solid var(--background-modifier-border);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+.hl-le-suggest-hint > span:not(.hl-le-key) {
+	margin-right: 6px;
+}
+.hl-le-key {
+	font-family: var(--font-monospace);
+	font-size: 0.85em;
+	border: 1px solid var(--background-modifier-border);
+	border-bottom-width: 2px;
+	border-radius: 4px;
+	padding: 0 5px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
 }
 .hl-le-suggest-item {
 	display: flex;
@@ -937,20 +1055,23 @@
 	font-size: var(--font-ui-smaller);
 	color: var(--text-faint);
 }
-.hl-lang-row-input {
+input.hl-lang-row-input,
+input.hl-lang-row-input[type="text"] {
 	flex: 1;
 	min-width: 0;
 	border: none;
 	background: transparent;
 	box-shadow: none;
 	padding: 2px 4px;
+	height: auto;
 	border-bottom: 1px solid transparent;
 	border-radius: 0;
 }
-.hl-lang-row-input:hover {
+input.hl-lang-row-input:hover {
 	border-bottom-color: var(--background-modifier-border);
 }
-.hl-lang-row-input:focus {
+input.hl-lang-row-input:focus,
+input.hl-lang-row-input:focus-visible {
 	box-shadow: none;
 	border-bottom-color: var(--interactive-accent);
 }
@@ -1022,16 +1143,20 @@
 .hl-tag-chip-x:hover {
 	color: var(--text-error);
 }
-.hl-tag-chip-input {
+input.hl-tag-chip-input,
+input.hl-tag-chip-input[type="text"] {
 	flex: 1;
 	min-width: 6em;
 	border: none;
 	background: transparent;
 	box-shadow: none;
 	padding: 2px 4px;
+	height: auto;
 }
-.hl-tag-chip-input:focus {
+input.hl-tag-chip-input:focus,
+input.hl-tag-chip-input:focus-visible {
 	box-shadow: none;
+	border-color: transparent;
 }
 
 /* Entity tab page */

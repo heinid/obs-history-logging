@@ -15,13 +15,15 @@ import {
 	keymap,
 	placeholder as cmPlaceholder,
 } from "@codemirror/view";
-import { EditorState, Prec, RangeSetBuilder } from "@codemirror/state";
-import { Menu } from "obsidian";
-import { EntityEntry } from "./db-format";
+import { EditorState, Prec } from "@codemirror/state";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { prepareFuzzySearch } from "obsidian";
+import { EntityEntry, displayName } from "./db-format";
 import {
 	AliasCandidate,
 	aliasCandidates,
 	dbRegex,
+	entitySearchText,
 	makeDbMarker,
 } from "./db-marker";
 
@@ -37,9 +39,8 @@ export interface LiveEditorOptions {
 	annotate?: {
 		entities: () => EntityEntry[];
 		typeColor: (typeName: string) => string | null;
-		// "＋ New entity" flows: open the entity editor, then call apply.
+		// "＋ New entity" flow: open the entity editor, then call apply.
 		onCreate: (word: string, apply: (e: EntityEntry) => void) => void;
-		onLink: (apply: (e: EntityEntry) => void) => void;
 	};
 }
 
@@ -80,55 +81,108 @@ class DbRefWidget extends WidgetType {
 	}
 }
 
-const BOLD_RE = /\*\*([^*\n]+)\*\*/g;
-const boldMark = Decoration.mark({ class: "hl-le-bold" });
 const hide = Decoration.replace({});
+const boldMark = Decoration.mark({ class: "hl-le-bold" });
+const italicMark = Decoration.mark({ class: "hl-le-italic" });
+const codeMark = Decoration.mark({ class: "hl-le-code" });
+const strikeMark = Decoration.mark({ class: "hl-le-strike" });
+const bulletMark = Decoration.mark({ class: "hl-le-bullet" });
 
+// Inline markdown spans rendered live (raw text reappears under the cursor):
+// `{db …}` folds to an underlined word, plus **bold**, *italic*, `code` and
+// ~~strikethrough~~; headings and list bullets get line-level styling.
 function buildDecorations(
 	view: EditorView,
 	opts: LiveEditorOptions
 ): DecorationSet {
-	const sel = view.state.selection.ranges;
+	// Raw text is only revealed under the cursor while the editor is focused;
+	// an unfocused editor renders fully folded.
+	const sel = view.hasFocus ? view.state.selection.ranges : [];
 	const inside = (from: number, to: number): boolean =>
 		sel.some((r) => r.from <= to && r.to >= from);
 	const text = view.state.doc.toString();
-	const spans: { from: number; to: number; deco: Decoration }[] = [];
+	const ranges: ReturnType<Decoration["range"]>[] = [];
+	// Replace decorations must never overlap; track their intervals.
+	const taken: { from: number; to: number }[] = [];
+	const free = (from: number, to: number): boolean =>
+		!taken.some((s) => from < s.to && to > s.from);
+	const claim = (from: number, to: number): void => {
+		taken.push({ from, to });
+	};
 
 	let m: RegExpExecArray | null;
 	const db = dbRegex();
 	while ((m = db.exec(text)) !== null) {
 		const from = m.index;
 		const to = from + m[0].length;
+		claim(from, to);
 		if (inside(from, to)) continue;
-		spans.push({
-			from,
-			to,
-			deco: Decoration.replace({
+		ranges.push(
+			Decoration.replace({
 				widget: new DbRefWidget(
 					m[1],
 					m[2],
 					opts.colorFor?.(m[1]) ?? null,
 					opts.onOpenEntity
 				),
-			}),
-		});
+			}).range(from, to)
+		);
 	}
 
-	BOLD_RE.lastIndex = 0;
-	while ((m = BOLD_RE.exec(text)) !== null) {
-		const from = m.index;
-		const to = from + m[0].length;
-		if (inside(from, to)) continue;
-		if (spans.some((s) => from < s.to && to > s.from)) continue;
-		spans.push({ from, to: from + 2, deco: hide });
-		spans.push({ from: from + 2, to: to - 2, deco: boldMark });
-		spans.push({ from: to - 2, to, deco: hide });
+	const inline = (
+		re: RegExp,
+		markLen: number,
+		mark: Decoration,
+		group = 1
+	): void => {
+		re.lastIndex = 0;
+		let hit: RegExpExecArray | null;
+		while ((hit = re.exec(text)) !== null) {
+			const start = hit.index + hit[0].indexOf(hit[group]) - markLen;
+			const end = start + hit[group].length + markLen * 2;
+			if (!free(start, end)) continue;
+			claim(start, end);
+			if (inside(start, end)) continue;
+			ranges.push(hide.range(start, start + markLen));
+			ranges.push(mark.range(start + markLen, end - markLen));
+			ranges.push(hide.range(end - markLen, end));
+		}
+	};
+	inline(/\*\*([^*\n]+)\*\*/g, 2, boldMark);
+	inline(/(?<![*\\])\*(?!\*)([^*\n]+)\*(?!\*)/g, 1, italicMark);
+	inline(/~~([^~\n]+)~~/g, 2, strikeMark);
+	inline(/`([^`\n]+)`/g, 1, codeMark);
+
+	// Line-level: ATX headings and list bullets.
+	for (let n = 1; n <= view.state.doc.lines; n++) {
+		const line = view.state.doc.line(n);
+		const h = /^(#{1,6})\s+/.exec(line.text);
+		if (h) {
+			const level = Math.min(h[1].length, 3);
+			ranges.push(
+				Decoration.line({ class: `hl-le-heading hl-le-h${level}` }).range(
+					line.from
+				)
+			);
+			const end = line.from + h[0].length;
+			if (!inside(line.from, line.to) && free(line.from, end)) {
+				claim(line.from, end);
+				ranges.push(hide.range(line.from, end));
+			}
+			continue;
+		}
+		const b = /^(\s*)([-*+]|\d+[.)])\s/.exec(line.text);
+		if (b) {
+			const from = line.from + b[1].length;
+			const to = from + b[2].length;
+			if (free(from, to)) {
+				claim(from, to);
+				ranges.push(bulletMark.range(from, to));
+			}
+		}
 	}
 
-	spans.sort((a, b) => a.from - b.from);
-	const builder = new RangeSetBuilder<Decoration>();
-	for (const s of spans) builder.add(s.from, s.to, s.deco);
-	return builder.finish();
+	return Decoration.set(ranges, true);
 }
 
 export class LiveEditor {
@@ -152,7 +206,11 @@ export class LiveEditor {
 					this.decorations = buildDecorations(view, opts);
 				}
 				update(update: ViewUpdate) {
-					if (update.docChanged || update.selectionSet)
+					if (
+						update.docChanged ||
+						update.selectionSet ||
+						update.focusChanged
+					)
 						this.decorations = buildDecorations(update.view, opts);
 				}
 			},
@@ -194,9 +252,11 @@ export class LiveEditor {
 				doc: opts.value,
 				extensions: [
 					EditorView.lineWrapping,
+					history(),
 					cmPlaceholder(opts.placeholder ?? ""),
 					renderPlugin,
 					suggestKeys,
+					keymap.of([...historyKeymap, ...defaultKeymap]),
 					EditorView.updateListener.of((u) => {
 						if (u.docChanged) opts.onChange?.(u.state.doc.toString());
 						if (u.docChanged || u.selectionSet) self.updateSuggest();
@@ -225,10 +285,15 @@ export class LiveEditor {
 	}
 
 	focus(): void {
+		// Land the caret at the end of the document so nothing unfolds on open.
+		this.view.dispatch({
+			selection: { anchor: this.view.state.doc.length },
+		});
 		this.view.focus();
 	}
 
 	destroy(): void {
+		this.closePopover();
 		this.view.destroy();
 	}
 
@@ -292,6 +357,15 @@ export class LiveEditor {
 			this.selected = this.cands.length;
 			this.acceptSuggestion();
 		});
+		const hint = this.suggestEl.createDiv({ cls: "hl-le-suggest-hint" });
+		for (const [k, label] of [
+			["↑↓", "选择"],
+			["Tab", "确认"],
+			["Esc", "关闭"],
+		]) {
+			hint.createSpan({ cls: "hl-le-key", text: k });
+			hint.createSpan({ text: label });
+		}
 
 		// Anchor under the cursor.
 		const sel = this.view.state.selection.main;
@@ -356,6 +430,41 @@ export class LiveEditor {
 		this.view.focus();
 	}
 
+	// --- popover shell (right-click actions + link picker) --------------
+
+	private popoverEl: HTMLDivElement | null = null;
+	private onDocDown = (e: MouseEvent): void => {
+		if (this.popoverEl && !this.popoverEl.contains(e.target as Node))
+			this.closePopover();
+	};
+	private onDocKey = (e: KeyboardEvent): void => {
+		if (e.key === "Escape") {
+			e.stopPropagation();
+			this.closePopover();
+			this.view.focus();
+		}
+	};
+
+	private openPopover(x: number, y: number): HTMLDivElement {
+		this.closePopover();
+		const box = this.container.getBoundingClientRect();
+		const pop = this.container.createDiv({ cls: "hl-le-pop" });
+		pop.style.left = `${Math.max(0, Math.min(x - box.left, box.width - 300))}px`;
+		pop.style.top = `${y - box.top + 4}px`;
+		this.popoverEl = pop;
+		document.addEventListener("mousedown", this.onDocDown, true);
+		document.addEventListener("keydown", this.onDocKey, true);
+		return pop;
+	}
+
+	private closePopover(): void {
+		if (!this.popoverEl) return;
+		this.popoverEl.remove();
+		this.popoverEl = null;
+		document.removeEventListener("mousedown", this.onDocDown, true);
+		document.removeEventListener("keydown", this.onDocKey, true);
+	}
+
 	// --- right-click annotation ----------------------------------------
 
 	private contextMenu(e: MouseEvent): void {
@@ -371,24 +480,121 @@ export class LiveEditor {
 		const word = raw.trim();
 		if (!word || /[{}\n]/.test(word)) return;
 		e.preventDefault();
-		const menu = new Menu();
-		menu.addItem((item) =>
-			item
-				.setTitle(`Annotate "${word}" as new entity…`)
-				.setIcon("plus")
-				.onClick(() =>
-					ann.onCreate(word, (ent) => this.insertMarker(from, to, ent))
-				)
+		const pop = this.openPopover(e.clientX, e.clientY);
+		const mk = (icon: string, label: string, hint: string): HTMLDivElement => {
+			const row = pop.createDiv({ cls: "hl-le-pop-item" });
+			row.createSpan({ cls: "hl-le-pop-icon", text: icon });
+			row.createSpan({ cls: "hl-le-pop-label", text: label });
+			if (hint) row.createSpan({ cls: "hl-le-suggest-meta", text: hint });
+			return row;
+		};
+		mk("＋", "新建词条", `“${word}”`).addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			this.closePopover();
+			ann.onCreate(word, (ent) => this.insertMarker(from, to, ent));
+		});
+		mk("⧉", "链接到已有词条", `“${word}”`).addEventListener(
+			"mousedown",
+			(ev) => {
+				ev.preventDefault();
+				this.openLinkPicker(from, to, word, e.clientX, e.clientY);
+			}
 		);
-		menu.addItem((item) =>
-			item
-				.setTitle(`Link "${word}" to existing entity…`)
-				.setIcon("link")
-				.onClick(() =>
-					ann.onLink((ent) => this.insertMarker(from, to, ent))
-				)
-		);
-		menu.showAtMouseEvent(e);
+	}
+
+	// Inline fuzzy picker over every entity, anchored at the selection — no
+	// native modal.
+	private openLinkPicker(
+		from: number,
+		to: number,
+		word: string,
+		x: number,
+		y: number
+	): void {
+		const ann = this.opts.annotate;
+		if (!ann) return;
+		const pop = this.openPopover(x, y);
+		pop.addClass("hl-le-linkpick");
+		const input = pop.createEl("input", {
+			type: "text",
+			cls: "hl-le-linkpick-input",
+		});
+		input.placeholder = "搜索词条…";
+		input.value = word;
+		const list = pop.createDiv();
+		let items: EntityEntry[] = [];
+		let selected = 0;
+		const confirm = (): void => {
+			const ent = items[selected];
+			if (!ent) return;
+			this.closePopover();
+			this.insertMarker(from, to, ent);
+		};
+		const render = (): void => {
+			const q = input.value.trim();
+			const fuzzy = q ? prepareFuzzySearch(q) : null;
+			items = ann
+				.entities()
+				.map((ent) => ({
+					ent,
+					score: fuzzy ? fuzzy(entitySearchText(ent))?.score : 0,
+				}))
+				.filter((r) => r.score !== undefined && r.score !== null)
+				.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+				.slice(0, 8)
+				.map((r) => r.ent);
+			selected = Math.min(selected, Math.max(0, items.length - 1));
+			list.empty();
+			if (!items.length) {
+				list.createDiv({ cls: "hl-le-pop-empty", text: "无匹配词条" });
+				return;
+			}
+			items.forEach((ent, i) => {
+				const row = list.createDiv({ cls: "hl-le-suggest-item" });
+				if (i === selected) row.addClass("is-selected");
+				row.createSpan({
+					cls: "hl-le-suggest-word",
+					text: displayName(ent),
+				});
+				const color = ann.typeColor(ent.type);
+				const pill = row.createSpan({
+					cls: "hl-le-suggest-type",
+					text: ent.type || "?",
+				});
+				if (color) {
+					pill.style.color = color;
+					pill.style.borderColor = color;
+				}
+				const others = ent.labels
+					.map((l) => l.text)
+					.filter((t) => t !== displayName(ent))
+					.slice(0, 3)
+					.join(" · ");
+				if (others)
+					row.createSpan({ cls: "hl-le-suggest-meta", text: others });
+				row.addEventListener("mousedown", (ev) => {
+					ev.preventDefault();
+					selected = i;
+					confirm();
+				});
+			});
+		};
+		input.addEventListener("input", render);
+		input.addEventListener("keydown", (ev) => {
+			if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+				ev.preventDefault();
+				if (items.length)
+					selected =
+						(selected + (ev.key === "ArrowDown" ? 1 : -1) + items.length) %
+						items.length;
+				render();
+			} else if (ev.key === "Enter") {
+				ev.preventDefault();
+				confirm();
+			}
+		});
+		render();
+		window.setTimeout(() => input.focus(), 0);
 	}
 
 	// Entities list can change (a new entity created mid-edit).

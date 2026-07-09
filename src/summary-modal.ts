@@ -2,7 +2,7 @@ import { App, Modal, Notice } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { jumpToEv } from "./jump";
 import { DbType, EntityEntry } from "./db-format";
-import { EntityModal, EntitySuggestModal } from "./entity-modal";
+import { EntityModal } from "./entity-modal";
 import { LiveEditor } from "./live-editor";
 import { generateId } from "./id";
 import { describeYear, parseYearTag } from "./year-tag";
@@ -69,8 +69,6 @@ export class SummaryModal extends Modal {
 				entities: () => this.entities,
 				typeColor: (name) => this.typeColor(name),
 				onCreate: (word, apply) => this.createEntity(word, apply),
-				onLink: (apply) =>
-					new EntitySuggestModal(this.app, this.entities, apply).open(),
 			},
 		});
 
@@ -86,7 +84,9 @@ export class SummaryModal extends Modal {
 			else this.close();
 		});
 
-		this.editor.focus();
+		// Obsidian focuses the modal container right after onOpen; grab the
+		// focus back once that has happened.
+		window.setTimeout(() => this.editor?.focus(), 0);
 	}
 
 	private scheduleSave(): void {

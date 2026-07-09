@@ -30,6 +30,12 @@ class EvSymbolWidget extends WidgetType {
 		span.textContent = EV_SYMBOL;
 		span.setAttribute("aria-label", "Event actions");
 		span.addEventListener("mousedown", (e) => {
+			// Don't move the editor cursor; the menu opens on click so the
+			// release of the same press cannot immediately dismiss it.
+			e.preventDefault();
+			e.stopPropagation();
+		});
+		span.addEventListener("click", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
 			openEvMenu(this.plugin, e, this.id, this.tag, this.tracks);

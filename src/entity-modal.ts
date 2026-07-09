@@ -147,7 +147,7 @@ export class EntityModal extends Modal {
 			}
 			const other = addRow.createEl("button", {
 				cls: "hl-ghost-btn",
-				text: "＋ …",
+				text: "＋ 其他语言…",
 			});
 			other.addEventListener("click", () => {
 				const input = addRow.createEl("input", {

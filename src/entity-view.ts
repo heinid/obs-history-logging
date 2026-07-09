@@ -196,6 +196,10 @@ export class EntityView extends ItemView {
 			if (!parseDbMarks(ev.summary).some((m) => m.id === e.id)) continue;
 			const key = ev.tag ? parseYearTag(ev.tag)?.sortKey ?? 0 : 0;
 			const snippet = stripDbMarkers(ev.summary)
+				.replace(/\*\*([^*\n]+)\*\*/g, "$1")
+				.replace(/~~([^~\n]+)~~/g, "$1")
+				.replace(/`([^`\n]+)`/g, "$1")
+				.replace(/^#{1,6}\s+/gm, "")
 				.replace(/\s+/g, " ")
 				.trim()
 				.slice(0, 160);
