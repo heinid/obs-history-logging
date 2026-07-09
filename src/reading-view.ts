@@ -1,5 +1,6 @@
 import type HistoryLoggingPlugin from "./main";
 import { EV_SYMBOL } from "./constants";
+import { openEvMenu } from "./ev-menu";
 
 const OPEN_RE = /\{ev\s+([0-9a-z]{8})\s+$/;
 const CLOSE_RE = /^\s*\}/;
@@ -51,6 +52,10 @@ export function createReadingProcessor(plugin: HistoryLoggingPlugin) {
 			if (!open) continue;
 
 			const id = open[1];
+			const tracks = fold
+				.filter((n): n is HTMLElement => n instanceof HTMLElement)
+				.map((n) => (n.textContent ?? "").replace(/^#histolog\//, ""))
+				.filter((t) => t.length > 0);
 			prev.textContent = prevText.slice(0, open.index);
 			next.textContent = nextText.replace(CLOSE_RE, "");
 			for (const n of fold) n.remove();
@@ -58,11 +63,11 @@ export function createReadingProcessor(plugin: HistoryLoggingPlugin) {
 			const sym = document.createElement("span");
 			sym.className = "hl-ev-symbol";
 			sym.textContent = EV_SYMBOL;
-			sym.setAttribute("aria-label", "Open event summary");
+			sym.setAttribute("aria-label", "Event actions");
 			sym.addEventListener("click", (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				plugin.openSummary(id, tag);
+				openEvMenu(plugin, e, id, tag, tracks);
 			});
 			a.after(sym);
 		}

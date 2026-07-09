@@ -28,6 +28,8 @@ import { EV_SYMBOL } from "./constants";
 import { stripEvMarkers, stripImages, stripTags } from "./parser";
 import { dbMarkersToHtml, stripDbMarkers } from "./db-marker";
 import { addEventForEntry } from "./commands";
+import { openEvMenu } from "./ev-menu";
+import { tracksIn } from "./tracks";
 
 export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
 
@@ -503,7 +505,15 @@ export class TimelineView extends ItemView {
 		const head = card.createDiv({ cls: "hl-card-head" });
 		head.createSpan({ cls: "hl-year", text: describeYear(entry.decoded) });
 		head.createSpan({ cls: "hl-tag", text: entry.tag });
-		if (entry.evId) head.createSpan({ cls: "hl-ev-symbol", text: EV_SYMBOL });
+		if (entry.evId) {
+			const evId = entry.evId;
+			const sym = head.createSpan({ cls: "hl-ev-symbol", text: EV_SYMBOL });
+			sym.setAttr("aria-label", "Event actions");
+			sym.addEventListener("click", (e) => {
+				e.stopPropagation();
+				openEvMenu(this.plugin, e, evId, entry.tag, tracksIn(entry.block));
+			});
+		}
 		head.createSpan({ cls: "hl-file", text: entry.fileName });
 
 		// Per-card actions (revealed on hover): write/edit summary in place, and
@@ -683,6 +693,20 @@ export class TimelineView extends ItemView {
 				if (sib) this.scrollToEntry(sib);
 			});
 		}
+	}
+
+	// Scroll to the card of a specific event (by ev id, falling back to the
+	// bare tag) — the ⌛ menu's "Show on timeline" landing.
+	async focusEvent(evId: string, tag: string): Promise<void> {
+		if (!this.entries.length) await this.refresh();
+		const target =
+			this.entries.find((e) => e.evId === evId) ??
+			this.entries.find((e) => e.tag === tag);
+		if (!target) {
+			new Notice("Event not found on the timeline.");
+			return;
+		}
+		this.scrollToEntry(target);
 	}
 
 	// Scroll the timeline to another entry's card and flash it.

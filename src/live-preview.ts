@@ -9,14 +9,17 @@ import {
 import { RangeSetBuilder } from "@codemirror/state";
 import type HistoryLoggingPlugin from "./main";
 import { evRegex } from "./parser";
+import { tracksIn } from "./tracks";
 import { EV_SYMBOL } from "./constants";
+import { openEvMenu } from "./ev-menu";
 
 // The clickable ⌛ marker shown in place of the `{ev ... }` closing syntax.
 class EvSymbolWidget extends WidgetType {
 	constructor(
 		private plugin: HistoryLoggingPlugin,
 		private id: string,
-		private tag: string
+		private tag: string,
+		private tracks: string[]
 	) {
 		super();
 	}
@@ -25,11 +28,11 @@ class EvSymbolWidget extends WidgetType {
 		const span = document.createElement("span");
 		span.className = "hl-ev-symbol";
 		span.textContent = EV_SYMBOL;
-		span.setAttribute("aria-label", "Open event summary");
+		span.setAttribute("aria-label", "Event actions");
 		span.addEventListener("mousedown", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			this.plugin.openSummary(this.id, this.tag);
+			openEvMenu(this.plugin, e, this.id, this.tag, this.tracks);
 		});
 		return span;
 	}
@@ -59,6 +62,7 @@ function buildDecorations(
 			const matchEnd = matchStart + m[0].length;
 			const id = m[1];
 			const tag = m[2];
+			const tracks = tracksIn(m[3] ?? "");
 			const tagStart = matchStart + m[0].indexOf(tag);
 			const tagEnd = tagStart + tag.length;
 
@@ -75,7 +79,7 @@ function buildDecorations(
 				tagEnd,
 				matchEnd,
 				Decoration.replace({
-					widget: new EvSymbolWidget(plugin, id, tag),
+					widget: new EvSymbolWidget(plugin, id, tag, tracks),
 				})
 			);
 		}

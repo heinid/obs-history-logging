@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
+import { EvAction } from "./ev-actions";
 
 export interface HistoryLoggingSettings {
 	// Vault folder holding the plugin's markdown data files.
@@ -13,6 +14,10 @@ export interface HistoryLoggingSettings {
 	fillEmptyPeriods: boolean;
 	// Language code preselected for new entity labels / readings.
 	defaultLabelLang: string;
+	// Wikipedia language edition for the ⌛ menu's year-page item.
+	wikiLang: string;
+	// User-defined ⌛ menu actions (name + URL template).
+	evActions: EvAction[];
 }
 
 export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
@@ -20,6 +25,8 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	hideTagsInPreview: true,
 	fillEmptyPeriods: false,
 	defaultLabelLang: "zh",
+	wikiLang: "ja",
+	evActions: [],
 };
 
 export const EVENTS_FILE = "events.md";
@@ -95,5 +102,68 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		new Setting(containerEl)
+			.setName("Wikipedia language")
+			.setDesc(
+				"Wikipedia edition opened by the ⌛ menu's year-page item (e.g. ja, zh, en)."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("ja")
+					.setValue(this.plugin.settings.wikiLang)
+					.onChange(async (value) => {
+						this.plugin.settings.wikiLang =
+							value.trim().toLowerCase() || "ja";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Custom ⌛ menu actions")
+			.setDesc(
+				"Extra menu items for the event marker. Each action opens a URL built from its template; placeholders: {year} (signed number, BC negative), {tag}, {track}."
+			)
+			.setHeading();
+
+		this.plugin.settings.evActions.forEach((action, i) => {
+			const row = new Setting(containerEl);
+			row.addText((t) =>
+				t
+					.setPlaceholder("Name")
+					.setValue(action.name)
+					.onChange(async (v) => {
+						action.name = v.trim();
+						await this.plugin.saveSettings();
+					})
+			);
+			row.addText((t) => {
+				t.setPlaceholder("https://…/{year}…")
+					.setValue(action.url)
+					.onChange(async (v) => {
+						action.url = v.trim();
+						await this.plugin.saveSettings();
+					});
+				t.inputEl.addClass("hl-action-url");
+			});
+			row.addExtraButton((b) =>
+				b
+					.setIcon("trash")
+					.setTooltip("Remove action")
+					.onClick(async () => {
+						this.plugin.settings.evActions.splice(i, 1);
+						await this.plugin.saveSettings();
+						this.display();
+					})
+			);
+		});
+
+		new Setting(containerEl).addButton((b) =>
+			b.setButtonText("+ action").onClick(async () => {
+				this.plugin.settings.evActions.push({ name: "", url: "" });
+				await this.plugin.saveSettings();
+				this.display();
+			})
+		);
 	}
 }

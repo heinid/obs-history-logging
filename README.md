@@ -44,8 +44,19 @@ you add one, the tag is wrapped inline:
 1. Type a year tag such as `#ad/07/1/0` in a note.
 2. Put the cursor on the tag and run **Add event to year tag under cursor**.
 3. Write the summary in the dialog and save.
-4. Click the ⌛ marker any time to view/edit the summary or jump back to the
-   source.
+4. Click the ⌛ marker any time for the event menu.
+
+### The ⌛ menu
+
+Clicking an event marker (in notes or on a timeline card) opens a menu:
+
+- **View / edit summary** — the summary dialog;
+- **Open Wikipedia year page** — e.g. `ja.wikipedia.org/wiki/1274年`; the
+  language edition is a setting (ja/zh/en…);
+- **Show on timeline** — opens/focuses a timeline and scrolls to the event;
+- **Custom actions** — defined in settings as name + URL template, with
+  `{year}` (signed number, BC negative), `{tag}` and `{track}` placeholders.
+  The Wikipedia item is just the built-in first of these.
 
 ## Entity knowledge base
 

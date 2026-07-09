@@ -33,6 +33,11 @@ import {
 	dbMarkersToHtml,
 	aliasAtCursor,
 } from "../src/db-marker";
+import {
+	wikipediaYearTitle,
+	wikipediaYearUrl,
+	fillActionUrl,
+} from "../src/ev-actions";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -257,6 +262,25 @@ eq("alias longest wins", aliasAtCursor("x Alexander the Great", dict)?.alias, "A
 eq("alias word boundary", aliasAtCursor("xAlexander", dict), null);
 eq("alias none", aliasAtCursor("罗马", dict), null);
 eq("alias not inside marker", aliasAtCursor("{db q3x8k2p1 希腊", dict), null);
+
+// ⌛ menu: wikipedia year pages + action URL templates
+const y1274 = parseYearTag("#ad/12/7/4")!;
+const yBc44 = parseYearTag("#bc/00/4/4")!;
+eq("wiki ja ad", wikipediaYearTitle("ja", y1274), "1274年");
+eq("wiki ja bc", wikipediaYearTitle("ja", yBc44), "紀元前44年");
+eq("wiki zh bc", wikipediaYearTitle("zh", yBc44), "前44年");
+eq("wiki en ad", wikipediaYearTitle("en", y1274), "1274");
+eq("wiki en bc", wikipediaYearTitle("en", yBc44), "44 BC");
+eq(
+	"wiki url ja",
+	wikipediaYearUrl("ja", y1274),
+	"https://ja.wikipedia.org/wiki/" + encodeURIComponent("1274年")
+);
+eq(
+	"action url fill",
+	fillActionUrl("https://x.test/?y={year}&t={tag}&k={track}", yBc44, "#bc/00/4/4", "ローマ史"),
+	"https://x.test/?y=-44&t=%23bc%2F00%2F4%2F4&k=" + encodeURIComponent("ローマ史")
+);
 
 if (failures > 0) {
 	console.error(`\n${failures} failure(s)`);

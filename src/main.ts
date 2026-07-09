@@ -221,6 +221,13 @@ export default class HistoryLoggingPlugin extends Plugin {
 		new SummaryModal(this.app, this, id, tag, onSaved).open();
 	}
 
+	// ⌛ menu: open (or focus) a timeline and scroll to this event's card.
+	async revealOnTimeline(id: string, tag: string): Promise<void> {
+		await this.activateTimeline("tab");
+		const view = this.activeTimeline();
+		if (view) await view.focusEvent(id, tag);
+	}
+
 	async openEntity(id: string): Promise<void> {
 		const entity = (await this.store.readEntities()).get(id);
 		if (!entity) {

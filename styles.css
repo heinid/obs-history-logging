@@ -795,3 +795,9 @@
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 }
+
+/* Settings: custom ⌛ action URL templates need room */
+.hl-action-url {
+	width: 24em;
+	max-width: 100%;
+}
