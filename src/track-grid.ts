@@ -191,7 +191,11 @@ export function renderTrackGrid(opts: {
 				band.toggleClass("hl-era-empty", count === 0);
 				band.setAttr("aria-label", `${hit.name} ${hit.range} — ${count}`);
 				const label = band.createDiv({ cls: "hl-era-gutter-label" });
-				label.createSpan({ cls: "hl-era-name", text: hit.name });
+				// One character per line: reliable vertical text without
+				// depending on writing-mode support inside the band.
+				const nameEl = label.createDiv({ cls: "hl-era-gutter-name" });
+				for (const ch of hit.name)
+					nameEl.createDiv({ cls: "hl-era-gutter-ch", text: ch });
 				if (count > 0)
 					label.createSpan({ cls: "hl-era-count", text: String(count) });
 				band.addEventListener("click", () => opts.onActivate(ti));
