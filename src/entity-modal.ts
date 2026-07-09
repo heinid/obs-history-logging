@@ -178,7 +178,7 @@ export class EntityModal extends Modal {
 		const notesEl = body.createDiv({ cls: "hl-entity-notes" });
 		this.notes = new LiveEditor(notesEl, {
 			value: e.body,
-			placeholder: "自由正文（markdown）…",
+			placeholder: "正文…",
 			onChange: (v) => {
 				e.body = v;
 				this.scheduleSave();
@@ -242,7 +242,7 @@ export class EntityModal extends Modal {
 		};
 
 		const labels = row("词形");
-		labels.placeholder = "词形，逗号分隔=别名";
+		labels.placeholder = "词形";
 		labels.value = card.labels;
 		labels.addEventListener("input", () => {
 			card.labels = labels.value;
@@ -250,7 +250,6 @@ export class EntityModal extends Modal {
 		});
 
 		const reading = row("音标");
-		reading.placeholder = "kana / IPA / pinyin…";
 		reading.value = card.reading;
 		reading.addEventListener("input", () => {
 			card.reading = reading.value;
@@ -263,7 +262,7 @@ export class EntityModal extends Modal {
 			type: "text",
 			cls: "hl-lang-row-input",
 		});
-		audio.placeholder = "[[audio.mp3]] — 可直接粘贴或拖入音频";
+		audio.placeholder = "拖入或粘贴音频";
 		audio.value = card.audio;
 		audio.addEventListener("input", () => {
 			card.audio = audio.value;

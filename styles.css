@@ -687,16 +687,17 @@
 }
 .hl-modal-head {
 	display: flex;
-	align-items: baseline;
-	gap: 10px;
-	padding-bottom: 10px;
-	margin-bottom: 12px;
+	align-items: center;
+	gap: 12px;
+	padding-bottom: 14px;
+	margin-bottom: 4px;
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 .hl-modal-year {
-	font-size: 1.6em;
-	font-weight: 700;
+	font-size: 1.5em;
+	font-weight: 650;
 	line-height: 1.2;
+	letter-spacing: 0.01em;
 	color: var(--text-normal);
 }
 .hl-modal-year.hl-placeholder {
@@ -771,11 +772,11 @@
 	padding: 8px 10px;
 	line-height: 1.55;
 }
-/* CodeMirror defaults to a monospace scroller font — use the theme's text
-   font inside these editors. */
+/* CodeMirror defaults to a monospace scroller font — match the interface
+   font inside these modal editors so they blend with the other controls. */
 .hl-le-container .cm-scroller {
-	font-family: var(--font-text);
-	font-size: var(--font-text-size);
+	font-family: var(--font-interface, var(--default-font));
+	font-size: var(--font-ui-medium);
 	line-height: 1.55;
 	overflow: auto;
 }
@@ -969,11 +970,11 @@
 
 /* Overline section labels */
 .hl-overline {
-	margin: 16px 0 6px;
-	font-size: var(--font-ui-smaller);
+	margin: 20px 0 8px;
+	font-size: 11px;
 	font-weight: 600;
 	text-transform: uppercase;
-	letter-spacing: 0.08em;
+	letter-spacing: 0.1em;
 	color: var(--text-faint);
 }
 
@@ -1001,8 +1002,8 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 10px;
 	background: var(--background-secondary);
-	padding: 10px 12px;
-	margin-bottom: 8px;
+	padding: 12px 14px;
+	margin-bottom: 10px;
 	transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 .hl-lang-card:hover {
@@ -1020,9 +1021,10 @@
 	margin-bottom: 6px;
 }
 .hl-lang-badge {
-	font-size: var(--font-ui-smaller);
+	font-size: 11px;
+	line-height: 1.6;
 	font-weight: 700;
-	letter-spacing: 0.06em;
+	letter-spacing: 0.08em;
 	padding: 1px 8px;
 	border-radius: 5px;
 	background: var(--background-modifier-hover);
@@ -1047,13 +1049,14 @@
 .hl-lang-row {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	padding: 2px 0;
+	gap: 10px;
+	padding: 4px 0;
+	min-height: 28px;
 }
 .hl-lang-row-label {
-	flex: 0 0 3.2em;
-	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	flex: 0 0 3.4em;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
 }
 input.hl-lang-row-input,
 input.hl-lang-row-input[type="text"] {
@@ -1064,6 +1067,8 @@ input.hl-lang-row-input[type="text"] {
 	box-shadow: none;
 	padding: 2px 4px;
 	height: auto;
+	font-size: var(--font-ui-medium);
+	font-family: var(--font-interface, var(--default-font));
 	border-bottom: 1px solid transparent;
 	border-radius: 0;
 }
@@ -1078,6 +1083,8 @@ input.hl-lang-row-input:focus-visible {
 .hl-play-btn {
 	flex: 0 0 auto;
 	font-size: var(--font-ui-smaller);
+	height: auto;
+	line-height: 1.4;
 	padding: 2px 10px;
 	border-radius: 1em;
 	border: 1px solid var(--background-modifier-border);
