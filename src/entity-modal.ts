@@ -209,6 +209,19 @@ export class EntityModal extends Modal {
 			this.close();
 			await this.plugin.openEntityView(e.id);
 		});
+		const save = foot.createEl("button", {
+			cls: "hl-modal-foot-btn hl-primary",
+			text: "保存",
+		});
+		save.addEventListener("click", async () => {
+			if (!this.entity.labels.some((l) => l.text.trim())) {
+				new Notice("请先填写至少一个词形");
+				return;
+			}
+			this.dirty = true;
+			await this.flush();
+			this.close();
+		});
 	}
 
 	private updateHeadword(): void {
