@@ -683,3 +683,115 @@
 	font-family: var(--font-text);
 	line-height: 1.5;
 }
+
+/* Entity database ({db …} markers, entity modal, type manager) */
+.hl-db-ref {
+	text-decoration: underline;
+	text-decoration-style: solid;
+	text-decoration-thickness: 2px;
+	text-underline-offset: 2px;
+	text-decoration-color: var(--text-faint);
+	cursor: pointer;
+}
+.hl-db-ref:hover {
+	background: var(--background-modifier-hover);
+	border-radius: 2px;
+}
+.hl-db-hint {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	margin-top: 4px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background: var(--background-secondary);
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+.hl-db-hint-alias {
+	font-weight: 600;
+	color: var(--text-normal);
+}
+.hl-db-hint-key {
+	margin-left: auto;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 3px;
+	padding: 0 4px;
+}
+.hl-entity-modal,
+.hl-db-types-modal {
+	max-height: 80vh;
+}
+.hl-entity-rows {
+	margin-bottom: 8px;
+}
+.hl-entity-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 0;
+}
+.hl-entity-lang {
+	flex: 0 0 4em;
+}
+.hl-entity-text {
+	flex: 1;
+	min-width: 0;
+}
+.hl-row-del,
+.hl-row-play {
+	flex: 0 0 auto;
+	padding: 0 8px;
+}
+.hl-row-add {
+	margin-top: 4px;
+	font-size: var(--font-ui-small);
+}
+.hl-entity-body {
+	width: 100%;
+	min-height: 6em;
+	resize: vertical;
+	font-family: var(--font-text);
+	line-height: 1.5;
+}
+.hl-entity-occurrences {
+	max-height: 12em;
+	overflow-y: auto;
+	margin-bottom: 8px;
+}
+.hl-entity-occ {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 3px 4px;
+	border-radius: 4px;
+	cursor: pointer;
+}
+.hl-entity-occ:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-entity-occ .hl-tag {
+	flex: 0 0 auto;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-accent);
+}
+.hl-entity-occ-snippet {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+.hl-entity-occ-empty {
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+}
+.hl-entity-suggest-meta {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}

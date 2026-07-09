@@ -19,6 +19,11 @@ import { TIMELINE_VIEW_TYPE, TimelineView } from "./timeline-view";
 import { ERA_MANAGER_VIEW_TYPE, EraManagerView } from "./era-manager-view";
 import { LayoutPane, TimelineLayout } from "./layouts";
 import { NameModal } from "./name-modal";
+import {
+	DbTypeManagerModal,
+	EntityModal,
+	EntitySuggestModal,
+} from "./entity-modal";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
@@ -78,6 +83,16 @@ export default class HistoryLoggingPlugin extends Plugin {
 			id: "manage-era-systems",
 			name: "Manage era systems",
 			callback: () => void this.openEraManager(),
+		});
+		this.addCommand({
+			id: "browse-entities",
+			name: "Browse entities",
+			callback: () => void this.browseEntities(),
+		});
+		this.addCommand({
+			id: "manage-entity-types",
+			name: "Manage entity types",
+			callback: () => new DbTypeManagerModal(this.app, this).open(),
 		});
 	}
 
@@ -204,6 +219,28 @@ export default class HistoryLoggingPlugin extends Plugin {
 
 	openSummary(id: string, tag: string, onSaved?: () => void): void {
 		new SummaryModal(this.app, this, id, tag, onSaved).open();
+	}
+
+	async openEntity(id: string): Promise<void> {
+		const entity = (await this.store.readEntities()).get(id);
+		if (!entity) {
+			new Notice(`No entity with id ${id} in entities.md`);
+			return;
+		}
+		new EntityModal(this.app, this, entity, false).open();
+	}
+
+	async browseEntities(): Promise<void> {
+		const entities = [...(await this.store.readEntities()).values()];
+		if (!entities.length) {
+			new Notice(
+				"No entities yet. Select text in an event summary and right-click to create one."
+			);
+			return;
+		}
+		new EntitySuggestModal(this.app, entities, (e) => {
+			new EntityModal(this.app, this, e, false).open();
+		}).open();
 	}
 
 	async loadSettings(): Promise<void> {

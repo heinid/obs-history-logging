@@ -26,6 +26,7 @@ import {
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
 import { stripEvMarkers, stripImages, stripTags } from "./parser";
+import { dbMarkersToHtml, stripDbMarkers } from "./db-marker";
 import { addEventForEntry } from "./commands";
 
 export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
@@ -134,6 +135,7 @@ export class TimelineView extends ItemView {
 	async refresh(): Promise<void> {
 		this.profiles = await this.plugin.store.readProfiles();
 		this.eraSystems = await this.plugin.store.readEraSystems();
+		await this.loadDbColors();
 		if (!this.initialised) {
 			this.initialised = true;
 			if (!this.restored && this.profiles.length) {
@@ -535,13 +537,13 @@ export class TimelineView extends ItemView {
 		let line = stripImages(stripEvMarkers(entry.snippet));
 		if (this.plugin.settings.hideTagsInPreview) line = stripTags(line);
 		const preview = hasSummary
-			? entry.summary!
+			? dbMarkersToHtml(entry.summary!, (id) => this.dbColors.get(id) ?? "")
 			: line.replace(/\s+/g, " ").trim() || "*(no text)*";
 		// Expanded: the full surrounding block, raw (images + every tag).
 		const full = stripEvMarkers(entry.block).trim();
 
 		const norm = (s: string) =>
-			stripTags(stripImages(s)).replace(/\s+/g, " ").trim();
+			stripDbMarkers(stripTags(stripImages(s))).replace(/\s+/g, " ").trim();
 		const hasImage = full !== stripImages(full);
 		const expandable =
 			!!full && (hasSummary || norm(full) !== norm(preview) || hasImage);
@@ -619,7 +621,36 @@ export class TimelineView extends ItemView {
 			content,
 			entry.filePath,
 			this.plugin
+		).then(() => this.wireDbRefs(content));
+	}
+
+	// Entity-type colors for the `{db …}` underlines in summaries.
+	private dbColors = new Map<string, string>();
+
+	private async loadDbColors(): Promise<void> {
+		const [entities, types] = await Promise.all([
+			this.plugin.store.readEntities(),
+			this.plugin.store.readDbTypes(),
+		]);
+		const colorOf = new Map(types.map((t) => [t.name, t.color]));
+		this.dbColors = new Map(
+			[...entities.values()].map((e) => [e.id, colorOf.get(e.type) ?? ""])
 		);
+	}
+
+	// Folded `{db …}` markers render as underlined spans; click opens the entity.
+	private wireDbRefs(content: HTMLElement): void {
+		for (const el of Array.from(
+			content.querySelectorAll<HTMLElement>("span.hl-db-ref")
+		)) {
+			const id = el.getAttr("data-db-id");
+			if (!id) continue;
+			el.setAttr("aria-label", "Open entity");
+			el.addEventListener("click", (e) => {
+				e.stopPropagation();
+				void this.plugin.openEntity(id);
+			});
+		}
 	}
 
 	// Within an expanded block: emphasise the exact year tag this card is about,

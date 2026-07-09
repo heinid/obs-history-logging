@@ -47,6 +47,36 @@ you add one, the tag is wrapped inline:
 4. Click the ⌛ marker any time to view/edit the summary or jump back to the
    source.
 
+## Entity knowledge base
+
+Names appearing in event summaries (people, polities, places, works…) can be
+turned into **entities** — small multilingual dictionary entries that accumulate
+their own chronology from every summary they are annotated in.
+
+```
+元寇（1274）— {db q3x8k2p1 フビライ}の日本遠征…
+```
+
+- `{db <id> <text>}` binds a stretch of summary text to an entity. In timeline
+  cards it folds away, leaving the text with a coloured underline (the colour of
+  the entity's type); clicking it opens the entity.
+- Entities live in `_chronology/entities.md` (keyed by id, hand-editable), and
+  the type list (name + colour) in `_chronology/db-types.md`.
+- An entity holds: a type, multi-language labels (the first is the display
+  name; all of them act as aliases), readings (transcriptions) with optional
+  playable audio attachments, free tags, a markdown body, and the list of every
+  event summary it appears in, sorted chronologically.
+
+### Usage
+
+1. In an event's summary dialog, select a name and **right-click** — annotate
+   it as a new entity or link it to an existing one.
+2. While typing, known entity names are recognised (longest match across all
+   languages); press **Tab** to confirm and insert the marker. Every occurrence
+   is confirmed explicitly — nothing is auto-annotated.
+3. **Browse entities** / **Manage entity types** commands open the fuzzy entity
+   picker and the type list (rename / recolour / add / remove).
+
 ## Era systems
 
 An *era system* is one civilization's complete, sequential chronology (Japan,

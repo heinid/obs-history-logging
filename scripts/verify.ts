@@ -18,6 +18,21 @@ import {
 import { tracksIn, trackMatches } from "../src/tracks";
 import { parseLayoutsFile, serializeLayoutsFile } from "../src/layouts";
 import { EventEntry } from "../src/types";
+import {
+	parseEntitiesFile,
+	serializeEntitiesFile,
+	parseDbTypesFile,
+	serializeDbTypesFile,
+	DEFAULT_DB_TYPES,
+	EntityEntry as Ent,
+} from "../src/db-format";
+import {
+	parseDbMarks,
+	stripDbMarkers,
+	makeDbMarker,
+	dbMarkersToHtml,
+	aliasAtCursor,
+} from "../src/db-marker";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -181,6 +196,67 @@ eq("layout pane filter", layouts[0].panes[0].filter, "#histolog/日本史");
 eq("layout pane no profile", layouts[0].panes[1].profile, "");
 const layoutRound = parseLayoutsFile(serializeLayoutsFile(layouts));
 eq("layouts roundtrip", layoutRound, layouts);
+
+// entity db: entities.md round-trip
+const ents = new Map<string, Ent>();
+ents.set("q3x8k2p1", {
+	id: "q3x8k2p1",
+	type: "polity",
+	labels: [
+		{ lang: "zh", text: "希腊" },
+		{ lang: "en", text: "Greece" },
+		{ lang: "ja", text: "ギリシャ" },
+	],
+	readings: [{ lang: "ja", text: "girisha" }],
+	audios: [{ lang: "ja", link: "[[greece.mp3]]" }],
+	tags: ["欧洲史", "政权"],
+	updated: "2026-07-09",
+	body: "自由正文。\n\n第二段。",
+});
+const entSer = serializeEntitiesFile(ents);
+const entRound = parseEntitiesFile(entSer);
+eq("entity roundtrip type", entRound.get("q3x8k2p1")?.type, "polity");
+eq("entity roundtrip labels", entRound.get("q3x8k2p1")?.labels, ents.get("q3x8k2p1")!.labels);
+eq("entity roundtrip readings", entRound.get("q3x8k2p1")?.readings, ents.get("q3x8k2p1")!.readings);
+eq("entity roundtrip audios", entRound.get("q3x8k2p1")?.audios, ents.get("q3x8k2p1")!.audios);
+eq("entity roundtrip tags", entRound.get("q3x8k2p1")?.tags, ["欧洲史", "政权"]);
+eq("entity roundtrip body", entRound.get("q3x8k2p1")?.body, "自由正文。\n\n第二段。");
+
+// db-types round-trip + defaults
+eq("db types roundtrip", parseDbTypesFile(serializeDbTypesFile(DEFAULT_DB_TYPES)), DEFAULT_DB_TYPES);
+eq("db types skip malformed", parseDbTypesFile("- person | notacolor\n- place | #4faa5e\n"), [
+	{ name: "place", color: "#4faa5e" },
+]);
+
+// {db …} markers
+const dbDoc = "元寇 — {db q3x8k2p1 ギリシャ}遠征と{db a1b2c3d4 フビライ}。";
+const dbMarks = parseDbMarks(dbDoc);
+eq("db marks parsed", dbMarks.length, 2);
+eq("db mark id", dbMarks[0].id, "q3x8k2p1");
+eq("db mark text", dbMarks[0].text, "ギリシャ");
+eq("db strip", stripDbMarkers(dbDoc), "元寇 — ギリシャ遠征とフビライ。");
+eq("db make", makeDbMarker("q3x8k2p1", "希腊"), "{db q3x8k2p1 希腊}");
+eq(
+	"db to html",
+	dbMarkersToHtml("{db q3x8k2p1 希腊}", () => "#4faa5e"),
+	'<span class="hl-db-ref" data-db-id="q3x8k2p1" style="text-decoration-color: #4faa5e">希腊</span>'
+);
+eq("db html unknown id folds to text", dbMarkersToHtml("{db q3x8k2p1 <b>}", () => null), "&lt;b&gt;");
+
+// recognition: longest match, word boundaries, no firing inside markers
+const dict = [
+	{ ...ents.get("q3x8k2p1")!, labels: [{ lang: "zh", text: "希腊" }] },
+	{
+		id: "a1b2c3d4", type: "person",
+		labels: [{ lang: "en", text: "Alexander" }, { lang: "en", text: "Alexander the Great" }],
+		readings: [], audios: [], tags: [], body: "",
+	},
+];
+eq("alias hit", aliasAtCursor("公元前古希腊", dict)?.alias, "希腊");
+eq("alias longest wins", aliasAtCursor("x Alexander the Great", dict)?.alias, "Alexander the Great");
+eq("alias word boundary", aliasAtCursor("xAlexander", dict), null);
+eq("alias none", aliasAtCursor("罗马", dict), null);
+eq("alias not inside marker", aliasAtCursor("{db q3x8k2p1 希腊", dict), null);
 
 if (failures > 0) {
 	console.error(`\n${failures} failure(s)`);

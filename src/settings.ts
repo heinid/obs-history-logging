@@ -11,12 +11,15 @@ export interface HistoryLoggingSettings {
 	// timeline's vertical extent stays proportional to real time (the
 	// multi-track grid always does this). Off = compact, events only.
 	fillEmptyPeriods: boolean;
+	// Language code preselected for new entity labels / readings.
+	defaultLabelLang: string;
 }
 
 export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	dataFolder: "_chronology",
 	hideTagsInPreview: true,
 	fillEmptyPeriods: false,
+	defaultLabelLang: "zh",
 };
 
 export const EVENTS_FILE = "events.md";
@@ -75,6 +78,21 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 						this.plugin.settings.fillEmptyPeriods = value;
 						await this.plugin.saveSettings();
 						await this.plugin.refreshTimelines();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Default entity language")
+			.setDesc(
+				"Language code preselected when adding labels / readings to an entity (e.g. zh, ja, en)."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("zh")
+					.setValue(this.plugin.settings.defaultLabelLang)
+					.onChange(async (value) => {
+						this.plugin.settings.defaultLabelLang = value.trim() || "zh";
+						await this.plugin.saveSettings();
 					})
 			);
 	}

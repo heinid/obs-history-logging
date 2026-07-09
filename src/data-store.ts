@@ -13,6 +13,15 @@ import {
 	parseLayoutsFile,
 	serializeLayoutsFile,
 } from "./layouts";
+import {
+	DbType,
+	DEFAULT_DB_TYPES,
+	EntityEntry,
+	parseDbTypesFile,
+	parseEntitiesFile,
+	serializeDbTypesFile,
+	serializeEntitiesFile,
+} from "./db-format";
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
@@ -111,6 +120,59 @@ export class DataStore {
 		await this.ensureFolder();
 		const content = serializeLayoutsFile(layouts);
 		const path = this.layoutsPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
+	}
+
+	private entitiesPath(): string {
+		return normalizePath(`${this.getFolder()}/entities.md`);
+	}
+
+	async readEntities(): Promise<Map<string, EntityEntry>> {
+		const file = this.app.vault.getAbstractFileByPath(this.entitiesPath());
+		if (!(file instanceof TFile)) return new Map();
+		return parseEntitiesFile(await this.app.vault.read(file));
+	}
+
+	async writeEntities(entries: Map<string, EntityEntry>): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeEntitiesFile(entries);
+		const path = this.entitiesPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
+	}
+
+	async upsertEntity(entry: EntityEntry): Promise<void> {
+		const entries = await this.readEntities();
+		entries.set(entry.id, {
+			...entry,
+			updated: new Date().toISOString().slice(0, 10),
+		});
+		await this.writeEntities(entries);
+	}
+
+	async removeEntity(id: string): Promise<void> {
+		const entries = await this.readEntities();
+		if (entries.delete(id)) await this.writeEntities(entries);
+	}
+
+	private dbTypesPath(): string {
+		return normalizePath(`${this.getFolder()}/db-types.md`);
+	}
+
+	async readDbTypes(): Promise<DbType[]> {
+		const file = this.app.vault.getAbstractFileByPath(this.dbTypesPath());
+		if (!(file instanceof TFile)) return [...DEFAULT_DB_TYPES];
+		const types = parseDbTypesFile(await this.app.vault.read(file));
+		return types.length ? types : [...DEFAULT_DB_TYPES];
+	}
+
+	async writeDbTypes(types: DbType[]): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeDbTypesFile(types);
+		const path = this.dbTypesPath();
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (file instanceof TFile) await this.app.vault.modify(file, content);
 		else await this.app.vault.create(path, content);
