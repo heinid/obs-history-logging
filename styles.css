@@ -171,6 +171,11 @@
 	border-bottom: 1px solid var(--background-modifier-border);
 	color: var(--text-accent);
 }
+/* Empty filled-in period (single-track "show empty periods" setting on). */
+.hl-group.hl-group-empty {
+	color: var(--text-faint);
+	font-weight: 400;
+}
 /* Multi-track comparison grid: shared time rows crossing track columns,
    all inside one view under a single scrollbar. The view itself scrolls
    horizontally when columns overflow, so sticky heads keep working; the bar

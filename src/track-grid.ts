@@ -29,6 +29,42 @@ export function trackEntries(
 	});
 }
 
+// The bucket (shared row) containing a point on the absolute axis. AD
+// buckets start at their round year; BC spans are flipped, so the bucket
+// key is the earlier (more negative) end.
+export function bucketKeyFor(sortKey: number, span: number): number {
+	if (sortKey >= 0) return Math.floor(sortKey / span) * span;
+	const magStart = Math.floor(-sortKey / span) * span;
+	return -(magStart + span - 1);
+}
+
+export function bucketLabelFor(key: number, span: number): string {
+	const gb = span === 100 ? "century" : "decade";
+	const d: DecodedYear =
+		key >= 0
+			? {
+					era: "ad",
+					magnitude: key,
+					sortKey: key,
+					precision: gb,
+					span: [key, key + span - 1],
+			  }
+			: {
+					era: "bc",
+					magnitude: -key - (span - 1),
+					sortKey: key,
+					precision: gb,
+					span: [key, key + span - 1],
+			  };
+	return describeYear(d);
+}
+
+// Steps to the next bucket key after `key` (handles the BC→AD crossing,
+// where there is no year zero).
+export function nextBucketKey(key: number, span: number): number {
+	return bucketKeyFor(key + span + (key < 0 && key + span > 0 ? 1 : 0), span);
+}
+
 // A jump target for the era navigator: where an era starts in a column.
 export interface EraAnchor {
 	name: string;
@@ -66,33 +102,8 @@ export function renderTrackGrid(opts: {
 		t.lens ? opts.eraSystems.find((s) => s.name === t.lens) ?? null : null
 	);
 
-	// The bucket (shared row) containing a point on the absolute axis. AD
-	// buckets start at their round year; BC spans are flipped, so the bucket
-	// key is the earlier (more negative) end.
-	const bucketKey = (sortKey: number): number => {
-		if (sortKey >= 0) return Math.floor(sortKey / span) * span;
-		const magStart = Math.floor(-sortKey / span) * span;
-		return -(magStart + span - 1);
-	};
-	const bucketLabel = (key: number): string => {
-		const d: DecodedYear =
-			key >= 0
-				? {
-						era: "ad",
-						magnitude: key,
-						sortKey: key,
-						precision: gb,
-						span: [key, key + span - 1],
-				  }
-				: {
-						era: "bc",
-						magnitude: -key - (span - 1),
-						sortKey: key,
-						precision: gb,
-						span: [key, key + span - 1],
-				  };
-		return describeYear(d);
-	};
+	const bucketKey = (sortKey: number): number => bucketKeyFor(sortKey, span);
+	const bucketLabel = (key: number): string => bucketLabelFor(key, span);
 
 	type Seg = { key: number; end: number; label: string; cells: TimelineEntry[][] };
 	const segMap = new Map<number, Seg>();
@@ -134,7 +145,7 @@ export function renderTrackGrid(opts: {
 		for (
 			let key = bucketKey(first);
 			key <= bucketKey(cap);
-			key = bucketKey(key + span + (key < 0 && key + span > 0 ? 1 : 0))
+			key = nextBucketKey(key, span)
 		)
 			ensureSeg(key);
 	});

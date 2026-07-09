@@ -7,11 +7,16 @@ export interface HistoryLoggingSettings {
 	// Hide non year classification tags (#histolog/…, other #tags) in the
 	// collapsed timeline preview; they still appear when a card is expanded.
 	hideTagsInPreview: boolean;
+	// Single-track view: also render empty century/decade sections so the
+	// timeline's vertical extent stays proportional to real time (the
+	// multi-track grid always does this). Off = compact, events only.
+	fillEmptyPeriods: boolean;
 }
 
 export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	dataFolder: "_chronology",
 	hideTagsInPreview: true,
+	fillEmptyPeriods: false,
 };
 
 export const EVENTS_FILE = "events.md";
@@ -55,6 +60,21 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.hideTagsInPreview = value;
 						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Show empty periods in single-track view")
+			.setDesc(
+				"Also render centuries/decades that contain no events, so the timeline's length stays proportional to real time (the era-system coverage when a lens is set, otherwise the span between the first and last event). The multi-track grid always shows them. Off = compact list with event periods only."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.fillEmptyPeriods)
+					.onChange(async (value) => {
+						this.plugin.settings.fillEmptyPeriods = value;
+						await this.plugin.saveSettings();
+						await this.plugin.refreshTimelines();
 					})
 			);
 	}

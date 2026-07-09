@@ -14,7 +14,15 @@ import { Profile } from "./profiles";
 import { EraSystem, eraAt } from "./eras";
 import { matchesQuery, parseQuery } from "./query";
 import { FilterBar } from "./filter-bar";
-import { EraAnchor, TrackDef, renderTrackGrid, trackLabel } from "./track-grid";
+import {
+	EraAnchor,
+	TrackDef,
+	bucketKeyFor,
+	bucketLabelFor,
+	nextBucketKey,
+	renderTrackGrid,
+	trackLabel,
+} from "./track-grid";
 import { jumpToLocation } from "./jump";
 import { EV_SYMBOL } from "./constants";
 import { stripEvMarkers, stripImages, stripTags } from "./parser";
@@ -338,8 +346,31 @@ export class TimelineView extends ItemView {
 			}
 		};
 
+		// With "show empty periods" on, headings are also emitted for the
+		// buckets that contain no events, so the list's vertical extent stays
+		// proportional to real time — the same rule the multi-track grid
+		// always applies. The filled range is the era-system coverage when a
+		// lens is set (open-ended last era capped at the latest event),
+		// otherwise the span between the first and last event.
+		const fill = grouped && this.plugin.settings.fillEmptyPeriods;
+		const span = this.bar.groupBy === "decade" ? 10 : 100;
+		let cursor: number | null = null;
+		if (fill && system && system.boundaries.length)
+			cursor = bucketKeyFor(system.boundaries[0].startKey, span);
+		const emitEmpty = (upTo: number): void => {
+			if (!fill || cursor === null) return;
+			for (; cursor < upTo; cursor = nextBucketKey(cursor, span)) {
+				emitBands(cursor);
+				const h = list.createEl("h3", { cls: "hl-group hl-group-empty" });
+				h.createSpan({ text: bucketLabelFor(cursor, span) });
+			}
+		};
+
 		let lastGroup: string | null = null;
 		for (const entry of visible) {
+			const bucket = bucketKeyFor(entry.decoded.sortKey, span);
+			if (cursor === null) cursor = bucket;
+			emitEmpty(bucket);
 			if (grouped) {
 				const { label } = this.groupLabel(entry, null);
 				if (label !== lastGroup) {
@@ -351,9 +382,18 @@ export class TimelineView extends ItemView {
 					lastGroup = label;
 				}
 			}
+			if (cursor !== null && bucket >= cursor)
+				cursor = nextBucketKey(bucket, span);
 			if (!system && anchors.length) anchors[anchors.length - 1].count++;
 			emitBands(entry.decoded.sortKey);
 			this.renderCard(list, entry);
+		}
+		if (fill && system && system.boundaries.length) {
+			const last = system.boundaries[system.boundaries.length - 1].startKey;
+			const latest = visible.length
+				? visible[visible.length - 1].decoded.sortKey
+				: last;
+			emitEmpty(nextBucketKey(bucketKeyFor(Math.max(last, latest), span), span));
 		}
 		emitBands(Infinity);
 		this.trackCounts = [visible.length];
