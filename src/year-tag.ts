@@ -5,18 +5,20 @@
 //   #ad/07       -> 700-799  (century bucket)
 //   #bc/07/1/0   -> 710 BC
 //
-// A year is zero-padded to (at least) four digits ABCD and split positionally
-// as first-two-digits / tens / ones. Joining the segments therefore reproduces
-// the leading digits of the year; padding on the right yields the bucket start.
+// A year is zero-padded to four digits ABCD and split positionally as
+// first-two-digits / tens / ones. The grammar is strict: the first segment is
+// exactly two digits (the century), the optional second and third are exactly
+// one digit each (decade, year). Anything else (`#ad/1912`, `#ad/19/12`) is
+// not a year tag and is ignored.
 
 import { DecodedYear, Era, Precision } from "./types";
 
-const TAG_RE = /^#(ad|bc)((?:\/\d+)+)$/;
+const TAG_RE = /^#(ad|bc)\/(\d{2}(?:\/\d(?:\/\d)?)?)$/;
 
-// Bare year tag matcher for scanning note content. Uses lookbehind-free
-// boundary handling: must be preceded by start/whitespace and followed by a
-// non tag-char so `#ad/07/1/0` is matched but not partial garbage.
-export const YEAR_TAG_SRC = String.raw`#(?:ad|bc)(?:/\d+)+`;
+// Bare year tag matcher for scanning note content. The trailing lookahead
+// rejects tags that continue with more tag characters (`#ad/1912`,
+// `#ad/19/12`, `#ad/07/1/0/5`) instead of matching a valid prefix of them.
+export const YEAR_TAG_SRC = String.raw`#(?:ad|bc)/\d{2}(?:/\d(?:/\d)?)?(?![0-9A-Za-z_/-])`;
 
 export function yearTagRegex(): RegExp {
 	return new RegExp(YEAR_TAG_SRC, "g");
@@ -39,7 +41,6 @@ export function parseYearTag(tag: string): DecodedYear | null {
 	if (!m) return null;
 	const era = m[1] as Era;
 	const digits = m[2].replace(/\//g, "");
-	if (digits.length === 0) return null;
 
 	const precision = precisionOf(digits.length);
 	const magStart = parseInt(digits.padEnd(4, "0"), 10);
@@ -95,16 +96,12 @@ export function describeYear(d: DecodedYear): string {
 }
 
 // Truncate a year tag to a coarser bucket (for "same decade / century" search).
-// Works on digits rather than segments so non-canonical spellings (e.g.
-// `#ad/1912` or `#ad/19/12`) still land in the right bucket.
 export function truncateTag(tag: string, level: Precision): string | null {
 	const m = TAG_RE.exec(tag.trim());
 	if (!m) return null;
 	const era = m[1];
-	const digits = m[2].replace(/\//g, "");
-	const keep = level === "century" ? 2 : level === "decade" ? 3 : 4;
-	if (digits.length < keep) return null;
-	const kept = digits.slice(0, keep);
-	const parts = [kept.slice(0, 2), ...kept.slice(2).split("")];
-	return `#${era}/${parts.join("/")}`;
+	const segs = m[2].split("/");
+	const keep = level === "century" ? 1 : level === "decade" ? 2 : 3;
+	if (segs.length < keep) return null;
+	return `#${era}/${segs.slice(0, keep).join("/")}`;
 }

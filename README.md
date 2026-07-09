@@ -19,6 +19,10 @@ A year is zero-padded to four digits `ABCD` and split as `AB / C / D`. Because
 these are ordinary tags they remain searchable and clickable, and coarser tags
 group finer ones.
 
+The grammar is strict: the first segment is exactly two digits (century), the
+optional second and third are exactly one digit each (decade, year). Anything
+else — `#ad/1912`, `#ad/19/12` — is not a year tag and is ignored.
+
 ## Events and summaries
 
 Any year tag can carry a **summary / narrative** that you write yourself. When

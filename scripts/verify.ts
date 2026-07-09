@@ -3,6 +3,7 @@ import {
 	encodeYearTag,
 	truncateTag,
 	describeYear,
+	yearTagRegex,
 } from "../src/year-tag";
 import { parseEvMarks, stripEvMarkers, wrapTagAt, unwrapEv } from "../src/parser";
 import { generateId, isValidId } from "../src/id";
@@ -71,11 +72,17 @@ eq("encode 50", encodeYearTag("bc", 50), "#bc/00/5/0");
 eq("truncate century", truncateTag("#ad/07/1/0", "century"), "#ad/07");
 eq("truncate decade", truncateTag("#ad/07/1/0", "decade"), "#ad/07/1");
 eq("truncate year", truncateTag("#ad/07/1/0", "year"), "#ad/07/1/0");
-eq("truncate flat year to century", truncateTag("#ad/1912", "century"), "#ad/19");
-eq("truncate flat year to decade", truncateTag("#ad/1912", "decade"), "#ad/19/1");
-eq("truncate two-seg year to century", truncateTag("#ad/19/12", "century"), "#ad/19");
 eq("truncate century tag stays", truncateTag("#ad/07", "century"), "#ad/07");
 eq("truncate too coarse", truncateTag("#ad/07", "decade"), null);
+
+// strict grammar: malformed tags are not year tags at all
+eq("reject flat year", parseYearTag("#ad/1912"), null);
+eq("reject two-digit decade", parseYearTag("#ad/19/12"), null);
+eq("reject one-digit century", parseYearTag("#ad/7"), null);
+eq("reject extra segment", parseYearTag("#ad/07/1/0/5"), null);
+eq("scan skips flat year", yearTagRegex().test("x #ad/1912 y"), false);
+eq("scan skips two-digit decade", yearTagRegex().test("x #ad/19/12 y"), false);
+eq("scan accepts exact year", yearTagRegex().test("x #ad/19/1/2 y"), true);
 
 // id
 const id = generateId();
