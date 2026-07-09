@@ -250,7 +250,12 @@ export function renderTrackGrid(opts: {
 	// the row where it starts to the top of its successor's (the last one to
 	// the grid's bottom edge). Offsets are measured against the grid, so the
 	// bands survive horizontal scrolling; re-run whenever geometry changes
-	// (cards expanding, images loading, pane resizes).
+	// (cards expanding, images loading, pane resizes). Several eras can start
+	// in the SAME row when they're shorter than one bucket (e.g. 秦 221–206 BC
+	// and 漢, both in the 3rd c. BC century): rather than pile them at the same
+	// top and overlap, the short ones get a fixed mini-band and the next era
+	// stacks below, so every era stays a distinct, labelled segment.
+	const MINI = 26;
 	const relayout = (): void => {
 		const perTi = new Map<number, typeof gutters>();
 		for (const g of gutters) {
@@ -259,16 +264,24 @@ export function renderTrackGrid(opts: {
 			perTi.set(g.ti, arr);
 		}
 		for (const arr of perTi.values()) {
+			let prevTop = 0;
+			let prevH = 0;
 			for (let i = 0; i < arr.length; i++) {
 				const g = arr[i];
-				const top = g.startCell.offsetTop;
-				const end =
-					i + 1 < arr.length
-						? arr[i + 1].startCell.offsetTop - 6
-						: grid.scrollHeight - 8;
+				const sharesPrev = i > 0 && arr[i - 1].startCell === g.startCell;
+				const sharesNext =
+					i + 1 < arr.length && arr[i + 1].startCell === g.startCell;
+				const top = sharesPrev ? prevTop + prevH + 3 : g.startCell.offsetTop;
+				let end: number;
+				if (sharesNext) end = top + MINI;
+				else if (i + 1 < arr.length) end = arr[i + 1].startCell.offsetTop - 6;
+				else end = grid.scrollHeight - 8;
+				const h = Math.max(end - top, MINI);
 				g.el.style.left = `${g.startCell.offsetLeft}px`;
 				g.el.style.top = `${top}px`;
-				g.el.style.height = `${Math.max(end - top, 22)}px`;
+				g.el.style.height = `${h}px`;
+				prevTop = top;
+				prevH = h;
 			}
 		}
 	};
