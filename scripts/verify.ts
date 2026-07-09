@@ -166,7 +166,6 @@ const layouts = parseLayoutsFile(
 eq("layouts parsed", layouts.length, 1);
 eq("layout panes", layouts[0].panes.length, 2);
 eq("layout pane filter", layouts[0].panes[0].filter, "#histolog/日本史");
-eq("layout pane sync", layouts[0].panes[1].sync, true);
 eq("layout pane no profile", layouts[0].panes[1].profile, "");
 const layoutRound = parseLayoutsFile(serializeLayoutsFile(layouts));
 eq("layouts roundtrip", layoutRound, layouts);

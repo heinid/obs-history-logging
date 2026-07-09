@@ -108,21 +108,11 @@ export default class HistoryLoggingPlugin extends Plugin {
 
 	// Always open a fresh timeline pane in a vertical split — each pane keeps
 	// its own profile/query/era-system, so parallel comparison is just several
-	// panes side by side (optionally year-linked via each pane's sync toggle).
+	// panes side by side.
 	async openTimelineSplit(): Promise<void> {
 		const leaf = this.app.workspace.getLeaf("split", "vertical");
 		await leaf.setViewState({ type: TIMELINE_VIEW_TYPE, active: true });
 		this.app.workspace.revealLeaf(leaf);
-	}
-
-	// Year-aligned scroll sync: a synced pane reports its topmost visible year;
-	// every other synced pane scrolls to that year.
-	broadcastYear(source: TimelineView, key: number): void {
-		for (const leaf of this.app.workspace.getLeavesOfType(TIMELINE_VIEW_TYPE)) {
-			const view = leaf.view;
-			if (view instanceof TimelineView && view !== source)
-				view.alignToYear(key);
-		}
 	}
 
 	// Snapshot the active timeline's tracks under a name in layouts.md — a
@@ -140,7 +130,6 @@ export default class HistoryLoggingPlugin extends Plugin {
 			lens: t.lens,
 			profile: t.profile,
 			groupBy,
-			sync: view.syncEnabled,
 		}));
 		new NameModal(this.app, "Save layout as", "", (name) => {
 			void (async () => {
@@ -187,7 +176,6 @@ export default class HistoryLoggingPlugin extends Plugin {
 				tracks,
 				active: 0,
 				groupBy: layout.panes[0]?.groupBy ?? "century",
-				sync: layout.panes.some((p) => p.sync),
 			},
 		});
 		workspace.revealLeaf(leaf);

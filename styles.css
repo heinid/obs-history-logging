@@ -161,10 +161,6 @@
 .hl-icon-btn {
 	padding: 4px 6px;
 }
-/* Year-sync toggle: lit while this pane is linked to the others. */
-.hl-icon-btn.hl-sync-on {
-	color: var(--interactive-accent);
-}
 .hl-group {
 	margin: 14px 0 6px;
 	padding-bottom: 2px;

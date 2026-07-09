@@ -1,6 +1,6 @@
 // Saved multi-pane layouts, persisted in `_chronology/layouts.md`. A layout
 // is a snapshot of every open timeline pane's state (filter + lens + grouping
-// + loaded view + year-sync), so a whole parallel-comparison desk can be
+// + loaded view), so a whole parallel-comparison desk can be
 // reopened in one step. Format:
 //
 //   ## 東西対照
@@ -9,7 +9,6 @@
 //   lens: 日本史
 //   groupBy: century
 //   profile: 日本史
-//   sync: true
 //   ### pane
 //   ...
 
@@ -18,7 +17,6 @@ export interface LayoutPane {
 	lens: string;
 	groupBy: string;
 	profile: string;
-	sync: boolean;
 }
 
 export interface TimelineLayout {
@@ -33,7 +31,6 @@ const DEFAULT_PANE: LayoutPane = {
 	lens: "",
 	groupBy: "century",
 	profile: "",
-	sync: false,
 };
 
 export function parseLayoutsFile(content: string): TimelineLayout[] {
@@ -66,7 +63,7 @@ export function parseLayoutsFile(content: string): TimelineLayout[] {
 			else if (key === "lens") pane.lens = value.trim();
 			else if (key === "groupBy") pane.groupBy = value.trim();
 			else if (key === "profile") pane.profile = value.trim();
-			else if (key === "sync") pane.sync = value.trim() === "true";
+			// Unknown keys (e.g. the retired `sync`) are ignored.
 		}
 		if (panes.length) layouts.push({ name: h.name, panes });
 	}
@@ -83,7 +80,6 @@ export function serializeLayoutsFile(layouts: TimelineLayout[]): string {
 			if (p.lens) parts.push(`lens: ${p.lens}`);
 			parts.push(`groupBy: ${p.groupBy}`);
 			if (p.profile) parts.push(`profile: ${p.profile}`);
-			parts.push(`sync: ${p.sync}`);
 		}
 		parts.push("");
 	}

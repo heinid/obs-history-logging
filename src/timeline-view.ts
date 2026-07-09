@@ -53,13 +53,8 @@ export class TimelineView extends ItemView {
 	private gridSizer?: ResizeObserver;
 	private navItems: { anchor: EraAnchor; el: HTMLElement }[] = [];
 	private cardEls = new Map<TimelineEntry, HTMLElement>();
-	// Cards in render order with their year sort keys, for year-aligned sync.
+	// Cards in render order with their year sort keys, for year jumps.
 	private cardIndex: { key: number; el: HTMLElement }[] = [];
-	// When on, this pane follows (and drives) the shared year position of the
-	// other synced timeline panes — parallel comparison falls out of opening
-	// several timelines with different profiles and linking them.
-	syncEnabled = false;
-	private suppressSyncUntil = 0;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: HistoryLoggingPlugin) {
 		super(leaf);
@@ -97,7 +92,7 @@ export class TimelineView extends ItemView {
 		this.gridSizer?.disconnect();
 	}
 
-	// Each pane's whole definition (filter, lens, grouping, loaded view, sync)
+	// Each pane's whole definition (filter, lens, grouping, loaded view)
 	// persists with the workspace layout, so panes survive restarts as-is.
 	getState(): Record<string, unknown> {
 		this.tracks[this.active] = this.bar.getTrack();
@@ -105,7 +100,6 @@ export class TimelineView extends ItemView {
 			...this.bar.getState(),
 			tracks: this.tracks,
 			active: this.active,
-			sync: this.syncEnabled,
 		};
 	}
 
@@ -132,7 +126,6 @@ export class TimelineView extends ItemView {
 				this.tracks = [this.bar.getTrack()];
 				this.active = 0;
 			}
-			if (typeof state.sync === "boolean") this.syncEnabled = state.sync;
 			if (this.listEl) this.renderChrome();
 		}
 	}
@@ -177,21 +170,6 @@ export class TimelineView extends ItemView {
 			refreshBtn.buttonEl.addClass("hl-icon-btn");
 			setIcon(refreshBtn.buttonEl, "refresh-cw");
 			refreshBtn.onClick(() => this.refresh());
-
-			// Year-sync toggle: linked panes scroll together, aligned by year.
-			const syncBtn = new ButtonComponent(row);
-			syncBtn.setTooltip("Sync scrolling with other timelines (align by year)");
-			syncBtn.buttonEl.addClass("hl-icon-btn");
-			const paintSync = () => {
-				setIcon(syncBtn.buttonEl, this.syncEnabled ? "link" : "unlink");
-				syncBtn.buttonEl.toggleClass("hl-sync-on", this.syncEnabled);
-			};
-			paintSync();
-			syncBtn.onClick(() => {
-				this.syncEnabled = !this.syncEnabled;
-				paintSync();
-				this.app.workspace.requestSaveLayout();
-			});
 		});
 
 		// Sticky offsets (track heads, navigator) hang below the bar's height.
@@ -692,27 +670,7 @@ export class TimelineView extends ItemView {
 		if (this.navEl) this.navEl.style.width = `${this.contentEl.clientWidth}px`;
 	}
 
-	// Broadcast this pane's topmost visible year to the other synced panes.
 	private onScroll(): void {
 		this.paintNavCurrent();
-		if (!this.syncEnabled || Date.now() < this.suppressSyncUntil) return;
-		const top = this.contentEl.getBoundingClientRect().top;
-		const first = this.cardIndex.find(
-			(c) => c.el.getBoundingClientRect().bottom > top
-		);
-		if (first) this.plugin.broadcastYear(this, first.key);
-	}
-
-	// Scroll so the first card at/after `key` sits at the top of the pane.
-	alignToYear(key: number): void {
-		if (!this.syncEnabled) return;
-		const target =
-			this.cardIndex.find((c) => c.key >= key) ??
-			this.cardIndex[this.cardIndex.length - 1];
-		if (!target) return;
-		this.suppressSyncUntil = Date.now() + 200;
-		const box = this.contentEl.getBoundingClientRect();
-		this.contentEl.scrollTop +=
-			target.el.getBoundingClientRect().top - box.top - 8;
 	}
 }
