@@ -113,10 +113,30 @@ export function renderTrackGrid(opts: {
 		for (const e of entries)
 			ensureSeg(bucketKey(e.decoded.sortKey)).cells[ti].push(e);
 	});
-	// Every era boundary gets a row, so eras without entries still show up.
+	// Any span a track's era system covers gets ALL its buckets, entries or
+	// not, so band heights stay proportional to era lengths and the vertical
+	// names have room. The trailing open-ended era is capped at the latest
+	// event across all tracks (it has no natural end of its own).
+	const latestEntryKey = perTrack.reduce(
+		(acc: number | null, entries) =>
+			entries.reduce(
+				(a: number | null, e) =>
+					a === null ? e.decoded.sortKey : Math.max(a, e.decoded.sortKey),
+				acc
+			),
+		null
+	);
 	systems.forEach((sys) => {
-		if (!sys) return;
-		for (const b of sys.boundaries) ensureSeg(bucketKey(b.startKey));
+		if (!sys || !sys.boundaries.length) return;
+		const first = sys.boundaries[0].startKey;
+		const last = sys.boundaries[sys.boundaries.length - 1].startKey;
+		const cap = Math.max(last, latestEntryKey ?? last);
+		for (
+			let key = bucketKey(first);
+			key <= bucketKey(cap);
+			key = bucketKey(key + span + (key < 0 && key + span > 0 ? 1 : 0))
+		)
+			ensureSeg(key);
 	});
 	const segs = [...segMap.values()].sort((a, b) => a.key - b.key);
 

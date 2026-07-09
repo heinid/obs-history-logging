@@ -226,9 +226,13 @@
 .hl-track-head:hover .hl-track-x {
 	visibility: visible;
 }
-/* A shared time-segment row label spans every column. */
+/* A shared time-segment row label spans every column. When the first column
+   carries an era gutter, the label steps aside so the two never collide. */
 .hl-row-label {
 	grid-column: 1 / -1;
+}
+.hl-multi-grid:has(.hl-era-gutter) .hl-row-label {
+	padding-left: 36px;
 }
 .hl-cell {
 	min-width: 0;
