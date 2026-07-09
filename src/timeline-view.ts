@@ -33,6 +33,16 @@ import { tracksIn } from "./tracks";
 
 export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
 
+// Identity of the topmost visible card, used to restore the reader's place
+// across a full rebuild (pixel scroll offsets drift when content changes).
+interface ScrollAnchor {
+	evId: string;
+	filePath: string;
+	tag: string;
+	tagOrdinal: number;
+	delta: number;
+}
+
 export class TimelineView extends ItemView {
 	private entries: TimelineEntry[] = [];
 	private profiles: Profile[] = [];
@@ -133,8 +143,16 @@ export class TimelineView extends ItemView {
 		}
 	}
 
-	// Re-scan the vault and rebuild everything.
+	// A plain view: one track, no filter — the default navigation landing.
+	isPlainView(): boolean {
+		const tracks = this.getTracks();
+		return tracks.length === 1 && !tracks[0].filter.trim();
+	}
+
+	// Re-scan the vault and rebuild everything, keeping the reader's place:
+	// the viewport is re-anchored to the same card after the rebuild.
 	async refresh(): Promise<void> {
+		const anchor = this.captureAnchor();
 		this.profiles = await this.plugin.store.readProfiles();
 		this.eraSystems = await this.plugin.store.readEraSystems();
 		await this.loadDbColors();
@@ -151,6 +169,43 @@ export class TimelineView extends ItemView {
 			this.plugin.settings.dataFolder
 		);
 		this.renderChrome();
+		this.restoreAnchor(anchor);
+	}
+
+	// Scroll anchoring: pixel offsets drift when content changes, so the
+	// viewport is anchored to the identity of its topmost visible card.
+	private captureAnchor(): ScrollAnchor | null {
+		if (this.contentEl.scrollTop <= 0) return null;
+		const top = this.contentEl.getBoundingClientRect().top + this.barHeight();
+		for (const [entry, el] of this.cardEls) {
+			const r = el.getBoundingClientRect();
+			if (r.bottom < top) continue;
+			return {
+				evId: entry.evId ?? "",
+				filePath: entry.filePath,
+				tag: entry.tag,
+				tagOrdinal: entry.tagOrdinal,
+				delta: r.top - top,
+			};
+		}
+		return null;
+	}
+
+	private restoreAnchor(a: ScrollAnchor | null): void {
+		if (!a) return;
+		const entry =
+			(a.evId ? this.entries.find((e) => e.evId === a.evId) : undefined) ??
+			this.entries.find(
+				(e) =>
+					e.filePath === a.filePath &&
+					e.tag === a.tag &&
+					e.tagOrdinal === a.tagOrdinal
+			);
+		const card = entry ? this.cardEls.get(entry) : undefined;
+		if (!card) return;
+		const top = this.contentEl.getBoundingClientRect().top + this.barHeight();
+		this.contentEl.scrollTop +=
+			card.getBoundingClientRect().top - top - a.delta;
 	}
 
 	private renderChrome(): void {
@@ -527,7 +582,15 @@ export class TimelineView extends ItemView {
 		);
 		editBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			void addEventForEntry(this.plugin, entry, () => this.refresh());
+			// Summary edits repaint just this card (live, on every autosave);
+			// only binding a bare tag to a new event changes the vault structure
+			// and needs a full rescan.
+			void addEventForEntry(
+				this.plugin,
+				entry,
+				() => this.refresh(),
+				(evId, summary) => this.updateCardSummary(evId, summary)
+			);
 		});
 		const openBtn = actions.createEl("button", { cls: "hl-icon-btn" });
 		setIcon(openBtn, "arrow-up-right");
@@ -646,6 +709,21 @@ export class TimelineView extends ItemView {
 		this.dbColors = new Map(
 			[...entities.values()].map((e) => [e.id, colorOf.get(e.type) ?? ""])
 		);
+	}
+
+	// Repaint one event's card after its summary changed — no vault rescan,
+	// no list rebuild, so scroll, expansion and focus elsewhere are untouched.
+	private updateCardSummary(evId: string, summary: string): void {
+		const entry = this.entries.find((e) => e.evId === evId);
+		const old = entry ? this.cardEls.get(entry) : undefined;
+		if (!entry || !old) return;
+		entry.summary = summary;
+		this.cardIndex = this.cardIndex.filter((c) => c.el !== old);
+		const tmp = createDiv();
+		this.renderCard(tmp, entry);
+		const fresh = tmp.firstElementChild;
+		if (fresh) old.replaceWith(fresh);
+		this.cardIndex.sort((a, b) => a.key - b.key);
 	}
 
 	// Folded `{db …}` markers render as underlined spans; click opens the entity.

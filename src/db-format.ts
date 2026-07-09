@@ -76,17 +76,38 @@ export function displayName(e: EntityEntry): string {
 	return e.labels[0]?.text ?? e.id;
 }
 
-export function parseEntitiesFile(content: string): Map<string, EntityEntry> {
+// Entry ids: lowercase alphanumerics (plus - and _), no spaces, 2-64 chars.
+// Generated ids are 8 chars, but hand-written ids only need to be well-formed.
+export const ENTITY_ID_RE = /^[0-9a-z][0-9a-z_-]{1,63}$/;
+
+export function parseEntitiesFile(
+	content: string,
+	warn?: (msg: string) => void
+): Map<string, EntityEntry> {
 	const map = new Map<string, EntityEntry>();
 	const normalised = content.replace(/\r\n/g, "\n");
-	const re = /^##\s+([0-9a-z]{8})\s*$/gm;
+	const re = /^##[ \t]+(.+?)[ \t]*$/gm;
 	const heads: { id: string; start: number; bodyStart: number }[] = [];
 	let m: RegExpExecArray | null;
-	while ((m = re.exec(normalised)) !== null)
-		heads.push({ id: m[1], start: m.index, bodyStart: m.index + m[0].length });
+	while ((m = re.exec(normalised)) !== null) {
+		const title = m[1];
+		if (!ENTITY_ID_RE.test(title)) {
+			// A heading that carries entry fields right below it was meant to
+			// be an entry — flag it instead of silently dropping the data.
+			const tail = normalised.slice(m.index + m[0].length).split("\n", 4);
+			if (tail.some((l) => /^(type|label|reading|audio|tags):/.test(l)))
+				warn?.(
+					`entities.md: 「## ${title}」不是合法的词条 id（需为小写字母/数字，无空格），该词条已被跳过`
+				);
+			continue;
+		}
+		heads.push({ id: title, start: m.index, bodyStart: m.index + m[0].length });
+	}
 	for (let i = 0; i < heads.length; i++) {
 		const h = heads[i];
 		const end = i + 1 < heads.length ? heads[i + 1].start : normalised.length;
+		if (map.has(h.id))
+			warn?.(`entities.md: 词条 id「${h.id}」重复，后一条覆盖了前一条`);
 		map.set(h.id, parseEntityBlock(h.id, normalised.slice(h.bodyStart, end)));
 	}
 	return map;

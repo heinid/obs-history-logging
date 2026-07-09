@@ -1,4 +1,4 @@
-import { App, TFile, normalizePath } from "obsidian";
+import { App, Notice, TFile, normalizePath } from "obsidian";
 import { EventEntry } from "./types";
 import { parseEventsFile, serializeEventsFile } from "./events-format";
 import {
@@ -25,6 +25,8 @@ import {
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
+	private warned = new Set<string>();
+
 	constructor(private app: App, private getFolder: () => string) {}
 
 	private eventsPath(): string {
@@ -129,10 +131,18 @@ export class DataStore {
 		return normalizePath(`${this.getFolder()}/entities.md`);
 	}
 
+	entitiesFilePath(): string {
+		return this.entitiesPath();
+	}
+
 	async readEntities(): Promise<Map<string, EntityEntry>> {
 		const file = this.app.vault.getAbstractFileByPath(this.entitiesPath());
 		if (!(file instanceof TFile)) return new Map();
-		return parseEntitiesFile(await this.app.vault.read(file));
+		return parseEntitiesFile(await this.app.vault.read(file), (msg) => {
+			if (this.warned.has(msg)) return;
+			this.warned.add(msg);
+			new Notice(msg, 8000);
+		});
 	}
 
 	async writeEntities(entries: Map<string, EntityEntry>): Promise<void> {

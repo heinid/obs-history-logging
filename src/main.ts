@@ -222,15 +222,31 @@ export default class HistoryLoggingPlugin extends Plugin {
 		}
 	}
 
-	openSummary(id: string, tag: string, onSaved?: () => void): void {
+	openSummary(
+		id: string,
+		tag: string,
+		onSaved?: (summary: string) => void
+	): void {
 		new SummaryModal(this.app, this, id, tag, onSaved).open();
 	}
 
 	// ⌛ menu: open (or focus) a timeline and scroll to this event's card.
+	// Navigation always lands on a plain single-track unfiltered timeline —
+	// never a curated multi-track layout tab — so the target is always there
+	// and the reader's comparison layouts stay untouched.
 	async revealOnTimeline(id: string, tag: string): Promise<void> {
-		await this.activateTimeline("tab");
-		const view = this.activeTimeline();
-		if (view) await view.focusEvent(id, tag);
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(TIMELINE_VIEW_TYPE).find((l) => {
+			if (l.getRoot() === workspace.rightSplit) return false;
+			return l.view instanceof TimelineView && l.view.isPlainView();
+		});
+		if (!leaf) {
+			leaf = workspace.getLeaf("tab");
+			await leaf.setViewState({ type: TIMELINE_VIEW_TYPE, active: true });
+		}
+		workspace.revealLeaf(leaf);
+		const view = leaf.view;
+		if (view instanceof TimelineView) await view.focusEvent(id, tag);
 	}
 
 	async openEntity(id: string): Promise<void> {

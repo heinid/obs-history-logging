@@ -9,7 +9,7 @@
 
 import { EntityEntry, displayName } from "./db-format";
 
-const DB_SRC = String.raw`\{db\s+([0-9a-z]{8})\s+([^{}]*?)\s*\}`;
+const DB_SRC = String.raw`\{db\s+([0-9a-z][0-9a-z_-]{1,63})\s+([^{}]*?)\s*\}`;
 
 export interface DbMark {
 	id: string;

@@ -69,7 +69,7 @@ export class EntityModal extends Modal {
 	private entity: EntityEntry;
 	private cards: LangCard[] = [];
 	private types: DbType[] = [];
-	private statusEl?: HTMLElement;
+	private saveBtn?: HTMLButtonElement;
 	private headEl?: HTMLElement;
 	private dirty = false;
 	private everSaved = false;
@@ -184,9 +184,8 @@ export class EntityModal extends Modal {
 			},
 		});
 
-		// Footer: save status, delete, open full page.
+		// Footer: delete, open full page, save.
 		const foot = contentEl.createDiv({ cls: "hl-modal-foot" });
-		this.statusEl = foot.createSpan({ cls: "hl-modal-status" });
 		if (!this.isNew) {
 			const del = foot.createEl("button", {
 				cls: "hl-modal-foot-btn hl-danger",
@@ -204,7 +203,7 @@ export class EntityModal extends Modal {
 			text: "↗ 打开词条页",
 		});
 		open.addEventListener("click", async () => {
-			if (!(await this.save())) return;
+			if ((this.dirty || this.isNew) && !(await this.save())) return;
 			this.close();
 			await this.plugin.openEntityView(e.id);
 		});
@@ -215,7 +214,8 @@ export class EntityModal extends Modal {
 		save.addEventListener("click", async () => {
 			if (await this.save()) this.close();
 		});
-		this.setStatus("unsaved");
+		this.saveBtn = save;
+		this.paintSaveBtn();
 	}
 
 	private updateHeadword(): void {
@@ -377,11 +377,15 @@ export class EntityModal extends Modal {
 		this.markDirty();
 	}
 
-	// Nothing is written until the user presses "保存"; this only reflects that
-	// there are unsaved edits.
+	// Nothing is written until the user presses "保存"; the save button's
+	// enabled state is the only unsaved-edits indicator.
 	private markDirty(): void {
 		this.dirty = true;
-		this.setStatus("unsaved");
+		this.paintSaveBtn();
+	}
+
+	private paintSaveBtn(): void {
+		if (this.saveBtn) this.saveBtn.disabled = !this.dirty && !this.isNew;
 	}
 
 	// Persist explicitly (from the save button). Returns false if invalid.
@@ -393,23 +397,12 @@ export class EntityModal extends Modal {
 		await this.plugin.store.upsertEntity(this.entity);
 		this.dirty = false;
 		this.everSaved = true;
-		this.setStatus("saved");
+		this.paintSaveBtn();
 		if (!this.notified) {
 			this.notified = true;
 			this.onSaved?.(this.entity);
 		}
 		return true;
-	}
-
-	private setStatus(state: "unsaved" | "saved"): void {
-		if (!this.statusEl) return;
-		this.statusEl.empty();
-		this.statusEl.createSpan({
-			cls: `hl-status-dot ${state === "saved" ? "is-saved" : "is-typing"}`,
-		});
-		this.statusEl.createSpan({
-			text: state === "saved" ? "已保存" : "未保存",
-		});
 	}
 
 	private playAudio(link: string): void {

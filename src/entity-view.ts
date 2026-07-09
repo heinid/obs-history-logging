@@ -1,4 +1,11 @@
-import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import {
+	ItemView,
+	MarkdownRenderer,
+	Notice,
+	TFile,
+	WorkspaceLeaf,
+	setIcon,
+} from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { DbType, EntityEntry, displayName } from "./db-format";
 import { dbMarkersToHtml, parseDbMarks, stripDbMarkers } from "./db-marker";
@@ -226,6 +233,13 @@ export class EntityView extends ItemView {
 				text: decoded ? describeYear(decoded) : hit.tag,
 			});
 			row.createSpan({ cls: "hl-entity-occ-snippet", text: hit.snippet });
+			const reveal = row.createEl("button", { cls: "hl-icon-btn hl-occ-reveal" });
+			setIcon(reveal, "gantt-chart");
+			reveal.setAttr("aria-label", "在时间线上显示");
+			reveal.addEventListener("click", (ev) => {
+				ev.stopPropagation();
+				void this.plugin.revealOnTimeline(hit.evId, hit.tag);
+			});
 			row.addEventListener("click", () =>
 				this.plugin.openSummary(hit.evId, hit.tag, () =>
 					void this.refresh()

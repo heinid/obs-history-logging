@@ -1,4 +1,4 @@
-import { App, Modal, Notice } from "obsidian";
+import { App, EventRef, Modal, Notice, TFile } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { jumpToEv } from "./jump";
 import { DbType, EntityEntry } from "./db-format";
@@ -18,13 +18,14 @@ export class SummaryModal extends Modal {
 	private statusEl?: HTMLElement;
 	private saveTimer: number | null = null;
 	private dirty = false;
+	private entitiesWatch?: EventRef;
 
 	constructor(
 		app: App,
 		private plugin: HistoryLoggingPlugin,
 		private id: string,
 		private tag: string,
-		private onSaved?: () => void
+		private onSaved?: (summary: string) => void
 	) {
 		super(app);
 	}
@@ -33,7 +34,21 @@ export class SummaryModal extends Modal {
 		const existing = await this.plugin.store.getEvent(this.id);
 		this.entities = [...(await this.plugin.store.readEntities()).values()];
 		this.types = await this.plugin.store.readDbTypes();
+		// Entities created or edited while this modal is open (from any entry
+		// point) must show up in completion right away.
+		this.entitiesWatch = this.app.vault.on("modify", (f) => {
+			if (
+				f instanceof TFile &&
+				f.path === this.plugin.store.entitiesFilePath()
+			)
+				void this.reloadEntities();
+		});
 		this.render(existing?.summary ?? "");
+	}
+
+	private async reloadEntities(): Promise<void> {
+		this.entities = [...(await this.plugin.store.readEntities()).values()];
+		this.editor?.refreshDecorations();
 	}
 
 	private typeColor(name: string): string | null {
@@ -56,7 +71,13 @@ export class SummaryModal extends Modal {
 			cls: "hl-modal-year",
 			text: decoded ? describeYear(decoded) : this.tag,
 		});
-		head.createSpan({ cls: "hl-modal-tag", text: this.tag });
+		const pill = head.createSpan({ cls: "hl-modal-tag", text: this.tag });
+		pill.addClass("hl-clickable");
+		pill.setAttr("aria-label", "Show on timeline");
+		pill.addEventListener("click", () => {
+			this.close();
+			void this.plugin.revealOnTimeline(this.id, this.tag);
+		});
 
 		const editorEl = contentEl.createDiv({ cls: "hl-summary-editor" });
 		this.editor = new LiveEditor(editorEl, {
@@ -65,7 +86,10 @@ export class SummaryModal extends Modal {
 			onChange: () => this.scheduleSave(),
 			colorFor: (id) => this.colorFor(id),
 			onOpenEntity: (id) => this.editEntity(id),
-			onOpenEntityPage: (id) => void this.plugin.openEntityView(id),
+			onOpenEntityPage: (id) => {
+				this.close();
+				void this.plugin.openEntityView(id);
+			},
 			annotate: {
 				entities: () => this.entities,
 				typeColor: (name) => this.typeColor(name),
@@ -106,7 +130,7 @@ export class SummaryModal extends Modal {
 			summary: this.editor.getValue(),
 		});
 		this.setStatus("saved");
-		this.onSaved?.();
+		this.onSaved?.(this.editor.getValue());
 	}
 
 	private setStatus(state: "typing" | "saved"): void {
@@ -155,6 +179,7 @@ export class SummaryModal extends Modal {
 	}
 
 	onClose(): void {
+		if (this.entitiesWatch) this.app.vault.offref(this.entitiesWatch);
 		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
 		void this.save();
 		this.editor?.destroy();

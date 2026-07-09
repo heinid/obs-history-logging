@@ -766,6 +766,18 @@
 	border-color: var(--interactive-accent-hover);
 	color: var(--text-on-accent);
 }
+.hl-modal-foot-btn:disabled {
+	opacity: 0.45;
+	cursor: default;
+	pointer-events: none;
+}
+.hl-modal-tag.hl-clickable {
+	cursor: pointer;
+}
+.hl-modal-tag.hl-clickable:hover {
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
+}
 .hl-modal-foot-btn.hl-danger:hover {
 	color: var(--text-error);
 	border-color: var(--text-error);
@@ -1342,6 +1354,14 @@ input.hl-tag-chip-input:focus-visible {
 .hl-entity-occ-empty {
 	color: var(--text-faint);
 	font-size: var(--font-ui-small);
+}
+.hl-occ-reveal {
+	flex: 0 0 auto;
+	align-self: center;
+	visibility: hidden;
+}
+.hl-entity-occ:hover .hl-occ-reveal {
+	visibility: visible;
 }
 .hl-entity-suggest-meta {
 	color: var(--text-muted);

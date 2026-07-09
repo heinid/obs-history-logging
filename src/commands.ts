@@ -60,15 +60,18 @@ export async function addEventAtCursor(
 
 // Add or edit the summary for a timeline entry, straight from the timeline.
 // A bare tag is wrapped into `{ev <id> #tag }` in its source note at the known
-// offset first; an already-bound tag just opens its existing summary. `onDone`
-// is invoked once the vault changes so the caller can rescan.
+// offset first; an already-bound tag just opens its existing summary.
+// `onWrapped` fires once the source note changes (a rescan is needed);
+// `onSaved` fires on every summary save (a single-card repaint suffices).
 export async function addEventForEntry(
 	plugin: HistoryLoggingPlugin,
 	entry: TimelineEntry,
-	onDone?: () => void
+	onWrapped?: () => void,
+	onSaved?: (evId: string, summary: string) => void
 ): Promise<void> {
 	if (entry.evId) {
-		plugin.openSummary(entry.evId, entry.tag, onDone);
+		const evId = entry.evId;
+		plugin.openSummary(evId, entry.tag, (s) => onSaved?.(evId, s));
 		return;
 	}
 
@@ -89,6 +92,6 @@ export async function addEventForEntry(
 	}
 
 	await plugin.app.vault.modify(file, next);
-	onDone?.();
-	plugin.openSummary(id, entry.tag, onDone);
+	onWrapped?.();
+	plugin.openSummary(id, entry.tag, (s) => onSaved?.(id, s));
 }
