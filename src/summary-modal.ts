@@ -64,7 +64,8 @@ export class SummaryModal extends Modal {
 			placeholder: "Write your summary / narrative for this date…",
 			onChange: () => this.scheduleSave(),
 			colorFor: (id) => this.colorFor(id),
-			onOpenEntity: (id) => void this.plugin.openEntity(id),
+			onOpenEntity: (id) => this.editEntity(id),
+			onOpenEntityPage: (id) => void this.plugin.openEntityView(id),
 			annotate: {
 				entities: () => this.entities,
 				typeColor: (name) => this.typeColor(name),
@@ -117,6 +118,21 @@ export class SummaryModal extends Modal {
 		this.statusEl.createSpan({
 			text: state === "saved" ? "已自动保存" : "输入中…",
 		});
+	}
+
+	// Left-click / "编辑词条": open the entity editor in place instead of
+	// navigating away to the full tab page.
+	private editEntity(id: string): void {
+		const entity = this.entities.find((e) => e.id === id);
+		if (!entity) {
+			void this.plugin.openEntityView(id);
+			return;
+		}
+		new EntityModal(this.app, this.plugin, entity, false, (saved) => {
+			const i = this.entities.findIndex((e) => e.id === saved.id);
+			if (i >= 0) this.entities[i] = saved;
+			this.editor?.refreshDecorations();
+		}).open();
 	}
 
 	private createEntity(word: string, apply: (e: EntityEntry) => void): void {

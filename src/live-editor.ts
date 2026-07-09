@@ -17,7 +17,7 @@ import {
 } from "@codemirror/view";
 import { EditorState, Prec } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { prepareFuzzySearch } from "obsidian";
+import { Notice, prepareFuzzySearch } from "obsidian";
 import { EntityEntry, displayName } from "./db-format";
 import {
 	AliasCandidate,
@@ -34,7 +34,12 @@ export interface LiveEditorOptions {
 	onChange?: (value: string) => void;
 	// Underline colour for an entity id; null = render as plain text.
 	colorFor?: (id: string) => string | null;
+	// Left click on a folded entity marker (open the entity editor).
 	onOpenEntity?: (id: string) => void;
+	// Right-click actions on a folded entity marker.
+	onOpenEntityPage?: (id: string) => void;
+	// Internal: wired by LiveEditor to open the folded-marker right-click menu.
+	onEntityMenu?: (id: string, word: string, e: MouseEvent) => void;
 	// Entity annotation support (completion dropdown + right-click menu).
 	annotate?: {
 		entities: () => EntityEntry[];
@@ -49,7 +54,8 @@ class DbRefWidget extends WidgetType {
 		private id: string,
 		private word: string,
 		private color: string | null,
-		private onOpen?: (id: string) => void
+		private onOpen?: (id: string) => void,
+		private onMenu?: (id: string, word: string, e: MouseEvent) => void
 	) {
 		super();
 	}
@@ -58,12 +64,22 @@ class DbRefWidget extends WidgetType {
 		const span = document.createElement("span");
 		span.className = "hl-db-ref";
 		span.textContent = this.word;
+		span.dataset.dbId = this.id;
+		span.dataset.dbWord = this.word;
 		if (this.color && /^#[0-9a-fA-F]{3,8}$/.test(this.color))
 			span.style.textDecorationColor = this.color;
+		// Handle both buttons on the widget itself: right-clicking must be
+		// caught here (and stop propagation) so CodeMirror doesn't focus the
+		// editor and unfold the marker into raw text before we react.
 		span.addEventListener("mousedown", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			this.onOpen?.(this.id);
+			if (e.button === 0) this.onOpen?.(this.id);
+		});
+		span.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.onMenu?.(this.id, this.word, e);
 		});
 		return span;
 	}
@@ -77,7 +93,10 @@ class DbRefWidget extends WidgetType {
 	}
 
 	ignoreEvent(): boolean {
-		return false;
+		// Let CodeMirror ignore mouse events on the widget so it doesn't focus
+		// the editor / move the cursor (which would unfold the marker); our own
+		// DOM listeners handle left-click (open) and right-click (menu).
+		return true;
 	}
 }
 
@@ -123,7 +142,8 @@ function buildDecorations(
 					m[1],
 					m[2],
 					opts.colorFor?.(m[1]) ?? null,
-					opts.onOpenEntity
+					opts.onOpenEntity,
+					opts.onEntityMenu
 				),
 			}).range(from, to)
 		);
@@ -197,6 +217,7 @@ export class LiveEditor {
 		private opts: LiveEditorOptions
 	) {
 		container.addClass("hl-le-container");
+		opts.onEntityMenu = (id, word, e) => this.dbRefMenu(id, word, e);
 
 		const self = this;
 		const renderPlugin = ViewPlugin.fromClass(
@@ -468,6 +489,8 @@ export class LiveEditor {
 	// --- right-click annotation ----------------------------------------
 
 	private contextMenu(e: MouseEvent): void {
+		// Folded entity markers handle their own contextmenu on the widget DOM
+		// (DbRefWidget) so they can stop CodeMirror from unfolding them first.
 		const ann = this.opts.annotate;
 		if (!ann) return;
 		const sel = this.view.state.selection.main;
@@ -525,6 +548,57 @@ export class LiveEditor {
 			ev.preventDefault();
 			this.openLinkPicker(from, to, word, e.clientX, e.clientY);
 		});
+	}
+
+	// Right-click menu on a folded entity marker.
+	private dbRefMenu(id: string, word: string, e: MouseEvent): void {
+		const pop = this.openPopover(e.clientX, e.clientY);
+		const mk = (icon: string, label: string): HTMLDivElement => {
+			const row = pop.createDiv({ cls: "hl-le-pop-item" });
+			row.createSpan({ cls: "hl-le-pop-icon", text: icon });
+			row.createSpan({ cls: "hl-le-pop-label", text: label });
+			return row;
+		};
+		mk("✎", "编辑词条").addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			this.closePopover();
+			this.opts.onOpenEntity?.(id);
+		});
+		mk("↗", "打开词条页").addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			this.closePopover();
+			this.opts.onOpenEntityPage?.(id);
+		});
+		mk("⊘", "取消标注").addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			this.closePopover();
+			this.unannotate(id, word);
+		});
+		mk("⧉", "复制词条 ID").addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			this.closePopover();
+			void navigator.clipboard?.writeText(id);
+			new Notice(`已复制词条 ID：${id}`);
+		});
+	}
+
+	// Replace the `{db id word}` marker with its plain word (entity kept).
+	private unannotate(id: string, word: string): void {
+		const text = this.view.state.doc.toString();
+		const re = dbRegex();
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(text)) !== null) {
+			if (m[1] === id && m[2] === word) {
+				this.view.dispatch({
+					changes: {
+						from: m.index,
+						to: m.index + m[0].length,
+						insert: m[2],
+					},
+				});
+				return;
+			}
+		}
 	}
 
 	// Inline fuzzy picker over every entity, anchored at the selection — no

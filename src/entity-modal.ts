@@ -71,7 +71,6 @@ export class EntityModal extends Modal {
 	private types: DbType[] = [];
 	private statusEl?: HTMLElement;
 	private headEl?: HTMLElement;
-	private saveTimer: number | null = null;
 	private dirty = false;
 	private everSaved = false;
 	private notified = false;
@@ -123,7 +122,7 @@ export class EntityModal extends Modal {
 		pill.addEventListener("change", () => {
 			e.type = pill.value;
 			paintPill();
-			this.scheduleSave();
+			this.markDirty();
 		});
 
 		const body = contentEl.createDiv({ cls: "hl-entity-body-wrap" });
@@ -181,7 +180,7 @@ export class EntityModal extends Modal {
 			placeholder: "正文…",
 			onChange: (v) => {
 				e.body = v;
-				this.scheduleSave();
+				this.markDirty();
 			},
 		});
 
@@ -205,7 +204,7 @@ export class EntityModal extends Modal {
 			text: "↗ 打开词条页",
 		});
 		open.addEventListener("click", async () => {
-			await this.flush();
+			if (!(await this.save())) return;
 			this.close();
 			await this.plugin.openEntityView(e.id);
 		});
@@ -214,14 +213,9 @@ export class EntityModal extends Modal {
 			text: "保存",
 		});
 		save.addEventListener("click", async () => {
-			if (!this.entity.labels.some((l) => l.text.trim())) {
-				new Notice("请先填写至少一个词形");
-				return;
-			}
-			this.dirty = true;
-			await this.flush();
-			this.close();
+			if (await this.save()) this.close();
 		});
+		this.setStatus("unsaved");
 	}
 
 	private updateHeadword(): void {
@@ -337,7 +331,7 @@ export class EntityModal extends Modal {
 			const x = chip.createSpan({ cls: "hl-tag-chip-x", text: "✕" });
 			x.addEventListener("click", () => {
 				this.entity.tags.splice(i, 1);
-				this.scheduleSave();
+				this.markDirty();
 				this.renderTags(host);
 			});
 		});
@@ -350,7 +344,7 @@ export class EntityModal extends Modal {
 			const v = input.value.trim().replace(/[,，]$/, "").trim();
 			if (v && !this.entity.tags.includes(v)) {
 				this.entity.tags.push(v);
-				this.scheduleSave();
+				this.markDirty();
 				this.renderTags(host);
 				const next = host.querySelector("input");
 				(next as HTMLInputElement | null)?.focus();
@@ -367,7 +361,7 @@ export class EntityModal extends Modal {
 				this.entity.tags.length
 			) {
 				this.entity.tags.pop();
-				this.scheduleSave();
+				this.markDirty();
 				this.renderTags(host);
 				(host.querySelector("input") as HTMLInputElement | null)?.focus();
 			}
@@ -380,42 +374,41 @@ export class EntityModal extends Modal {
 	private syncCards(): void {
 		fromCards(this.entity, this.cards);
 		this.updateHeadword();
-		this.scheduleSave();
+		this.markDirty();
 	}
 
-	private scheduleSave(): void {
+	// Nothing is written until the user presses "保存"; this only reflects that
+	// there are unsaved edits.
+	private markDirty(): void {
 		this.dirty = true;
-		this.setStatus("typing");
-		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
-		this.saveTimer = window.setTimeout(() => void this.save(), 600);
+		this.setStatus("unsaved");
 	}
 
-	private async save(): Promise<void> {
-		if (!this.dirty) return;
-		if (!this.entity.labels.some((l) => l.text.trim())) return;
-		this.dirty = false;
+	// Persist explicitly (from the save button). Returns false if invalid.
+	private async save(): Promise<boolean> {
+		if (!this.entity.labels.some((l) => l.text.trim())) {
+			new Notice("请先填写至少一个词形");
+			return false;
+		}
 		await this.plugin.store.upsertEntity(this.entity);
+		this.dirty = false;
 		this.everSaved = true;
 		this.setStatus("saved");
-	}
-
-	private async flush(): Promise<void> {
-		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
-		await this.save();
-		if (this.everSaved && !this.notified) {
+		if (!this.notified) {
 			this.notified = true;
 			this.onSaved?.(this.entity);
 		}
+		return true;
 	}
 
-	private setStatus(state: "typing" | "saved"): void {
+	private setStatus(state: "unsaved" | "saved"): void {
 		if (!this.statusEl) return;
 		this.statusEl.empty();
 		this.statusEl.createSpan({
 			cls: `hl-status-dot ${state === "saved" ? "is-saved" : "is-typing"}`,
 		});
 		this.statusEl.createSpan({
-			text: state === "saved" ? "已自动保存" : "输入中…",
+			text: state === "saved" ? "已保存" : "未保存",
 		});
 	}
 
@@ -430,7 +423,8 @@ export class EntityModal extends Modal {
 	}
 
 	onClose(): void {
-		void this.flush();
+		// Nothing is written unless the user pressed 保存 — closing an
+		// unsaved new entity simply discards it.
 		this.notes?.destroy();
 		this.contentEl.empty();
 	}
