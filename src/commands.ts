@@ -82,16 +82,22 @@ export async function addEventForEntry(
 	}
 
 	const content = (await plugin.app.vault.read(file)).replace(/\r\n/g, "\n");
-	const start = entry.offset;
-	const end = start + entry.tag.length;
 	const id = generateId((c) => evIdsIn(content).has(c));
-	const next = wrapTagAt(content, start, end, id);
-	if (next === null) {
-		new Notice("Could not add an event to this tag");
-		return;
-	}
 
-	await plugin.app.vault.modify(file, next);
-	onWrapped?.();
-	plugin.openSummary(id, entry.tag, (s) => onSaved?.(id, s));
+	// Deferred creation: nothing is written to the source note until the
+	// summary actually gets content, so opening the editor and closing it
+	// empty leaves no trace (the card keeps its "＋" state).
+	const ensure = async (): Promise<boolean> => {
+		const cur = (await plugin.app.vault.read(file)).replace(/\r\n/g, "\n");
+		const next = wrapTagAt(cur, entry.offset, entry.offset + entry.tag.length, id);
+		if (next === null) {
+			new Notice("Could not add an event to this tag");
+			return false;
+		}
+		await plugin.app.vault.modify(file, next);
+		onWrapped?.();
+		return true;
+	};
+
+	plugin.openSummary(id, entry.tag, (s) => onSaved?.(id, s), ensure);
 }

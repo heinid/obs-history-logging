@@ -225,9 +225,10 @@ export default class HistoryLoggingPlugin extends Plugin {
 	openSummary(
 		id: string,
 		tag: string,
-		onSaved?: (summary: string) => void
+		onSaved?: (summary: string) => void,
+		ensure?: () => Promise<boolean>
 	): void {
-		new SummaryModal(this.app, this, id, tag, onSaved).open();
+		new SummaryModal(this.app, this, id, tag, onSaved, ensure).open();
 	}
 
 	// ⌛ menu: open (or focus) a timeline and scroll to this event's card.

@@ -19,15 +19,21 @@ export class SummaryModal extends Modal {
 	private saveTimer: number | null = null;
 	private dirty = false;
 	private entitiesWatch?: EventRef;
+	private ensured = false;
 
+	// `ensure` defers event creation for a bare tag: it is run before the
+	// first write (wrapping the tag in its source note), and nothing at all
+	// is written while the summary is still empty.
 	constructor(
 		app: App,
 		private plugin: HistoryLoggingPlugin,
 		private id: string,
 		private tag: string,
-		private onSaved?: (summary: string) => void
+		private onSaved?: (summary: string) => void,
+		private ensure?: () => Promise<boolean>
 	) {
 		super(app);
+		this.ensured = !ensure;
 	}
 
 	async onOpen(): Promise<void> {
@@ -123,11 +129,17 @@ export class SummaryModal extends Modal {
 
 	private async save(): Promise<void> {
 		if (!this.dirty || !this.editor) return;
+		const summary = this.editor.getValue();
+		if (!this.ensured) {
+			if (!summary.trim()) return;
+			if (!(await this.ensure!())) return;
+			this.ensured = true;
+		}
 		this.dirty = false;
 		await this.plugin.store.upsertEvent({
 			id: this.id,
 			tag: this.tag,
-			summary: this.editor.getValue(),
+			summary,
 		});
 		this.setStatus("saved");
 		this.onSaved?.(this.editor.getValue());
