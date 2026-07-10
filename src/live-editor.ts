@@ -27,6 +27,8 @@ import {
 	dbRegex,
 	entitySearchText,
 	makeDbMarker,
+	parseDbMarks,
+	stripDbMarkers,
 } from "./db-marker";
 
 // Put an Escape handler in FRONT of a modal's key scope, so it runs before
@@ -616,7 +618,19 @@ export class LiveEditor {
 		from += raw.length - raw.trimStart().length;
 		to -= raw.length - raw.trimEnd().length;
 		const word = raw.trim();
-		if (!word || /[{}\n]/.test(word)) return;
+		if (!word) return;
+		// Long selections, multi-line selections, and selections that already
+		// contain `{db …}` markers aren't entity names — they get a plain-text
+		// menu (clean copy, bulk unwrap) instead of the linking menu.
+		const marks = parseDbMarks(word);
+		const clean = stripDbMarkers(word);
+		const cjk = (clean.match(/[\u3040-\u30ff\u3400-\u9fff]/g) ?? []).length;
+		if (marks.length || /\n/.test(word) || cjk > 16 || clean.length > 48) {
+			e.preventDefault();
+			this.textSelectionMenu(e, from, to, word, clean, marks.length);
+			return;
+		}
+		if (/[{}]/.test(word)) return;
 		e.preventDefault();
 		const pop = this.openPopover(e.clientX, e.clientY);
 		const mk = (icon: string, label: string, hint: string): HTMLDivElement => {
@@ -666,6 +680,73 @@ export class LiveEditor {
 			ev.preventDefault();
 			this.openLinkPicker(from, to, word, e.clientX, e.clientY);
 		});
+	}
+
+	// Plain-text menu for long / multi-line / already-annotated selections.
+	private textSelectionMenu(
+		e: MouseEvent,
+		from: number,
+		to: number,
+		raw: string,
+		clean: string,
+		markCount: number
+	): void {
+		const pop = this.openPopover(e.clientX, e.clientY);
+		const mk = (icon: string, label: string, hint = ""): HTMLDivElement => {
+			const row = pop.createDiv({ cls: "hl-le-pop-item" });
+			row.createSpan({ cls: "hl-le-pop-icon", text: icon });
+			row.createSpan({ cls: "hl-le-pop-label", text: label });
+			if (hint)
+				row.createSpan({ cls: "hl-le-suggest-meta", text: hint });
+			return row;
+		};
+		mk("⧉", "复制干净文本", markCount ? "去除标注语法" : "").addEventListener(
+			"mousedown",
+			(ev) => {
+				ev.preventDefault();
+				this.closePopover();
+				void navigator.clipboard?.writeText(clean);
+				new Notice("已复制干净文本");
+			}
+		);
+		if (markCount)
+			mk("⧉", "复制原文", "含标注语法").addEventListener(
+				"mousedown",
+				(ev) => {
+					ev.preventDefault();
+					this.closePopover();
+					void navigator.clipboard?.writeText(raw);
+					new Notice("已复制原文");
+				}
+			);
+		mk("✂", "剪切").addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			this.closePopover();
+			void navigator.clipboard?.writeText(raw);
+			this.view.dispatch({ changes: { from, to, insert: "" } });
+		});
+		if (markCount)
+			mk("⊘", `取消选区内所有标注`, `${markCount} 处`).addEventListener(
+				"mousedown",
+				(ev) => {
+					ev.preventDefault();
+					this.closePopover();
+					this.view.dispatch({
+						changes: { from, to, insert: clean },
+					});
+					new Notice(
+						`已取消 ${markCount} 处标注（Ctrl+Z 可撤销）`
+					);
+				}
+			);
+		if (!/\n/.test(clean))
+			mk("⧉", "链接到已有词条…", "").addEventListener(
+				"mousedown",
+				(ev) => {
+					ev.preventDefault();
+					this.openLinkPicker(from, to, clean, e.clientX, e.clientY);
+				}
+			);
 	}
 
 	// Right-click menu on a folded entity marker.

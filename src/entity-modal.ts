@@ -3,6 +3,7 @@ import type HistoryLoggingPlugin from "./main";
 import { DbType, EntityEntry, displayName } from "./db-format";
 import { entitySearchText } from "./db-marker";
 import { LiveEditor, registerEscapeFirst } from "./live-editor";
+import { ConfirmModal } from "./name-modal";
 
 // One language's slice of an entity, edited as a card: spellings (comma =
 // aliases), transcription, and a pronunciation audio attachment.
@@ -197,11 +198,20 @@ export class EntityModal extends Modal {
 				cls: "hl-modal-foot-btn hl-danger",
 				text: "Delete",
 			});
-			del.addEventListener("click", async () => {
-				await this.plugin.store.removeEntity(e.id);
-				this.dirty = false;
-				new Notice("Entity deleted (markers in summaries are kept).");
-				this.close();
+			del.addEventListener("click", () => {
+				new ConfirmModal(
+					this.app,
+					"删除词条",
+					`确定删除「${displayName(e)}」？正文中的标注会保留但将失效。`,
+					"删除",
+					() =>
+						void (async () => {
+							await this.plugin.store.removeEntity(e.id);
+							this.dirty = false;
+							new Notice(`已删除词条「${displayName(e)}」。`);
+							this.close();
+						})()
+				).open();
 			});
 		}
 		const open = foot.createEl("button", {

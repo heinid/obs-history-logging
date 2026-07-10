@@ -5,6 +5,7 @@ import { entitySearchText, parseDbMarks, stripDbMarkers } from "./db-marker";
 import { entityHint } from "./live-editor";
 import { EntityModal } from "./entity-modal";
 import { generateId } from "./id";
+import { ConfirmModal } from "./name-modal";
 import { renderEntityPage } from "./entity-page";
 import { describeYear, parseYearTag } from "./year-tag";
 
@@ -545,15 +546,22 @@ export class EntityBrowserView extends ItemView {
 		menu.showAtMouseEvent(e);
 	}
 
-	private async deleteEntity(row: Row): Promise<void> {
-		await this.plugin.store.removeEntity(row.entity.id);
+	private deleteEntity(row: Row): void {
 		const n = row.occ.length;
-		new Notice(
+		new ConfirmModal(
+			this.app,
+			"删除词条",
 			n
-				? `已删除词条「${displayName(row.entity)}」。正文中 ${n} 处标注将失效。`
-				: `已删除词条「${displayName(row.entity)}」。`
-		);
-		await this.reload();
+				? `确定删除「${displayName(row.entity)}」？正文中 ${n} 处标注会保留但将失效。`
+				: `确定删除「${displayName(row.entity)}」？`,
+			"删除",
+			() =>
+				void (async () => {
+					await this.plugin.store.removeEntity(row.entity.id);
+					new Notice(`已删除词条「${displayName(row.entity)}」。`);
+					await this.reload();
+				})()
+		).open();
 	}
 
 	private createEntity(): void {

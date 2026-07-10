@@ -28,7 +28,19 @@ export function openEvMenu(
 	tracks: string[] = [],
 	bare?: BareTagSource
 ): void {
+	void openEvMenuAsync(plugin, evt, id, tag, tracks, bare);
+}
+
+async function openEvMenuAsync(
+	plugin: HistoryLoggingPlugin,
+	evt: MouseEvent,
+	id: string,
+	tag: string,
+	tracks: string[],
+	bare?: BareTagSource
+): Promise<void> {
 	const decoded = parseYearTag(tag);
+	const layouts = decoded ? await plugin.store.readLayouts() : [];
 	const menu = new Menu();
 
 	if (id)
@@ -64,6 +76,24 @@ export function openEvMenu(
 				.setIcon("history")
 				.onClick(() => void plugin.revealOnTimeline(id, tag))
 		);
+		if (layouts.length)
+			menu.addItem((item) => {
+				item.setTitle("以布局显示…").setIcon("layout-grid");
+				// setSubmenu is public API since Obsidian 1.4 but missing
+				// from the bundled typings; reach it structurally.
+				const sub = (
+					item as unknown as { setSubmenu(): Menu }
+				).setSubmenu();
+				for (const layout of layouts)
+					sub.addItem((si) =>
+						si
+							.setTitle(layout.name)
+							.setIcon("gantt-chart")
+							.onClick(() =>
+								void plugin.revealOnLayout(layout, id, tag)
+							)
+					);
+			});
 	}
 
 	const search = globalSearch(plugin);

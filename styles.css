@@ -1593,3 +1593,16 @@ input.hl-tag-chip-input:focus-visible {
 	font-size: var(--font-ui-small);
 	margin-bottom: 8px;
 }
+
+/* --- Data health report -------------------------------------------------- */
+.hl-health-report h4 {
+	margin: 12px 0 4px;
+}
+.hl-health-report ul {
+	margin: 0;
+	padding-left: 20px;
+}
+.hl-health-loc {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}

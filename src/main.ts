@@ -25,6 +25,7 @@ import { ERA_MANAGER_VIEW_TYPE, EraManagerView } from "./era-manager-view";
 import { LayoutPane, TimelineLayout } from "./layouts";
 import { NameModal } from "./name-modal";
 import { EntitySuggestModal } from "./entity-modal";
+import { checkDataHealth } from "./health-check";
 import { ENTITY_VIEW_TYPE, EntityView } from "./entity-view";
 import {
 	ENTITY_BROWSER_VIEW_TYPE,
@@ -124,6 +125,11 @@ export default class HistoryLoggingPlugin extends Plugin {
 			name: "Manage entity types",
 			callback: () => void this.browseEntities("types"),
 		});
+		this.addCommand({
+			id: "check-data-health",
+			name: "Check data health",
+			callback: () => void checkDataHealth(this),
+		});
 	}
 
 	onunload(): void {
@@ -208,7 +214,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 
 	// Open a layout as ONE timeline tab whose columns are the saved tracks —
 	// the comparison lives inside a single view, not across split panes.
-	async applyLayout(layout: TimelineLayout): Promise<void> {
+	async applyLayout(layout: TimelineLayout): Promise<TimelineView | null> {
 		const { workspace } = this.app;
 		const tracks = layout.panes.map((p) => ({
 			filter: p.filter,
@@ -226,6 +232,18 @@ export default class HistoryLoggingPlugin extends Plugin {
 			},
 		});
 		workspace.revealLeaf(leaf);
+		return leaf.view instanceof TimelineView ? leaf.view : null;
+	}
+
+	// "Show with layout …": open a saved layout and try to land on the event.
+	// If the layout's filters hide it, focusEvent notices the reader.
+	async revealOnLayout(
+		layout: TimelineLayout,
+		id: string,
+		tag: string
+	): Promise<void> {
+		const view = await this.applyLayout(layout);
+		if (view) await view.focusEvent(id, tag);
 	}
 
 	// Open the era-system manager as a main-pane tab (reuse if already open).
