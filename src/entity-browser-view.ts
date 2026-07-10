@@ -5,6 +5,7 @@ import { entitySearchText, parseDbMarks, stripDbMarkers } from "./db-marker";
 import { entityHint } from "./live-editor";
 import { EntityModal } from "./entity-modal";
 import { generateId } from "./id";
+import { renderEntityPage } from "./entity-page";
 import { describeYear, parseYearTag } from "./year-tag";
 
 export const ENTITY_BROWSER_VIEW_TYPE = "history-logging-entity-browser";
@@ -25,11 +26,25 @@ interface Row {
 type SortKey = "occ" | "name" | "file";
 type HealthKey = "all" | "unused" | "no-notes";
 
+// Browser-style navigation stack: every place you can be in the backstage is
+// a frame; back/forward restores it including scroll position and filters.
+type NavFrame =
+	| {
+			kind: "entities";
+			query: string;
+			types: string[];
+			sort: SortKey;
+			health: HealthKey;
+			scroll: number;
+	  }
+	| { kind: "types"; scroll: number }
+	| { kind: "entity"; id: string; scroll: number };
+
 const ROW_H = 40;
 const OVERSCAN = 8;
 
-// The entity browser: a virtualised, filterable catalogue of every entry in
-// entities.md, with per-entity usage counts drawn from events.md.
+// The plugin backstage: entity catalogue and type manager as sections of one
+// tab, with wiki-style in-place navigation into entity pages.
 export class EntityBrowserView extends ItemView {
 	private rows: Row[] = [];
 	private filtered: Row[] = [];
@@ -38,6 +53,14 @@ export class EntityBrowserView extends ItemView {
 	private selectedTypes = new Set<string>();
 	private sort: SortKey = "occ";
 	private health: HealthKey = "all";
+	private stack: NavFrame[] = [
+		{ kind: "entities", query: "", types: [], sort: "occ", health: "all", scroll: 0 },
+	];
+	private pos = 0;
+	private bodyEl?: HTMLElement;
+	private navBack?: HTMLButtonElement;
+	private navFwd?: HTMLButtonElement;
+	private tabEls = new Map<string, HTMLElement>();
 	private countEl?: HTMLElement;
 	private scrollEl?: HTMLElement;
 	private spacerEl?: HTMLElement;
@@ -52,7 +75,12 @@ export class EntityBrowserView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Entities";
+		const top = this.stack[this.pos];
+		if (top?.kind === "entity") {
+			const row = this.rows.find((r) => r.entity.id === top.id);
+			if (row) return displayName(row.entity);
+		}
+		return "History Logging";
 	}
 
 	getIcon(): string {
@@ -60,8 +88,8 @@ export class EntityBrowserView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
-		// The catalogue lives in two data files; a debounced reload on either
-		// keeps the list current without rescanning on every note edit.
+		// The catalogue lives in a few data files; a debounced reload on any
+		// of them keeps the backstage current without rescanning per edit.
 		this.registerEvent(
 			this.app.vault.on("modify", (f) => {
 				const folder = this.plugin.settings.dataFolder.replace(/\/+$/, "");
@@ -122,45 +150,121 @@ export class EntityBrowserView extends ItemView {
 		return this.types.find((t) => t.name === name)?.color ?? null;
 	}
 
-	// --- filtering ------------------------------------------------------
+	// --- navigation stack -------------------------------------------------
 
-	private applyFilters(): void {
-		const q = this.query.trim().toLowerCase();
-		this.filtered = this.rows.filter((r) => {
-			if (
-				this.selectedTypes.size &&
-				!this.selectedTypes.has(r.entity.type)
-			)
-				return false;
-			if (this.health === "unused" && r.occ.length) return false;
-			if (this.health === "no-notes" && r.entity.body.trim())
-				return false;
-			if (!q) return true;
-			return (
-				entitySearchText(r.entity).toLowerCase().includes(q) ||
-				r.entity.body.toLowerCase().includes(q)
-			);
-		});
-		const name = (r: Row): string => displayName(r.entity);
-		if (this.sort === "occ")
-			this.filtered.sort(
-				(a, b) =>
-					b.occ.length - a.occ.length ||
-					name(a).localeCompare(name(b))
-			);
-		else if (this.sort === "name")
-			this.filtered.sort((a, b) => name(a).localeCompare(name(b)));
-		// "file": keep entities.md order (Map preserves insertion order).
+	private current(): NavFrame {
+		return this.stack[this.pos];
 	}
 
-	// --- rendering ------------------------------------------------------
+	// Snapshot the live UI state into the current frame before leaving it.
+	private snapshot(): void {
+		const f = this.current();
+		const scroll = this.bodyScroll();
+		if (f.kind === "entities") {
+			f.query = this.query;
+			f.types = [...this.selectedTypes];
+			f.sort = this.sort;
+			f.health = this.health;
+			f.scroll = scroll;
+		} else f.scroll = scroll;
+	}
+
+	private bodyScroll(): number {
+		if (this.current().kind === "entities")
+			return this.scrollEl?.scrollTop ?? 0;
+		return this.bodyEl?.scrollTop ?? 0;
+	}
+
+	private push(frame: NavFrame): void {
+		this.snapshot();
+		this.stack.splice(this.pos + 1);
+		this.stack.push(frame);
+		this.pos = this.stack.length - 1;
+		this.render();
+	}
+
+	private go(delta: number): void {
+		const next = this.pos + delta;
+		if (next < 0 || next >= this.stack.length) return;
+		this.snapshot();
+		this.pos = next;
+		this.render();
+	}
+
+	// --- chrome -------------------------------------------------------------
 
 	private render(): void {
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("hl-entity-browser");
 
-		const bar = root.createDiv({ cls: "hl-eb-bar" });
+		const nav = root.createDiv({ cls: "hl-eb-nav" });
+		this.navBack = nav.createEl("button", { cls: "hl-icon-btn" });
+		setIcon(this.navBack, "arrow-left");
+		this.navBack.setAttr("aria-label", "后退");
+		this.navBack.disabled = this.pos === 0;
+		this.navBack.addEventListener("click", () => this.go(-1));
+		this.navFwd = nav.createEl("button", { cls: "hl-icon-btn" });
+		setIcon(this.navFwd, "arrow-right");
+		this.navFwd.setAttr("aria-label", "前进");
+		this.navFwd.disabled = this.pos >= this.stack.length - 1;
+		this.navFwd.addEventListener("click", () => this.go(1));
+
+		const tabs = nav.createDiv({ cls: "hl-eb-tabs" });
+		this.tabEls.clear();
+		const mkTab = (key: "entities" | "types", label: string): void => {
+			const el = tabs.createSpan({ cls: "hl-eb-tab", text: label });
+			this.tabEls.set(key, el);
+			el.addEventListener("click", () => {
+				if (this.current().kind === key) return;
+				this.push(
+					key === "entities"
+						? {
+								kind: "entities",
+								query: this.query,
+								types: [...this.selectedTypes],
+								sort: this.sort,
+								health: this.health,
+								scroll: 0,
+						  }
+						: { kind: "types", scroll: 0 }
+				);
+			});
+		};
+		mkTab("entities", "词条");
+		mkTab("types", "范畴");
+		const cur = this.current();
+		const activeTab = cur.kind === "types" ? "types" : "entities";
+		this.tabEls.get(activeTab)?.addClass("is-active");
+		if (cur.kind === "entity") {
+			const crumb = nav.createSpan({ cls: "hl-eb-crumb" });
+			const row = this.rows.find((r) => r.entity.id === cur.id);
+			crumb.setText(`› ${row ? displayName(row.entity) : cur.id}`);
+		}
+
+		this.bodyEl = root.createDiv({ cls: "hl-eb-body" });
+		if (cur.kind === "entities") this.renderEntities(this.bodyEl, cur);
+		else if (cur.kind === "types") this.renderTypes(this.bodyEl, cur);
+		else void this.renderEntity(this.bodyEl, cur);
+		// Refresh the tab title (Obsidian re-reads getDisplayText on layout
+		// change; trigger it via the leaf's internal header update if present).
+		(
+			this.leaf as unknown as { updateHeader?: () => void }
+		).updateHeader?.();
+	}
+
+	// --- entities section -----------------------------------------------
+
+	private renderEntities(
+		host: HTMLElement,
+		frame: Extract<NavFrame, { kind: "entities" }>
+	): void {
+		this.query = frame.query;
+		this.selectedTypes = new Set(frame.types);
+		this.sort = frame.sort;
+		this.health = frame.health;
+
+		const bar = host.createDiv({ cls: "hl-eb-bar" });
 
 		const search = bar.createEl("input", {
 			cls: "hl-eb-search",
@@ -235,14 +339,15 @@ export class EntityBrowserView extends ItemView {
 		});
 		add.addEventListener("click", () => this.createEntity());
 
-		this.countEl = root.createDiv({ cls: "hl-eb-count" });
+		this.countEl = host.createDiv({ cls: "hl-eb-count" });
 
-		this.scrollEl = root.createDiv({ cls: "hl-eb-list" });
+		this.scrollEl = host.createDiv({ cls: "hl-eb-list" });
 		this.spacerEl = this.scrollEl.createDiv({ cls: "hl-eb-spacer" });
 		this.registerDomEvent(this.scrollEl, "scroll", () =>
 			this.renderWindow()
 		);
 		this.refreshList();
+		this.scrollEl.scrollTop = frame.scroll;
 	}
 
 	private refreshList(): void {
@@ -256,6 +361,35 @@ export class EntityBrowserView extends ItemView {
 			this.spacerEl.style.height = `${this.filtered.length * ROW_H}px`;
 		}
 		this.renderWindow(true);
+	}
+
+	private applyFilters(): void {
+		const q = this.query.trim().toLowerCase();
+		this.filtered = this.rows.filter((r) => {
+			if (
+				this.selectedTypes.size &&
+				!this.selectedTypes.has(r.entity.type)
+			)
+				return false;
+			if (this.health === "unused" && r.occ.length) return false;
+			if (this.health === "no-notes" && r.entity.body.trim())
+				return false;
+			if (!q) return true;
+			return (
+				entitySearchText(r.entity).toLowerCase().includes(q) ||
+				r.entity.body.toLowerCase().includes(q)
+			);
+		});
+		const name = (r: Row): string => displayName(r.entity);
+		if (this.sort === "occ")
+			this.filtered.sort(
+				(a, b) =>
+					b.occ.length - a.occ.length ||
+					name(a).localeCompare(name(b))
+			);
+		else if (this.sort === "name")
+			this.filtered.sort((a, b) => name(a).localeCompare(name(b)));
+		// "file": keep entities.md order (Map preserves insertion order).
 	}
 
 	// Virtualised window: only the rows in (and just around) the viewport
@@ -326,14 +460,25 @@ export class EntityBrowserView extends ItemView {
 				this.openOccMenu(e, row);
 			});
 
-		el.addEventListener("click", () =>
-			void this.plugin.openEntityView(row.entity.id)
-		);
+		// Left click navigates in place; middle / Ctrl-click opens the
+		// standalone tab, like a browser's "open in new tab".
+		el.addEventListener("click", (e) => {
+			if (e.ctrlKey || e.metaKey)
+				void this.plugin.openEntityView(row.entity.id);
+			else this.openEntityInPlace(row.entity.id);
+		});
+		el.addEventListener("auxclick", (e) => {
+			if (e.button === 1) void this.plugin.openEntityView(row.entity.id);
+		});
 		el.addEventListener("contextmenu", (e) => {
 			e.preventDefault();
 			this.openRowMenu(e, row);
 		});
 		return el;
+	}
+
+	private openEntityInPlace(id: string): void {
+		this.push({ kind: "entity", id, scroll: 0 });
 	}
 
 	// The usage badge unfolds into the entity's occurrences: pick one to jump
@@ -360,9 +505,7 @@ export class EntityBrowserView extends ItemView {
 				item
 					.setTitle(`… 共 ${row.occ.length} 处，打开词条页查看全部`)
 					.setIcon("book-open")
-					.onClick(() =>
-						void this.plugin.openEntityView(row.entity.id)
-					)
+					.onClick(() => this.openEntityInPlace(row.entity.id))
 			);
 		menu.showAtMouseEvent(e);
 	}
@@ -381,7 +524,7 @@ export class EntityBrowserView extends ItemView {
 		);
 		menu.addItem((item) =>
 			item
-				.setTitle("打开词条页")
+				.setTitle("在新页签打开词条页")
 				.setIcon("book-open")
 				.onClick(() => void this.plugin.openEntityView(row.entity.id))
 		);
@@ -424,5 +567,269 @@ export class EntityBrowserView extends ItemView {
 		new EntityModal(this.app, this.plugin, entity, true, () =>
 			void this.reload()
 		).open();
+	}
+
+	// --- entity page (in-place) -------------------------------------------
+
+	private async renderEntity(
+		host: HTMLElement,
+		frame: Extract<NavFrame, { kind: "entity" }>
+	): Promise<void> {
+		const page = host.createDiv({ cls: "hl-eb-entity-host" });
+		await renderEntityPage(page, frame.id, {
+			plugin: this.plugin,
+			component: this,
+			openEntity: (id) => this.openEntityInPlace(id),
+			refresh: () => void this.reload(),
+		});
+		host.scrollTop = frame.scroll;
+	}
+
+	// --- types section ----------------------------------------------------
+
+	private typeCount(name: string): number {
+		return this.rows.filter((r) => r.entity.type === name).length;
+	}
+
+	private renderTypes(
+		host: HTMLElement,
+		frame: Extract<NavFrame, { kind: "types" }>
+	): void {
+		const wrap = host.createDiv({ cls: "hl-eb-types" });
+		wrap.createDiv({
+			cls: "hl-eb-count",
+			text: "改名会自动更新所有词条；删除非空范畴需先选择词条的去处。",
+		});
+		const list = wrap.createDiv({ cls: "hl-eb-type-list" });
+		this.types.forEach((t, i) => this.buildTypeRow(list, t, i));
+
+		const unknown = this.rows.filter(
+			(r) => !this.types.some((t) => t.name === r.entity.type)
+		).length;
+		if (unknown)
+			wrap.createDiv({
+				cls: "hl-eb-type-warn",
+				text: `⚠ ${unknown} 个词条的范畴不在此列表中（未知范畴）。`,
+			});
+
+		const add = wrap.createEl("button", {
+			cls: "hl-modal-foot-btn hl-eb-add",
+			text: "＋ 新建范畴",
+		});
+		add.addEventListener("click", async () => {
+			const name = this.freshTypeName();
+			await this.plugin.store.writeDbTypes([
+				...this.types,
+				{ name, color: "#888888" },
+			]);
+			await this.reload();
+		});
+		host.scrollTop = frame.scroll;
+	}
+
+	private freshTypeName(): string {
+		let n = 1;
+		while (this.types.some((t) => t.name === `type-${n}`)) n++;
+		return `type-${n}`;
+	}
+
+	private buildTypeRow(list: HTMLElement, t: DbType, index: number): void {
+		const row = list.createDiv({ cls: "hl-eb-type-row" });
+
+		const swatch = row.createEl("input", {
+			cls: "hl-eb-type-color",
+			type: "color",
+		});
+		swatch.value = /^#[0-9a-fA-F]{6}$/.test(t.color) ? t.color : "#888888";
+		swatch.addEventListener("change", async () => {
+			const next = this.types.map((x) =>
+				x.name === t.name ? { ...x, color: swatch.value } : x
+			);
+			await this.plugin.store.writeDbTypes(next);
+			await this.reload();
+		});
+
+		const name = row.createEl("input", {
+			cls: "hl-eb-type-name",
+			type: "text",
+		});
+		name.value = t.name;
+		const commit = async (): Promise<void> => {
+			const to = name.value.trim();
+			if (!to || to === t.name) {
+				name.value = t.name;
+				return;
+			}
+			if (this.types.some((x) => x.name === to)) {
+				new Notice(`范畴「${to}」已存在。如需合并请用右键菜单。`);
+				name.value = t.name;
+				return;
+			}
+			await this.renameType(t.name, to);
+		};
+		name.addEventListener("blur", () => void commit());
+		name.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") name.blur();
+			if (e.key === "Escape") {
+				name.value = t.name;
+				name.blur();
+			}
+		});
+
+		const count = this.typeCount(t.name);
+		const badge = row.createSpan({
+			cls: `hl-eb-badge${count ? "" : " is-zero"}`,
+			text: count ? `${count} 词条` : "空",
+		});
+		if (count)
+			badge.addEventListener("click", () =>
+				this.push({
+					kind: "entities",
+					query: "",
+					types: [t.name],
+					sort: this.sort,
+					health: "all",
+					scroll: 0,
+				})
+			);
+
+		const up = row.createEl("button", { cls: "hl-icon-btn" });
+		setIcon(up, "chevron-up");
+		up.disabled = index === 0;
+		up.addEventListener("click", () => void this.moveType(index, -1));
+		const down = row.createEl("button", { cls: "hl-icon-btn" });
+		setIcon(down, "chevron-down");
+		down.disabled = index === this.types.length - 1;
+		down.addEventListener("click", () => void this.moveType(index, 1));
+
+		const more = row.createEl("button", { cls: "hl-icon-btn" });
+		setIcon(more, "more-horizontal");
+		more.addEventListener("click", (e) => {
+			const menu = new Menu();
+			for (const other of this.types) {
+				if (other.name === t.name) continue;
+				menu.addItem((item) =>
+					item
+						.setTitle(`合并到「${other.name}」`)
+						.setIcon("merge")
+						.onClick(() => void this.mergeType(t.name, other.name))
+				);
+			}
+			menu.addSeparator();
+			menu.addItem((item) =>
+				item
+					.setTitle("删除范畴")
+					.setIcon("trash")
+					.onClick(() => this.deleteType(t, e))
+			);
+			menu.showAtMouseEvent(e as MouseEvent);
+		});
+	}
+
+	private async moveType(index: number, delta: number): Promise<void> {
+		const next = [...this.types];
+		const j = index + delta;
+		if (j < 0 || j >= next.length) return;
+		[next[index], next[j]] = [next[j], next[index]];
+		await this.plugin.store.writeDbTypes(next);
+		await this.reload();
+	}
+
+	// Renaming a type is only safe if every entity that references it is
+	// rewritten in the same operation.
+	private async renameType(from: string, to: string): Promise<void> {
+		const entities = await this.plugin.store.readEntities();
+		let n = 0;
+		for (const e of entities.values())
+			if (e.type === from) {
+				e.type = to;
+				n++;
+			}
+		if (n) await this.plugin.store.writeEntities(entities);
+		await this.plugin.store.writeDbTypes(
+			this.types.map((x) => (x.name === from ? { ...x, name: to } : x))
+		);
+		new Notice(
+			n
+				? `范畴「${from}」已改名为「${to}」，${n} 个词条已更新。`
+				: `范畴「${from}」已改名为「${to}」。`
+		);
+		await this.reload();
+	}
+
+	private async mergeType(from: string, into: string): Promise<void> {
+		const entities = await this.plugin.store.readEntities();
+		let n = 0;
+		for (const e of entities.values())
+			if (e.type === from) {
+				e.type = into;
+				n++;
+			}
+		if (n) await this.plugin.store.writeEntities(entities);
+		await this.plugin.store.writeDbTypes(
+			this.types.filter((x) => x.name !== from)
+		);
+		new Notice(`范畴「${from}」已合并到「${into}」，${n} 个词条已更新。`);
+		await this.reload();
+	}
+
+	// Deleting an empty type is immediate; a non-empty one demands a
+	// destination for its entities first.
+	private deleteType(t: DbType, e: MouseEvent): void {
+		const count = this.typeCount(t.name);
+		if (!count) {
+			void (async () => {
+				await this.plugin.store.writeDbTypes(
+					this.types.filter((x) => x.name !== t.name)
+				);
+				new Notice(`范畴「${t.name}」已删除。`);
+				await this.reload();
+			})();
+			return;
+		}
+		const menu = new Menu();
+		for (const other of this.types) {
+			if (other.name === t.name) continue;
+			menu.addItem((item) =>
+				item
+					.setTitle(`${count} 个词条迁移到「${other.name}」后删除`)
+					.setIcon("corner-down-right")
+					.onClick(() => void this.mergeType(t.name, other.name))
+			);
+		}
+		menu.addItem((item) =>
+			item
+				.setTitle(`留为未知范畴并删除（不推荐）`)
+				.setIcon("alert-triangle")
+				.onClick(() =>
+					void (async () => {
+						await this.plugin.store.writeDbTypes(
+							this.types.filter((x) => x.name !== t.name)
+						);
+						new Notice(
+							`范畴「${t.name}」已删除；${count} 个词条现为未知范畴。`
+						);
+						await this.reload();
+					})()
+				)
+		);
+		menu.showAtMouseEvent(e);
+	}
+
+	// External entry points (commands) land on a specific section.
+	showSection(section: "entities" | "types"): void {
+		if (this.current().kind === section) return;
+		this.push(
+			section === "types"
+				? { kind: "types", scroll: 0 }
+				: {
+						kind: "entities",
+						query: "",
+						types: [],
+						sort: this.sort,
+						health: "all",
+						scroll: 0,
+				  }
+		);
 	}
 }

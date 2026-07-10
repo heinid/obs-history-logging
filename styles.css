@@ -1491,3 +1491,105 @@ input.hl-tag-chip-input:focus-visible {
 	color: var(--text-faint);
 	font-size: var(--font-ui-small);
 }
+
+/* --- Backstage navigation ---------------------------------------------- */
+.hl-eb-nav {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	flex: 0 0 auto;
+}
+.hl-eb-nav .hl-icon-btn:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+.hl-eb-tabs {
+	display: flex;
+	gap: 2px;
+	margin-left: 6px;
+}
+.hl-eb-tab {
+	padding: 3px 12px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	user-select: none;
+}
+.hl-eb-tab:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-eb-tab.is-active {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+	font-weight: 600;
+}
+.hl-eb-crumb {
+	margin-left: 4px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hl-eb-body {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow-y: auto;
+}
+.hl-eb-body .hl-eb-list {
+	padding-bottom: 12px;
+}
+.hl-eb-entity-host {
+	padding: 12px 24px 32px;
+}
+
+/* --- Type manager ------------------------------------------------------- */
+.hl-eb-types {
+	padding: 8px 16px 24px;
+	max-width: 560px;
+}
+.hl-eb-type-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 8px 0 12px;
+}
+.hl-eb-type-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 6px;
+	border-radius: 6px;
+}
+.hl-eb-type-row:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-eb-type-color {
+	width: 26px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+}
+.hl-eb-type-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	background: transparent;
+	border: 1px solid transparent;
+}
+.hl-eb-type-name:hover,
+.hl-eb-type-name:focus {
+	border-color: var(--background-modifier-border);
+	background: var(--background-primary);
+}
+.hl-eb-type-warn {
+	color: var(--text-warning, #b58900);
+	font-size: var(--font-ui-small);
+	margin-bottom: 8px;
+}

@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, Modal, Notice, Setting, TFile } from "obsidian";
+import { App, FuzzySuggestModal, Modal, Notice, TFile } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { DbType, EntityEntry, displayName } from "./db-format";
 import { entitySearchText } from "./db-marker";
@@ -463,62 +463,3 @@ export class EntitySuggestModal extends FuzzySuggestModal<EntityEntry> {
 	}
 }
 
-// Minimal manager for the type list: rename, recolor, add, remove.
-export class DbTypeManagerModal extends Modal {
-	private types: DbType[] = [];
-
-	constructor(app: App, private plugin: HistoryLoggingPlugin) {
-		super(app);
-	}
-
-	async onOpen(): Promise<void> {
-		this.types = await this.plugin.store.readDbTypes();
-		this.render();
-	}
-
-	private render(): void {
-		const { contentEl } = this;
-		contentEl.empty();
-		contentEl.addClass("hl-db-types-modal");
-		contentEl.createEl("h3", { text: "Entity types" });
-		const list = contentEl.createDiv({ cls: "hl-entity-rows" });
-		this.types.forEach((t, i) => {
-			const row = list.createDiv({ cls: "hl-entity-row" });
-			const name = row.createEl("input", { type: "text" });
-			name.addClass("hl-entity-text");
-			name.value = t.name;
-			name.addEventListener("input", () => (t.name = name.value.trim()));
-			const color = row.createEl("input", { type: "color" });
-			color.value = t.color;
-			color.addEventListener("input", () => (t.color = color.value));
-			const del = row.createEl("button", { text: "×", cls: "hl-row-del" });
-			del.addEventListener("click", () => {
-				this.types.splice(i, 1);
-				this.render();
-			});
-		});
-		const add = contentEl.createEl("button", {
-			text: "+ type",
-			cls: "hl-row-add",
-		});
-		add.addEventListener("click", () => {
-			this.types.push({ name: "", color: "#888888" });
-			this.render();
-		});
-		new Setting(contentEl).addButton((b) =>
-			b
-				.setButtonText("Save")
-				.setCta()
-				.onClick(async () => {
-					const clean = this.types.filter((t) => t.name.length > 0);
-					await this.plugin.store.writeDbTypes(clean);
-					new Notice("Entity types saved");
-					this.close();
-				})
-		);
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
-}

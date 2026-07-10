@@ -24,10 +24,7 @@ import { TIMELINE_VIEW_TYPE, TimelineView } from "./timeline-view";
 import { ERA_MANAGER_VIEW_TYPE, EraManagerView } from "./era-manager-view";
 import { LayoutPane, TimelineLayout } from "./layouts";
 import { NameModal } from "./name-modal";
-import {
-	DbTypeManagerModal,
-	EntitySuggestModal,
-} from "./entity-modal";
+import { EntitySuggestModal } from "./entity-modal";
 import { ENTITY_VIEW_TYPE, EntityView } from "./entity-view";
 import {
 	ENTITY_BROWSER_VIEW_TYPE,
@@ -125,7 +122,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.addCommand({
 			id: "manage-entity-types",
 			name: "Manage entity types",
-			callback: () => new DbTypeManagerModal(this.app, this).open(),
+			callback: () => void this.browseEntities("types"),
 		});
 	}
 
@@ -308,14 +305,16 @@ export default class HistoryLoggingPlugin extends Plugin {
 		workspace.revealLeaf(leaf);
 	}
 
-	// Open (or focus) the entity browser tab.
-	async browseEntities(): Promise<void> {
+	// Open (or focus) the backstage tab, optionally landing on a section.
+	async browseEntities(section?: "entities" | "types"): Promise<void> {
 		const { workspace } = this.app;
 		const existing = workspace.getLeavesOfType(ENTITY_BROWSER_VIEW_TYPE)[0];
 		if (existing) {
 			workspace.revealLeaf(existing);
-			if (existing.view instanceof EntityBrowserView)
+			if (existing.view instanceof EntityBrowserView) {
 				await existing.view.reload();
+				if (section) existing.view.showSection(section);
+			}
 			return;
 		}
 		const leaf = workspace.getLeaf("tab");
@@ -324,6 +323,8 @@ export default class HistoryLoggingPlugin extends Plugin {
 			active: true,
 		});
 		workspace.revealLeaf(leaf);
+		if (section && leaf.view instanceof EntityBrowserView)
+			leaf.view.showSection(section);
 	}
 
 	// Quick fuzzy jump straight to one entity's page.

@@ -99,6 +99,15 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("管理后台")
+			.setDesc("词条浏览、范畴管理等都在插件后台页面中。")
+			.addButton((b) =>
+				b
+					.setButtonText("打开管理后台")
+					.onClick(() => void this.plugin.browseEntities())
+			);
+
+		new Setting(containerEl)
 			.setName("Entity languages")
 			.setDesc(
 				"Ordered, comma-separated language codes for entity language cards (e.g. ja, zh, en). New codes can also be added on an entity directly."
