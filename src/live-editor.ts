@@ -52,6 +52,8 @@ export interface LiveEditorOptions {
 		// "normal" (CJK 1 char / Latin 2), "conservative" (CJK 2 / Latin 3),
 		// or "off" (only the explicit `//` trigger). Default "normal".
 		autoTrigger?: () => "normal" | "conservative" | "off";
+		// Also auto-complete on the last word of a spaced name (surname).
+		lastToken?: () => boolean;
 	};
 }
 
@@ -362,7 +364,8 @@ export class LiveEditor {
 						before,
 						ann.entities(),
 						undefined,
-						mode === "conservative"
+						mode === "conservative",
+						ann.lastToken?.() ?? false
 				  );
 		if (!this.cands.length) {
 			this.closeSuggest();

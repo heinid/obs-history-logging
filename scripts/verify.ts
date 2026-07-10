@@ -279,6 +279,29 @@ eq("cand word boundary", aliasCandidates("xAlexander", dict), []);
 eq("cand not inside marker", aliasCandidates("{db q3x8k2p1 希腊", dict), []);
 eq("cand none", aliasCandidates("罗马", dict), []);
 
+// surname completion: last token of a spaced name as its own alias
+eq("surname hit", aliasCandidates("x Caes", [
+	{
+		id: "b2c3d4e5", type: "person",
+		labels: [{ lang: "en", text: "Gaius Julius Caesar" }],
+		readings: [], audios: [], tags: [], body: "",
+	},
+], 8, false, true)[0]?.alias, "Caesar");
+eq("surname off by default", aliasCandidates("x Caes", [
+	{
+		id: "b2c3d4e5", type: "person",
+		labels: [{ lang: "en", text: "Gaius Julius Caesar" }],
+		readings: [], audios: [], tags: [], body: "",
+	},
+]), []);
+eq("surname full name still wins", aliasCandidates("Gaius Julius Caesar", [
+	{
+		id: "b2c3d4e5", type: "person",
+		labels: [{ lang: "en", text: "Gaius Julius Caesar" }],
+		readings: [], audios: [], tags: [], body: "",
+	},
+], 8, false, true)[0]?.alias, "Gaius Julius Caesar");
+
 // explicit `//` completion: trigger detection + loose matching
 eq("trig none", triggerQuery("just text"), null);
 eq("trig single slash", triggerQuery("a/b"), null);

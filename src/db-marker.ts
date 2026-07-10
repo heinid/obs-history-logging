@@ -114,24 +114,41 @@ export interface AliasCandidate {
 	exact: boolean;
 }
 
+// The last token of a spaced (Latin-script) name — usually the surname —
+// e.g. "Caesar" out of "Gaius Julius Caesar". Null for unspaced names.
+function lastNameToken(alias: string): string | null {
+	if (!/[A-Za-z]/.test(alias)) return null;
+	const tokens = alias.split(/\s+/).filter(Boolean);
+	if (tokens.length < 2) return null;
+	const last = tokens[tokens.length - 1];
+	return last.length >= 3 ? last : null;
+}
+
 // Multi-candidate completion: every alias (any language) that starts with a
 // fragment the text before the cursor ends with. Longer matched fragments
 // rank first, exact matches before prefixes. Returns [] inside an unclosed
-// `{db …}` marker.
+// `{db …}` marker. With `lastToken`, the final word of a spaced name also
+// completes on its own (typing a surname finds the full-name entry).
 export function aliasCandidates(
 	before: string,
 	entities: Iterable<EntityEntry>,
 	limit = 8,
-	conservative = false
+	conservative = false,
+	lastToken = false
 ): AliasCandidate[] {
 	const open = before.lastIndexOf("{db");
 	if (open >= 0 && before.indexOf("}", open) < 0) return [];
 	const out: AliasCandidate[] = [];
 	for (const entity of entities) {
 		let best: AliasCandidate | null = null;
+		const variants: string[] = [];
 		for (const l of entity.labels) {
-			const alias = l.text;
-			if (!alias || alias.length < 2) continue;
+			if (l.text) variants.push(l.text);
+			const tok = lastToken ? lastNameToken(l.text) : null;
+			if (tok && !variants.includes(tok)) variants.push(tok);
+		}
+		for (const alias of variants) {
+			if (alias.length < 2) continue;
 			// Longest suffix of `before` that is a prefix of `alias`.
 			let n = Math.min(alias.length, before.length);
 			for (; n > 0; n--)

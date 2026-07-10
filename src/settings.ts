@@ -19,6 +19,9 @@ export interface HistoryLoggingSettings {
 	// `//` trigger always works): "normal" = CJK 1 char / Latin 2,
 	// "conservative" = CJK 2 / Latin 3, "off" = only `//`.
 	completeAutoTrigger: "normal" | "conservative" | "off";
+	// Also auto-complete on the last word of a spaced (Latin-script) name —
+	// typing just the surname finds the full-name entry.
+	completeLastToken: boolean;
 	// Wikipedia language edition for the ⌛ menu's year-page item.
 	wikiLang: string;
 	// User-defined ⌛ menu actions (name + URL template).
@@ -31,6 +34,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	fillEmptyPeriods: false,
 	entityLangs: ["ja", "zh", "en"],
 	completeAutoTrigger: "normal",
+	completeLastToken: true,
 	wikiLang: "ja",
 	evActions: [],
 };
@@ -129,6 +133,20 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.completeAutoTrigger =
 							value as "normal" | "conservative" | "off";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Complete on surname")
+			.setDesc(
+				"For spaced names (e.g. Gaius Julius Caesar), typing just the last word (Caesar) also finds the entry."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.completeLastToken)
+					.onChange(async (value) => {
+						this.plugin.settings.completeLastToken = value;
 						await this.plugin.saveSettings();
 					})
 			);
