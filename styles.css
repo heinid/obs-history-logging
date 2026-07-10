@@ -915,6 +915,15 @@
 	font-weight: 600;
 	color: var(--text-normal);
 }
+/* Plain-text selection menu: fixed width with right-aligned hints, so rows
+   of different lengths still form a clean rectangle. */
+.hl-le-textmenu {
+	width: 250px;
+}
+.hl-le-textmenu .hl-le-suggest-meta {
+	margin-left: auto;
+	flex-shrink: 0;
+}
 .hl-le-pop-empty {
 	padding: 8px 10px;
 	color: var(--text-faint);

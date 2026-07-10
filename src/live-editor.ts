@@ -692,6 +692,7 @@ export class LiveEditor {
 		markCount: number
 	): void {
 		const pop = this.openPopover(e.clientX, e.clientY);
+		pop.addClass("hl-le-textmenu");
 		const mk = (icon: string, label: string, hint = ""): HTMLDivElement => {
 			const row = pop.createDiv({ cls: "hl-le-pop-item" });
 			row.createSpan({ cls: "hl-le-pop-icon", text: icon });
