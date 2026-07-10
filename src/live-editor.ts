@@ -313,7 +313,9 @@ export class LiveEditor {
 			}),
 		});
 
-		this.suggestEl = container.createDiv({ cls: "hl-le-suggest" });
+		// Mounted on the document body with fixed positioning so it can
+		// overflow the hosting modal instead of being clipped by it.
+		this.suggestEl = document.body.createDiv({ cls: "hl-le-suggest" });
 		this.suggestEl.hide();
 
 		// Esc with the dropdown open must only close the dropdown — captured
@@ -370,6 +372,7 @@ export class LiveEditor {
 
 	destroy(): void {
 		this.closePopover();
+		this.suggestEl.remove();
 		this.view.destroy();
 	}
 
@@ -465,19 +468,24 @@ export class LiveEditor {
 			hint.createSpan({ text: label });
 		}
 
-		// Anchor under the cursor.
+		// Anchor under the cursor, in viewport coordinates; flip above the
+		// line when there is not enough room below.
 		const sel = this.view.state.selection.main;
 		const coords = this.view.coordsAtPos(sel.head);
-		const box = this.container.getBoundingClientRect();
-		if (coords) {
-			this.suggestEl.style.left = `${Math.max(
-				0,
-				Math.min(coords.left - box.left, box.width - 280)
-			)}px`;
-			this.suggestEl.style.top = `${coords.bottom - box.top + 6}px`;
-		}
 		this.suggestOpen = true;
 		this.suggestEl.show();
+		if (coords) {
+			const rect = this.suggestEl.getBoundingClientRect();
+			const left = Math.max(
+				8,
+				Math.min(coords.left, window.innerWidth - rect.width - 8)
+			);
+			let top = coords.bottom + 6;
+			if (top + rect.height > window.innerHeight - 8)
+				top = Math.max(8, coords.top - rect.height - 6);
+			this.suggestEl.style.left = `${left}px`;
+			this.suggestEl.style.top = `${top}px`;
+		}
 	}
 
 	private moveSuggestion(delta: number): boolean {
@@ -548,10 +556,11 @@ export class LiveEditor {
 
 	private openPopover(x: number, y: number): HTMLDivElement {
 		this.closePopover();
-		const box = this.container.getBoundingClientRect();
-		const pop = this.container.createDiv({ cls: "hl-le-pop" });
-		pop.style.left = `${Math.max(0, Math.min(x - box.left, box.width - 300))}px`;
-		pop.style.top = `${y - box.top + 4}px`;
+		// On the document body with fixed positioning, so it can overflow the
+		// hosting modal.
+		const pop = document.body.createDiv({ cls: "hl-le-pop" });
+		pop.style.left = `${Math.max(8, Math.min(x, window.innerWidth - 320))}px`;
+		pop.style.top = `${Math.max(8, Math.min(y + 4, window.innerHeight - 40))}px`;
 		this.popoverEl = pop;
 		document.addEventListener("mousedown", this.onDocDown, true);
 		document.addEventListener("keydown", this.onDocKey, true);
