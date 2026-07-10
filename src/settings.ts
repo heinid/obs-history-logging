@@ -26,6 +26,14 @@ export interface HistoryLoggingSettings {
 	wikiLang: string;
 	// User-defined ⌛ menu actions (name + URL template).
 	evActions: EvAction[];
+	// Curated timeline views for the ⌛ menu's "Show on timeline with…"
+	// submenu: a saved single-track profile or a saved multi-track layout.
+	evMenuViews: EvMenuView[];
+}
+
+export interface EvMenuView {
+	kind: "profile" | "layout";
+	name: string;
 }
 
 export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
@@ -37,6 +45,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	completeLastToken: true,
 	wikiLang: "ja",
 	evActions: [],
+	evMenuViews: [],
 };
 
 export const EVENTS_FILE = "events.md";
@@ -222,5 +231,70 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 				this.display();
 			})
 		);
+
+		new Setting(containerEl)
+			.setName("⌛ menu timeline views")
+			.setDesc(
+				"Saved profiles or layouts added here appear under the ⌛ menu's \"Show on timeline with…\" submenu. Leave empty to hide the submenu."
+			)
+			.setHeading();
+		const viewsEl = containerEl.createDiv();
+		void this.renderEvMenuViews(viewsEl);
+	}
+
+	private async renderEvMenuViews(host: HTMLElement): Promise<void> {
+		const [profiles, layouts] = await Promise.all([
+			this.plugin.store.readProfiles(),
+			this.plugin.store.readLayouts(),
+		]);
+		host.empty();
+		const views = this.plugin.settings.evMenuViews;
+		views.forEach((v, i) => {
+			new Setting(host)
+				.setName(v.name)
+				.setDesc(v.kind === "profile" ? "Profile" : "Layout")
+				.addExtraButton((b) =>
+					b
+						.setIcon("trash")
+						.setTooltip("Remove")
+						.onClick(async () => {
+							views.splice(i, 1);
+							await this.plugin.saveSettings();
+							void this.renderEvMenuViews(host);
+						})
+				);
+		});
+		const candidates: EvMenuView[] = [
+			...profiles.map((p): EvMenuView => ({ kind: "profile", name: p.name })),
+			...layouts.map((l): EvMenuView => ({ kind: "layout", name: l.name })),
+		].filter(
+			(c) => !views.some((v) => v.kind === c.kind && v.name === c.name)
+		);
+		if (!candidates.length) {
+			if (!views.length)
+				host.createDiv({
+					cls: "setting-item-description",
+					text: "No saved profiles or layouts yet.",
+				});
+			return;
+		}
+		let picked = 0;
+		new Setting(host)
+			.addDropdown((d) => {
+				candidates.forEach((c, i) =>
+					d.addOption(
+						String(i),
+						`${c.name} (${c.kind === "profile" ? "profile" : "layout"})`
+					)
+				);
+				d.setValue("0").onChange((v) => (picked = Number(v)));
+			})
+			.addButton((b) =>
+				b.setButtonText("+ add").onClick(async () => {
+					views.push(candidates[picked]);
+					await this.plugin.saveSettings();
+					void this.renderEvMenuViews(host);
+				})
+			);
 	}
 }

@@ -40,7 +40,11 @@ async function openEvMenuAsync(
 	bare?: BareTagSource
 ): Promise<void> {
 	const decoded = parseYearTag(tag);
-	const layouts = decoded ? await plugin.store.readLayouts() : [];
+	const views = plugin.settings.evMenuViews;
+	const layouts =
+		decoded && views.some((v) => v.kind === "layout")
+			? await plugin.store.readLayouts()
+			: [];
 	const menu = new Menu();
 
 	if (id)
@@ -76,23 +80,43 @@ async function openEvMenuAsync(
 				.setIcon("history")
 				.onClick(() => void plugin.revealOnTimeline(id, tag))
 		);
-		if (layouts.length)
+		if (views.length)
 			menu.addItem((item) => {
-				item.setTitle("以布局显示…").setIcon("layout-grid");
+				item.setTitle("Show on timeline with…").setIcon("layout-grid");
 				// setSubmenu is public API since Obsidian 1.4 but missing
 				// from the bundled typings; reach it structurally.
 				const sub = (
 					item as unknown as { setSubmenu(): Menu }
 				).setSubmenu();
-				for (const layout of layouts)
-					sub.addItem((si) =>
-						si
-							.setTitle(layout.name)
-							.setIcon("gantt-chart")
-							.onClick(() =>
+				for (const v of views) {
+					// A profile entry is a single-track layout on the fly; a
+					// layout entry is looked up in layouts.md by name.
+					const layout =
+						v.kind === "profile"
+							? {
+									name: v.name,
+									panes: [
+										{
+											filter: "",
+											lens: "",
+											groupBy: "century",
+											profile: v.name,
+										},
+									],
+							  }
+							: layouts.find((l) => l.name === v.name);
+					sub.addItem((si) => {
+						si.setTitle(v.name).setIcon(
+							v.kind === "profile" ? "list" : "gantt-chart"
+						);
+						if (layout)
+							si.onClick(() =>
 								void plugin.revealOnLayout(layout, id, tag)
-							)
-					);
+							);
+						else
+							si.setDisabled(true);
+					});
+				}
 			});
 	}
 
