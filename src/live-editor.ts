@@ -336,6 +336,20 @@ export class LiveEditor {
 			);
 	}
 
+	// For the hosting modal's Escape handling: close the completion dropdown
+	// or right-click popover if one is open and report whether anything was
+	// closed (Escape must not fall through to closing the whole modal then).
+	closeSuggestIfOpen(): boolean {
+		if (this.popoverEl) {
+			this.closePopover();
+			this.view.focus();
+			return true;
+		}
+		if (!this.suggestOpen) return false;
+		this.closeSuggest();
+		return true;
+	}
+
 	getValue(): string {
 		return this.view.state.doc.toString();
 	}

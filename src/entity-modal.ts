@@ -88,6 +88,13 @@ export class EntityModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		// Escape closes the notes editor's completion dropdown / popover
+		// first; only a second Escape (nothing open) closes the modal.
+		this.scope.register([], "Escape", () => {
+			if (this.notes?.closeSuggestIfOpen()) return false;
+			this.close();
+			return false;
+		});
 		this.types = await this.plugin.store.readDbTypes();
 		if (!this.entity.type) this.entity.type = this.types[0]?.name ?? "";
 		this.cards = toCards(this.entity, this.plugin.settings.entityLangs);

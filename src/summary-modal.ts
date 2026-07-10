@@ -37,6 +37,14 @@ export class SummaryModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		// Escape closes the completion dropdown / popover first; only a second
+		// Escape (nothing open) closes the modal. Registered on the modal's
+		// scope because Obsidian handles Escape before any DOM listener.
+		this.scope.register([], "Escape", () => {
+			if (this.editor?.closeSuggestIfOpen()) return false;
+			this.close();
+			return false;
+		});
 		const existing = await this.plugin.store.getEvent(this.id);
 		this.entities = [...(await this.plugin.store.readEntities()).values()];
 		this.types = await this.plugin.store.readDbTypes();
