@@ -183,6 +183,13 @@ export class EntityBrowserView extends ItemView {
 		this.render();
 	}
 
+	// Section switches don't take part in back/forward history — the arrows
+	// only walk entity-page navigation. Replace the current frame instead.
+	private replace(frame: NavFrame): void {
+		this.stack[this.pos] = frame;
+		this.render();
+	}
+
 	private go(delta: number): void {
 		const next = this.pos + delta;
 		if (next < 0 || next >= this.stack.length) return;
@@ -217,7 +224,7 @@ export class EntityBrowserView extends ItemView {
 			this.tabEls.set(key, el);
 			el.addEventListener("click", () => {
 				if (this.current().kind === key) return;
-				this.push(
+				this.replace(
 					key === "entities"
 						? {
 								kind: "entities",
@@ -683,7 +690,7 @@ export class EntityBrowserView extends ItemView {
 		});
 		if (count)
 			badge.addEventListener("click", () =>
-				this.push({
+				this.replace({
 					kind: "entities",
 					query: "",
 					types: [t.name],
@@ -819,7 +826,7 @@ export class EntityBrowserView extends ItemView {
 	// External entry points (commands) land on a specific section.
 	showSection(section: "entities" | "types"): void {
 		if (this.current().kind === section) return;
-		this.push(
+		this.replace(
 			section === "types"
 				? { kind: "types", scroll: 0 }
 				: {
