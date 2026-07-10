@@ -15,6 +15,10 @@ export interface HistoryLoggingSettings {
 	// Ordered preset language codes for entity language cards; the first is
 	// the default for new entries.
 	entityLangs: string[];
+	// How the entity completion dropdown fires while typing (the explicit
+	// `//` trigger always works): "normal" = CJK 1 char / Latin 2,
+	// "conservative" = CJK 2 / Latin 3, "off" = only `//`.
+	completeAutoTrigger: "normal" | "conservative" | "off";
 	// Wikipedia language edition for the ⌛ menu's year-page item.
 	wikiLang: string;
 	// User-defined ⌛ menu actions (name + URL template).
@@ -26,6 +30,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	hideTagsInPreview: true,
 	fillEmptyPeriods: false,
 	entityLangs: ["ja", "zh", "en"],
+	completeAutoTrigger: "normal",
 	wikiLang: "ja",
 	evActions: [],
 };
@@ -106,6 +111,24 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 						this.plugin.settings.entityLangs = langs.length
 							? langs
 							: ["ja", "zh", "en"];
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Entity completion while typing")
+			.setDesc(
+				"When the completion dropdown opens as you type. The explicit // trigger (type two slashes, then a fragment) always works. Normal: 1 CJK char / 2 Latin letters. Conservative: 2 CJK chars / 3 Latin letters. Off: only //."
+			)
+			.addDropdown((d) =>
+				d
+					.addOption("normal", "Normal")
+					.addOption("conservative", "Conservative")
+					.addOption("off", "Only //")
+					.setValue(this.plugin.settings.completeAutoTrigger)
+					.onChange(async (value) => {
+						this.plugin.settings.completeAutoTrigger =
+							value as "normal" | "conservative" | "off";
 						await this.plugin.saveSettings();
 					})
 			);

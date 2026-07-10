@@ -100,6 +100,7 @@ export class SummaryModal extends Modal {
 				entities: () => this.entities,
 				typeColor: (name) => this.typeColor(name),
 				onCreate: (word, apply) => this.createEntity(word, apply),
+				autoTrigger: () => this.plugin.settings.completeAutoTrigger,
 			},
 		});
 

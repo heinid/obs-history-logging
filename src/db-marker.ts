@@ -121,7 +121,8 @@ export interface AliasCandidate {
 export function aliasCandidates(
 	before: string,
 	entities: Iterable<EntityEntry>,
-	limit = 8
+	limit = 8,
+	conservative = false
 ): AliasCandidate[] {
 	const open = before.lastIndexOf("{db");
 	if (open >= 0 && before.indexOf("}", open) < 0) return [];
@@ -138,8 +139,16 @@ export function aliasCandidates(
 			if (n === 0) continue;
 			const matched = alias.slice(0, n);
 			// A single Latin letter matches too much; CJK chars carry enough
-			// signal on their own.
-			if (matched.length < 2 && /^[\x00-\xff]+$/.test(matched)) continue;
+			// signal on their own. Conservative mode raises both thresholds
+			// (Latin 3, CJK 2) for vaults where the dropdown fires too often.
+			const min = /^[\x00-\xff]+$/.test(matched)
+				? conservative
+					? 3
+					: 2
+				: conservative
+				? 2
+				: 1;
+			if (matched.length < min) continue;
 			// Word boundary for spaced scripts.
 			const prev = before[before.length - n - 1];
 			if (

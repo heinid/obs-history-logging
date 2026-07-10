@@ -48,6 +48,10 @@ export interface LiveEditorOptions {
 		typeColor: (typeName: string) => string | null;
 		// "＋ New entity" flow: open the entity editor, then call apply.
 		onCreate: (word: string, apply: (e: EntityEntry) => void) => void;
+		// How the completion dropdown fires while typing (`//` always works):
+		// "normal" (CJK 1 char / Latin 2), "conservative" (CJK 2 / Latin 3),
+		// or "off" (only the explicit `//` trigger). Default "normal".
+		autoTrigger?: () => "normal" | "conservative" | "off";
 	};
 }
 
@@ -350,7 +354,16 @@ export class LiveEditor {
 			return;
 		}
 		this.triggerFrom = null;
-		this.cands = aliasCandidates(before, ann.entities());
+		const mode = ann.autoTrigger?.() ?? "normal";
+		this.cands =
+			mode === "off"
+				? []
+				: aliasCandidates(
+						before,
+						ann.entities(),
+						undefined,
+						mode === "conservative"
+				  );
 		if (!this.cands.length) {
 			this.closeSuggest();
 			return;
