@@ -316,6 +316,20 @@ export class LiveEditor {
 		this.suggestEl = container.createDiv({ cls: "hl-le-suggest" });
 		this.suggestEl.hide();
 
+		// Esc with the dropdown open must only close the dropdown — captured
+		// here so the event never bubbles up to Obsidian's modal scope (which
+		// would close the whole modal).
+		container.addEventListener(
+			"keydown",
+			(e) => {
+				if (e.key !== "Escape" || !this.suggestOpen) return;
+				e.preventDefault();
+				e.stopPropagation();
+				this.closeSuggest();
+			},
+			true
+		);
+
 		if (opts.annotate)
 			this.view.dom.addEventListener("contextmenu", (e) =>
 				this.contextMenu(e)

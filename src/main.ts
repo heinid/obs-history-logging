@@ -14,6 +14,10 @@ import { DataStore } from "./data-store";
 import { createLivePreviewExtension } from "./live-preview";
 import { createReadingProcessor } from "./reading-view";
 import { addEventAtCursor } from "./commands";
+import {
+	createTagClickExtension,
+	registerTagContextMenu,
+} from "./tag-click";
 import { SummaryModal } from "./summary-modal";
 import { TIMELINE_VIEW_TYPE, TimelineView } from "./timeline-view";
 import { ERA_MANAGER_VIEW_TYPE, EraManagerView } from "./era-manager-view";
@@ -34,7 +38,9 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.store = new DataStore(this.app, () => this.settings.dataFolder);
 
 		this.registerEditorExtension(createLivePreviewExtension(this));
+		this.registerEditorExtension(createTagClickExtension(this));
 		this.registerMarkdownPostProcessor(createReadingProcessor(this));
+		registerTagContextMenu(this);
 		this.addSettingTab(new HistoryLoggingSettingTab(this.app, this));
 
 		this.registerView(

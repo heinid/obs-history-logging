@@ -6,28 +6,47 @@
 import { Menu, Notice } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { parseYearTag } from "./year-tag";
+import { addEventForTag } from "./commands";
 import {
 	fillActionUrl,
 	wikipediaYearTitle,
 	wikipediaYearUrl,
 } from "./ev-actions";
 
+// Source location of a bare (not yet `{ev …}`-wrapped) year tag; lets the
+// menu offer summary editing with deferred event creation.
+export interface BareTagSource {
+	filePath: string;
+	offset: number;
+}
+
 export function openEvMenu(
 	plugin: HistoryLoggingPlugin,
 	evt: MouseEvent,
 	id: string,
 	tag: string,
-	tracks: string[] = []
+	tracks: string[] = [],
+	bare?: BareTagSource
 ): void {
 	const decoded = parseYearTag(tag);
 	const menu = new Menu();
 
-	menu.addItem((item) =>
-		item
-			.setTitle("View / edit summary")
-			.setIcon("pencil")
-			.onClick(() => plugin.openSummary(id, tag))
-	);
+	if (id)
+		menu.addItem((item) =>
+			item
+				.setTitle("View / edit summary")
+				.setIcon("pencil")
+				.onClick(() => plugin.openSummary(id, tag))
+		);
+	else if (bare)
+		menu.addItem((item) =>
+			item
+				.setTitle("Add summary")
+				.setIcon("pencil")
+				.onClick(() =>
+					void addEventForTag(plugin, bare.filePath, bare.offset, tag)
+				)
+		);
 
 	if (decoded) {
 		const lang = plugin.settings.wikiLang;
@@ -46,6 +65,15 @@ export function openEvMenu(
 				.onClick(() => void plugin.revealOnTimeline(id, tag))
 		);
 	}
+
+	const search = globalSearch(plugin);
+	if (search)
+		menu.addItem((item) =>
+			item
+				.setTitle("Search tag")
+				.setIcon("search")
+				.onClick(() => search.openGlobalSearch(`tag:${tag}`))
+		);
 
 	const actions = plugin.settings.evActions.filter(
 		(a) => a.name && a.url
@@ -72,4 +100,19 @@ export function openEvMenu(
 	}
 
 	menu.showAtMouseEvent(evt);
+}
+
+// Obsidian's core global-search plugin has no public typings; reach it
+// through a narrow structural cast.
+function globalSearch(
+	plugin: HistoryLoggingPlugin
+): { openGlobalSearch(query: string): void } | null {
+	const app = plugin.app as unknown as {
+		internalPlugins?: {
+			getEnabledPluginById?(
+				id: string
+			): { openGlobalSearch(query: string): void } | null;
+		};
+	};
+	return app.internalPlugins?.getEnabledPluginById?.("global-search") ?? null;
 }

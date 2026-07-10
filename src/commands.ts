@@ -8,7 +8,7 @@ import type { TimelineEntry } from "./scan";
 const TAG_TOKEN_RE = new RegExp(YEAR_TAG_SRC, "g");
 
 // Find the year tag whose span contains the cursor column, if any.
-function tagAtCursor(
+export function tagAtCursor(
 	line: string,
 	ch: number
 ): { tag: string; from: number; to: number } | null {
@@ -74,8 +74,29 @@ export async function addEventForEntry(
 		plugin.openSummary(evId, entry.tag, (s) => onSaved?.(evId, s));
 		return;
 	}
+	await addEventForTag(
+		plugin,
+		entry.filePath,
+		entry.offset,
+		entry.tag,
+		onWrapped,
+		onSaved
+	);
+}
 
-	const file = plugin.app.vault.getAbstractFileByPath(entry.filePath);
+// Open the summary editor for a bare year tag at a known offset in a note.
+// Deferred creation: nothing is written to the source note until the summary
+// actually gets content, so opening the editor and closing it empty leaves
+// no trace.
+export async function addEventForTag(
+	plugin: HistoryLoggingPlugin,
+	filePath: string,
+	offset: number,
+	tag: string,
+	onWrapped?: () => void,
+	onSaved?: (evId: string, summary: string) => void
+): Promise<void> {
+	const file = plugin.app.vault.getAbstractFileByPath(filePath);
 	if (!(file instanceof TFile)) {
 		new Notice("Could not find the source note");
 		return;
@@ -84,12 +105,9 @@ export async function addEventForEntry(
 	const content = (await plugin.app.vault.read(file)).replace(/\r\n/g, "\n");
 	const id = generateId((c) => evIdsIn(content).has(c));
 
-	// Deferred creation: nothing is written to the source note until the
-	// summary actually gets content, so opening the editor and closing it
-	// empty leaves no trace (the card keeps its "＋" state).
 	const ensure = async (): Promise<boolean> => {
 		const cur = (await plugin.app.vault.read(file)).replace(/\r\n/g, "\n");
-		const next = wrapTagAt(cur, entry.offset, entry.offset + entry.tag.length, id);
+		const next = wrapTagAt(cur, offset, offset + tag.length, id);
 		if (next === null) {
 			new Notice("Could not add an event to this tag");
 			return false;
@@ -99,5 +117,5 @@ export async function addEventForEntry(
 		return true;
 	};
 
-	plugin.openSummary(id, entry.tag, (s) => onSaved?.(id, s), ensure);
+	plugin.openSummary(id, tag, (s) => onSaved?.(id, s), ensure);
 }
