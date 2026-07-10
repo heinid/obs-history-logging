@@ -1381,3 +1381,113 @@ input.hl-tag-chip-input:focus-visible {
 	width: 24em;
 	max-width: 100%;
 }
+
+/* --- Entity browser ---------------------------------------------------- */
+.hl-entity-browser {
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	overflow: hidden;
+}
+.hl-eb-bar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	flex: 0 0 auto;
+}
+.hl-eb-search {
+	flex: 1 1 12em;
+	min-width: 8em;
+}
+.hl-eb-pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.hl-eb-pill {
+	cursor: pointer;
+	user-select: none;
+}
+.hl-eb-select {
+	flex: 0 0 auto;
+}
+.hl-eb-add {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+.hl-eb-count {
+	flex: 0 0 auto;
+	padding: 4px 14px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+.hl-eb-list {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	padding: 0 6px 12px;
+}
+.hl-eb-spacer {
+	position: relative;
+}
+.hl-eb-row {
+	position: absolute;
+	left: 0;
+	right: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 8px;
+	border-radius: 6px;
+	cursor: pointer;
+	overflow: hidden;
+}
+.hl-eb-row:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-eb-name {
+	flex: 0 0 auto;
+	font-weight: 600;
+	max-width: 40%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hl-eb-row-pill {
+	flex: 0 0 auto;
+}
+.hl-eb-hint {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+.hl-eb-badge {
+	flex: 0 0 auto;
+	margin-left: auto;
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: var(--font-ui-smaller);
+	font-family: var(--font-monospace);
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.hl-eb-badge:not(.is-zero):hover {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+.hl-eb-badge.is-zero {
+	color: var(--text-faint);
+	background: transparent;
+	border: 1px dashed var(--background-modifier-border);
+}
+.hl-eb-empty {
+	padding: 24px 12px;
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+}

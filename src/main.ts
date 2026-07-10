@@ -29,6 +29,10 @@ import {
 	EntitySuggestModal,
 } from "./entity-modal";
 import { ENTITY_VIEW_TYPE, EntityView } from "./entity-view";
+import {
+	ENTITY_BROWSER_VIEW_TYPE,
+	EntityBrowserView,
+} from "./entity-browser-view";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
@@ -56,8 +60,21 @@ export default class HistoryLoggingPlugin extends Plugin {
 			ENTITY_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new EntityView(leaf, this)
 		);
+		this.registerView(
+			ENTITY_BROWSER_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new EntityBrowserView(leaf, this)
+		);
+
+		// Open views cache file paths from the last scan; a rename would leave
+		// their jump-to-source stale until the next manual refresh.
+		this.registerEvent(
+			this.app.vault.on("rename", () => void this.refreshTimelines())
+		);
 		this.addRibbonIcon("history", "Open history timeline", () =>
 			this.activateTimeline("tab")
+		);
+		this.addRibbonIcon("library", "Open entity browser", () =>
+			void this.browseEntities()
 		);
 
 		this.addCommand({
@@ -101,6 +118,11 @@ export default class HistoryLoggingPlugin extends Plugin {
 			callback: () => void this.browseEntities(),
 		});
 		this.addCommand({
+			id: "search-entities",
+			name: "Search entities (quick jump)",
+			callback: () => void this.searchEntities(),
+		});
+		this.addCommand({
 			id: "manage-entity-types",
 			name: "Manage entity types",
 			callback: () => new DbTypeManagerModal(this.app, this).open(),
@@ -111,6 +133,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.app.workspace.detachLeavesOfType(TIMELINE_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(ERA_MANAGER_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(ENTITY_VIEW_TYPE);
+		this.app.workspace.detachLeavesOfType(ENTITY_BROWSER_VIEW_TYPE);
 	}
 
 	// Open the timeline either as a full main-pane tab (default) or a narrow
@@ -285,7 +308,26 @@ export default class HistoryLoggingPlugin extends Plugin {
 		workspace.revealLeaf(leaf);
 	}
 
+	// Open (or focus) the entity browser tab.
 	async browseEntities(): Promise<void> {
+		const { workspace } = this.app;
+		const existing = workspace.getLeavesOfType(ENTITY_BROWSER_VIEW_TYPE)[0];
+		if (existing) {
+			workspace.revealLeaf(existing);
+			if (existing.view instanceof EntityBrowserView)
+				await existing.view.reload();
+			return;
+		}
+		const leaf = workspace.getLeaf("tab");
+		await leaf.setViewState({
+			type: ENTITY_BROWSER_VIEW_TYPE,
+			active: true,
+		});
+		workspace.revealLeaf(leaf);
+	}
+
+	// Quick fuzzy jump straight to one entity's page.
+	async searchEntities(): Promise<void> {
 		const entities = [...(await this.store.readEntities()).values()];
 		if (!entities.length) {
 			new Notice(

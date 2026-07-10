@@ -75,7 +75,7 @@ export interface LiveEditorOptions {
 // Grey disambiguation text for an entity row (same-name entries must be
 // tellable apart): other word forms first, then tags, then the first line
 // of the notes, and the id as a last resort.
-function entityHint(ent: EntityEntry, shown: string): string {
+export function entityHint(ent: EntityEntry, shown: string): string {
 	const others = ent.labels
 		.map((l) => l.text)
 		.filter((t) => t && t !== shown)
