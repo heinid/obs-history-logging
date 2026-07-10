@@ -57,6 +57,21 @@ export interface LiveEditorOptions {
 	};
 }
 
+// Grey disambiguation text for an entity row (same-name entries must be
+// tellable apart): other word forms first, then tags, then the first line
+// of the notes, and the id as a last resort.
+function entityHint(ent: EntityEntry, shown: string): string {
+	const others = ent.labels
+		.map((l) => l.text)
+		.filter((t) => t && t !== shown)
+		.slice(0, 3);
+	if (others.length) return others.join(" · ");
+	if (ent.tags.length) return ent.tags.slice(0, 3).join(" · ");
+	const line = ent.body.split("\n").find((l) => l.trim());
+	if (line) return line.trim().slice(0, 24);
+	return ent.id;
+}
+
 class DbRefWidget extends WidgetType {
 	constructor(
 		private id: string,
@@ -393,13 +408,9 @@ export class LiveEditor {
 				pill.style.color = color;
 				pill.style.borderColor = color;
 			}
-			const others = c.entity.labels
-				.map((l) => l.text)
-				.filter((t) => t !== c.alias)
-				.slice(0, 3)
-				.join(" · ");
-			if (others)
-				row.createSpan({ cls: "hl-le-suggest-meta", text: others });
+			const hint = entityHint(c.entity, c.alias);
+			if (hint)
+				row.createSpan({ cls: "hl-le-suggest-meta", text: hint });
 			row.addEventListener("mousedown", (e) => {
 				e.preventDefault();
 				this.selected = i;
@@ -574,6 +585,9 @@ export class LiveEditor {
 				const meta = row.querySelector(".hl-le-suggest-meta");
 				(meta as HTMLElement | null)?.style.setProperty("color", color);
 			}
+			const hint = entityHint(ent, displayName(ent));
+			if (hint)
+				row.createSpan({ cls: "hl-le-suggest-meta", text: hint });
 			row.addEventListener("mousedown", (ev) => {
 				ev.preventDefault();
 				this.closePopover();
