@@ -174,6 +174,71 @@ export function aliasCandidates(
 	return out.slice(0, limit);
 }
 
+export interface TriggerHit {
+	query: string;
+	start: number; // doc offset of the first slash
+}
+
+// Explicit completion trigger: two consecutive slashes (half- or full-width,
+// mixed) arm a loose search; the query is whatever follows, up to the cursor.
+// Returns null inside an unclosed `{db …}` marker.
+export function triggerQuery(before: string): TriggerHit | null {
+	const m = /[/／][/／]([^/／{}\n]*)$/.exec(before);
+	if (!m) return null;
+	const open = before.lastIndexOf("{db");
+	if (open >= 0 && before.indexOf("}", open) < 0) return null;
+	return { query: m[1], start: m.index };
+}
+
+// Loose matching for the explicit `//` mode: the query hits an alias at its
+// start, at a token start (after a space / ・ / - …), or anywhere as a
+// substring — ranked in that order. No length thresholds: the trigger
+// itself already signals intent.
+export function queryCandidates(
+	query: string,
+	entities: Iterable<EntityEntry>,
+	limit = 8
+): AliasCandidate[] {
+	const q = query.trim().toLowerCase();
+	if (!q) return [];
+	const scored: { c: AliasCandidate; score: number }[] = [];
+	for (const entity of entities) {
+		let best: { c: AliasCandidate; score: number } | null = null;
+		for (const l of entity.labels) {
+			const alias = l.text;
+			if (!alias) continue;
+			const low = alias.toLowerCase();
+			const at = low.indexOf(q);
+			if (at < 0) continue;
+			const score =
+				low === q
+					? 3
+					: at === 0
+					? 2
+					: /[\s・·．.\-–—,，、]/.test(alias[at - 1])
+					? 1
+					: 0;
+			const c: AliasCandidate = {
+				entity,
+				alias,
+				matched: query,
+				exact: low === q,
+			};
+			if (
+				!best ||
+				score > best.score ||
+				(score === best.score && alias.length < best.c.alias.length)
+			)
+				best = { c, score };
+		}
+		if (best) scored.push(best);
+	}
+	scored.sort(
+		(a, b) => b.score - a.score || a.c.alias.length - b.c.alias.length
+	);
+	return scored.slice(0, limit).map((s) => s.c);
+}
+
 // All searchable text of an entity, for fuzzy pickers.
 export function entitySearchText(e: EntityEntry): string {
 	return [

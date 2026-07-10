@@ -33,6 +33,8 @@ import {
 	dbMarkersToHtml,
 	aliasAtCursor,
 	aliasCandidates,
+	queryCandidates,
+	triggerQuery,
 } from "../src/db-marker";
 import {
 	wikipediaYearTitle,
@@ -276,6 +278,21 @@ eq("cand latin single char skipped", aliasCandidates("x A", dict), []);
 eq("cand word boundary", aliasCandidates("xAlexander", dict), []);
 eq("cand not inside marker", aliasCandidates("{db q3x8k2p1 希腊", dict), []);
 eq("cand none", aliasCandidates("罗马", dict), []);
+
+// explicit `//` completion: trigger detection + loose matching
+eq("trig none", triggerQuery("just text"), null);
+eq("trig single slash", triggerQuery("a/b"), null);
+eq("trig hit", triggerQuery("xx//Caes"), { query: "Caes", start: 2 });
+eq("trig fullwidth", triggerQuery("／／太"), { query: "太", start: 0 });
+eq("trig mixed", triggerQuery("/／Ju"), { query: "Ju", start: 0 });
+eq("trig newline breaks", triggerQuery("//a\nb"), null);
+eq("trig not inside marker", triggerQuery("{db q3x8k2p1 //希"), null);
+eq("query mid-name token", queryCandidates("the", dict)[0]?.alias, "Alexander the Great");
+eq("query substring", queryCandidates("lexand", dict)[0]?.alias, "Alexander");
+eq("query start beats substring", queryCandidates("alex", dict)[0]?.alias, "Alexander");
+eq("query cjk", queryCandidates("希", dict)[0]?.alias, "希腊");
+eq("query none", queryCandidates("罗马", dict), []);
+eq("query empty", queryCandidates("  ", dict), []);
 
 // ⌛ menu: wikipedia year pages + action URL templates
 const y1274 = parseYearTag("#ad/12/7/4")!;

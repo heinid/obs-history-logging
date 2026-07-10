@@ -22,6 +22,8 @@ import { EntityEntry, displayName } from "./db-format";
 import {
 	AliasCandidate,
 	aliasCandidates,
+	queryCandidates,
+	triggerQuery,
 	dbRegex,
 	entitySearchText,
 	makeDbMarker,
@@ -211,6 +213,10 @@ export class LiveEditor {
 	private cands: AliasCandidate[] = [];
 	private selected = 0;
 	private fragment = "";
+	// Explicit `//` mode: doc offset of the trigger (replaced on confirm
+	// together with the query); null while in plain automatic completion.
+	private triggerFrom: number | null = null;
+	private suggestOpen = false;
 
 	constructor(
 		private container: HTMLElement,
@@ -259,7 +265,7 @@ export class LiveEditor {
 				{
 					key: "Escape",
 					run: () => {
-						if (!this.cands.length) return false;
+						if (!this.suggestOpen) return false;
 						this.closeSuggest();
 						return true;
 					},
@@ -328,6 +334,22 @@ export class LiveEditor {
 			return;
 		}
 		const before = this.view.state.doc.sliceString(0, sel.head);
+		const trig = triggerQuery(before);
+		if (trig) {
+			// Explicit `//query` mode: loose matching, and even with zero
+			// hits the 「＋ 新建词条」 row stays available.
+			if (!trig.query.trim()) {
+				this.closeSuggest();
+				return;
+			}
+			this.cands = queryCandidates(trig.query, ann.entities());
+			this.triggerFrom = trig.start;
+			this.selected = 0;
+			this.fragment = trig.query.trim();
+			this.renderSuggest();
+			return;
+		}
+		this.triggerFrom = null;
 		this.cands = aliasCandidates(before, ann.entities());
 		if (!this.cands.length) {
 			this.closeSuggest();
@@ -399,11 +421,12 @@ export class LiveEditor {
 			)}px`;
 			this.suggestEl.style.top = `${coords.bottom - box.top + 6}px`;
 		}
+		this.suggestOpen = true;
 		this.suggestEl.show();
 	}
 
 	private moveSuggestion(delta: number): boolean {
-		if (!this.cands.length) return false;
+		if (!this.suggestOpen) return false;
 		const total = this.cands.length + 1; // + "new entity" row
 		this.selected = (this.selected + delta + total) % total;
 		this.renderSuggest();
@@ -412,19 +435,19 @@ export class LiveEditor {
 
 	private acceptSuggestion(): boolean {
 		const ann = this.opts.annotate;
-		if (!ann || !this.cands.length) return false;
+		if (!ann || !this.suggestOpen) return false;
 		const sel = this.view.state.selection.main;
-		if (this.selected === this.cands.length) {
+		const trigFrom = this.triggerFrom;
+		if (this.selected >= this.cands.length) {
 			const word = this.fragment;
-			const from = sel.head - word.length;
+			const from = trigFrom ?? sel.head - word.length;
+			const to = sel.head;
 			this.closeSuggest();
-			ann.onCreate(word, (e) =>
-				this.insertMarker(from, from + word.length, e, word)
-			);
+			ann.onCreate(word, (e) => this.insertMarker(from, to, e, word));
 			return true;
 		}
 		const c = this.cands[this.selected];
-		const from = sel.head - c.matched.length;
+		const from = trigFrom ?? sel.head - c.matched.length;
 		this.closeSuggest();
 		this.insertMarker(from, sel.head, c.entity, c.alias);
 		return true;
@@ -432,6 +455,8 @@ export class LiveEditor {
 
 	private closeSuggest(): void {
 		this.cands = [];
+		this.triggerFrom = null;
+		this.suggestOpen = false;
 		this.suggestEl.hide();
 	}
 
