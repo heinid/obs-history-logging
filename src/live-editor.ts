@@ -17,7 +17,7 @@ import {
 } from "@codemirror/view";
 import { EditorState, Prec } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { Notice, prepareFuzzySearch } from "obsidian";
+import { Notice, prepareFuzzySearch, Scope } from "obsidian";
 import { EntityEntry, displayName } from "./db-format";
 import {
 	AliasCandidate,
@@ -28,6 +28,21 @@ import {
 	entitySearchText,
 	makeDbMarker,
 } from "./db-marker";
+
+// Put an Escape handler in FRONT of a modal's key scope, so it runs before
+// the modal's own Escape-to-close handler. `cb` returns true when it consumed
+// the key (e.g. it closed the completion dropdown); returning true from the
+// scope handler lets the modal's default close run.
+export function registerEscapeFirst(scope: Scope, cb: () => boolean): void {
+	const handler = scope.register([], "Escape", () => (cb() ? false : true));
+	const keys = (scope as unknown as { keys: unknown[] }).keys;
+	if (!Array.isArray(keys)) return;
+	const i = keys.indexOf(handler);
+	if (i > 0) {
+		keys.splice(i, 1);
+		keys.unshift(handler);
+	}
+}
 
 export interface LiveEditorOptions {
 	value: string;
@@ -313,9 +328,12 @@ export class LiveEditor {
 			}),
 		});
 
-		// Mounted on the document body with fixed positioning so it can
-		// overflow the hosting modal instead of being clipped by it.
-		this.suggestEl = document.body.createDiv({ cls: "hl-le-suggest" });
+		// Mounted outside the editor with fixed positioning so it can
+		// overflow the hosting modal instead of being clipped by it. It stays
+		// inside the modal container so focus never leaves the modal.
+		this.suggestEl = this.overlayParent().createDiv({
+			cls: "hl-le-suggest",
+		});
 		this.suggestEl.hide();
 
 		// Esc with the dropdown open must only close the dropdown — captured
@@ -554,11 +572,19 @@ export class LiveEditor {
 		}
 	};
 
+	private overlayParent(): HTMLElement {
+		return (
+			(this.container.closest(".modal-container") as HTMLElement | null) ??
+			document.body
+		);
+	}
+
 	private openPopover(x: number, y: number): HTMLDivElement {
 		this.closePopover();
-		// On the document body with fixed positioning, so it can overflow the
-		// hosting modal.
-		const pop = document.body.createDiv({ cls: "hl-le-pop" });
+		// Fixed positioning so it can overflow the hosting modal, but mounted
+		// inside the modal container so focus (the link picker input) never
+		// leaves the modal.
+		const pop = this.overlayParent().createDiv({ cls: "hl-le-pop" });
 		pop.style.left = `${Math.max(8, Math.min(x, window.innerWidth - 320))}px`;
 		pop.style.top = `${Math.max(8, Math.min(y + 4, window.innerHeight - 40))}px`;
 		this.popoverEl = pop;

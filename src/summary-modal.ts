@@ -3,7 +3,7 @@ import type HistoryLoggingPlugin from "./main";
 import { jumpToEv } from "./jump";
 import { DbType, EntityEntry } from "./db-format";
 import { EntityModal } from "./entity-modal";
-import { LiveEditor } from "./live-editor";
+import { LiveEditor, registerEscapeFirst } from "./live-editor";
 import { generateId } from "./id";
 import { describeYear, parseYearTag } from "./year-tag";
 
@@ -38,13 +38,11 @@ export class SummaryModal extends Modal {
 
 	async onOpen(): Promise<void> {
 		// Escape closes the completion dropdown / popover first; only a second
-		// Escape (nothing open) closes the modal. Registered on the modal's
-		// scope because Obsidian handles Escape before any DOM listener.
-		this.scope.register([], "Escape", () => {
-			if (this.editor?.closeSuggestIfOpen()) return false;
-			this.close();
-			return false;
-		});
+		// Escape (nothing open) closes the modal. Must run before the modal's
+		// own Escape handler in the scope.
+		registerEscapeFirst(this.scope, () =>
+			this.editor?.closeSuggestIfOpen() ?? false
+		);
 		const existing = await this.plugin.store.getEvent(this.id);
 		this.entities = [...(await this.plugin.store.readEntities()).values()];
 		this.types = await this.plugin.store.readDbTypes();

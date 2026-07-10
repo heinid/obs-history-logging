@@ -2,7 +2,7 @@ import { App, FuzzySuggestModal, Modal, Notice, Setting, TFile } from "obsidian"
 import type HistoryLoggingPlugin from "./main";
 import { DbType, EntityEntry, displayName } from "./db-format";
 import { entitySearchText } from "./db-marker";
-import { LiveEditor } from "./live-editor";
+import { LiveEditor, registerEscapeFirst } from "./live-editor";
 
 // One language's slice of an entity, edited as a card: spellings (comma =
 // aliases), transcription, and a pronunciation audio attachment.
@@ -89,12 +89,11 @@ export class EntityModal extends Modal {
 
 	async onOpen(): Promise<void> {
 		// Escape closes the notes editor's completion dropdown / popover
-		// first; only a second Escape (nothing open) closes the modal.
-		this.scope.register([], "Escape", () => {
-			if (this.notes?.closeSuggestIfOpen()) return false;
-			this.close();
-			return false;
-		});
+		// first; only a second Escape (nothing open) closes the modal. Must
+		// run before the modal's own Escape handler in the scope.
+		registerEscapeFirst(this.scope, () =>
+			this.notes?.closeSuggestIfOpen() ?? false
+		);
 		this.types = await this.plugin.store.readDbTypes();
 		if (!this.entity.type) this.entity.type = this.types[0]?.name ?? "";
 		this.cards = toCards(this.entity, this.plugin.settings.entityLangs);
