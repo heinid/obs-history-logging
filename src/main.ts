@@ -2,6 +2,7 @@ import {
 	Editor,
 	FuzzySuggestModal,
 	Notice,
+	normalizePath,
 	Plugin,
 	WorkspaceLeaf,
 } from "obsidian";
@@ -297,12 +298,47 @@ export default class HistoryLoggingPlugin extends Plugin {
 		}).open();
 	}
 
+	// Settings live in `<dataFolder>/settings.json` inside the vault so they
+	// sync with it (`.obsidian` may be excluded from sync). The plugin-folder
+	// data.json is kept as a device-local fallback and migration source.
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const legacy = (await this.loadData()) as
+			| Partial<HistoryLoggingSettings>
+			| null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, legacy);
+		const adapter = this.app.vault.adapter;
+		const folders = [
+			...new Set([this.settings.dataFolder, DEFAULT_SETTINGS.dataFolder]),
+		];
+		for (const folder of folders) {
+			const path = normalizePath(`${folder}/settings.json`);
+			if (!(await adapter.exists(path))) continue;
+			try {
+				const parsed = JSON.parse(
+					await adapter.read(path)
+				) as Partial<HistoryLoggingSettings>;
+				this.settings = Object.assign(
+					{},
+					DEFAULT_SETTINGS,
+					legacy,
+					parsed
+				);
+			} catch (err) {
+				console.error("history-logging: bad settings.json", err);
+			}
+			break;
+		}
 	}
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+		const adapter = this.app.vault.adapter;
+		const folder = normalizePath(this.settings.dataFolder);
+		if (!(await adapter.exists(folder))) await adapter.mkdir(folder);
+		await adapter.write(
+			normalizePath(`${folder}/settings.json`),
+			JSON.stringify(this.settings, null, 2)
+		);
 	}
 }
 
