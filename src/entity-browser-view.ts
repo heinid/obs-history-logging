@@ -189,6 +189,22 @@ export class EntityBrowserView extends ItemView {
 		} else f.scroll = scroll;
 	}
 
+	// Async markdown rendering grows the list after the rebuild, so a single
+	// immediate scrollTop gets clamped near the top. Keep re-applying the
+	// target until the content is tall enough (or a short deadline passes).
+	private restoreBodyScroll(el: HTMLElement, target: number): void {
+		if (target <= 0) return;
+		el.scrollTop = target;
+		const until = Date.now() + 1500;
+		const tick = (): void => {
+			el.scrollTop = target;
+			if (Math.abs(el.scrollTop - target) < 1 || Date.now() > until)
+				return;
+			window.requestAnimationFrame(tick);
+		};
+		window.requestAnimationFrame(tick);
+	}
+
 	private bodyScroll(): number {
 		if (this.current().kind === "entities")
 			return this.scrollEl?.scrollTop ?? 0;
@@ -296,7 +312,7 @@ export class EntityBrowserView extends ItemView {
 				cur,
 				() => this.reload()
 			);
-			this.bodyEl.scrollTop = cur.scroll;
+			this.restoreBodyScroll(this.bodyEl, cur.scroll);
 		}
 		else void this.renderEntity(this.bodyEl, cur);
 		// Refresh the tab title (Obsidian re-reads getDisplayText on layout
