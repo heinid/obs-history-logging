@@ -1864,10 +1864,6 @@ input.hl-tag-chip-input:focus-visible {
 .hl-quiz-card-controls .hl-quiz-early-note {
 	flex: 1 1 100%;
 }
-.hl-practice-layout {
-	flex: 0 0 auto;
-}
-
 .hl-quiz-practice,
 .hl-quiz-session {
 	width: 100%;

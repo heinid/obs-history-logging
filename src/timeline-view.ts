@@ -235,18 +235,6 @@ export class TimelineView extends ItemView {
 		const bar = root.createDiv({ cls: "hl-timeline-bar" });
 		this.barHost = bar;
 		this.bar.render(bar, (row) => {
-			if (
-				this.bar.show === "active-quizzes" ||
-				this.bar.show === "all-quizzes"
-			) {
-				const practice = new ButtonComponent(row);
-				practice.setTooltip("Practice this layout");
-				practice.buttonEl.addClass("hl-practice-layout");
-				practice.buttonEl.addClass("hl-icon-btn");
-				practice.buttonEl.setAttr("aria-label", "Practice this layout");
-				setIcon(practice.buttonEl, "brain");
-				practice.onClick(() => this.practiceLayout());
-			}
 			// Add a comparison column: the new track starts empty and becomes
 			// the one the bar edits.
 			const addBtn = new ButtonComponent(row);
