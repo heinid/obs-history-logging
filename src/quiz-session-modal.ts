@@ -4,6 +4,7 @@ import { EventEntry } from "./types";
 import { QuizEntry, QuizResult, isQuizReady, reviewQuiz } from "./quiz";
 import {
 	clozeRevealsInline,
+	nextReviewLabel,
 	quizAnswer,
 	quizQuestion,
 	quizSchedule,
@@ -70,19 +71,19 @@ export class QuizSessionModal extends Modal {
 		);
 		host.createDiv({
 			cls: "hl-quiz-session-mastery",
-			text: `Mastery ${quiz.progress}/${
+			text: `掌握 ${quiz.progress}/${
 				this.plugin.settings.quizMasterySteps
-			} · ${ready ? "Ready" : "Cooling down"}`,
+			}${ready ? "" : ` · ${nextReviewLabel(quiz)}`}`,
 		});
 		if (!this.revealed) {
 			if (!ready)
 				host.createDiv({
 					cls: "hl-quiz-early-note",
-					text: "Cooling down: remembered will not advance mastery.",
+					text: "提前练习答对不会推进掌握。",
 				});
 			if (quiz.hint) {
 				const details = host.createEl("details", { cls: "hl-quiz-hint" });
-				details.createEl("summary", { text: "Hint" });
+				details.createEl("summary", { text: "提示" });
 				const hint = details.createDiv();
 				void MarkdownRenderer.render(
 					this.app,
@@ -94,7 +95,7 @@ export class QuizSessionModal extends Modal {
 			}
 			const show = host.createEl("button", {
 				cls: "mod-cta hl-quiz-show-answer",
-				text: ready ? "Show answer" : "Practice now",
+				text: ready ? "显示答案" : "立即练习",
 			});
 			show.addEventListener("click", () => {
 				this.revealed = true;
@@ -115,19 +116,16 @@ export class QuizSessionModal extends Modal {
 		}
 		const actions = host.createDiv({ cls: "hl-quiz-review-actions" });
 		for (const [result, label] of [
-			["forgot", "Didn't recall"],
-			["fuzzy", "Partly recalled"],
-			["remembered", "Recalled"],
+			["forgot", "不记得"],
+			["remembered", "记得"],
 		] as [QuizResult, string][]) {
 			const button = actions.createEl("button", { text: label });
 			if (result === "remembered") button.addClass("mod-cta");
 			button.setAttr(
 				"aria-label",
 				result === "forgot"
-					? "Didn't recall — move mastery back one step"
-					: result === "fuzzy"
-					? "Partly recalled — keep mastery and retry soon"
-					: "Recalled — advance mastery when ready"
+					? "不记得：掌握退一级并在短间隔后重试"
+					: "记得：到达练习时间时掌握进一级"
 			);
 			button.addEventListener("click", () => void this.rate(quiz, result));
 		}
@@ -151,20 +149,17 @@ export class QuizSessionModal extends Modal {
 	}
 
 	private renderResults(host: HTMLElement): void {
-		host.createEl("h2", { text: "Practice complete" });
+		host.createEl("h2", { text: "练习完成" });
 		const summary = host.createDiv({ cls: "hl-quiz-session-results" });
-		summary.createDiv({ text: `Recalled ${this.results.remembered}` });
-		summary.createDiv({ text: `Partly recalled ${this.results.fuzzy}` });
-		summary.createDiv({ text: `Didn't recall ${this.results.forgot}` });
+		summary.createDiv({ text: `记得 ${this.results.remembered}` });
+		summary.createDiv({ text: `不记得 ${this.results.forgot}` });
 		if (this.weakIds.size) {
 			const retry = host.createEl("button", {
-				text: `Retest ${this.weakIds.size} weak quiz${
-					this.weakIds.size === 1 ? "" : "zes"
-				}`,
+				text: `重练 ${this.weakIds.size} 道题`,
 			});
 			retry.addEventListener("click", () => this.retestWeak());
 		}
-		const done = host.createEl("button", { cls: "mod-cta", text: "Done" });
+		const done = host.createEl("button", { cls: "mod-cta", text: "完成" });
 		done.addEventListener("click", () => this.close());
 	}
 

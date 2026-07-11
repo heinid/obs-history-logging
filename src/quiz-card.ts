@@ -111,15 +111,15 @@ export function renderTimelineQuizCard(
 		);
 
 		const status = body.createDiv({ cls: "hl-quiz-card-status" });
+		const schedule =
+			quiz.status === "mastered"
+				? "已掌握"
+				: quiz.status === "paused"
+				? "已暂停学习"
+				: nextReviewLabel(quiz);
 		status.createSpan({
-			text: `Mastery ${quiz.progress}/${
-				opts.plugin.settings.quizMasterySteps
-			} · ${
-				quiz.status === "mastered"
-					? "Mastered"
-					: quiz.status === "paused"
-					? "Learning paused"
-					: nextReviewLabel(quiz)
+			text: `掌握 ${quiz.progress}/${opts.plugin.settings.quizMasterySteps}${
+				schedule ? ` · ${schedule}` : ""
 			}`,
 		});
 
@@ -137,7 +137,7 @@ export function renderTimelineQuizCard(
 		if (!revealed) {
 			const controls = body.createDiv({ cls: "hl-quiz-card-controls" });
 			if (quiz.hint && !hintShown) {
-				const hint = controls.createEl("button", { text: "Hint" });
+				const hint = controls.createEl("button", { text: "提示" });
 				hint.addEventListener("click", (e) => {
 					e.stopPropagation();
 					hintShown = true;
@@ -148,8 +148,8 @@ export function renderTimelineQuizCard(
 				cls: "mod-cta",
 				text:
 					quiz.status === "active" && !ready
-						? "Practice now"
-						: "Show answer",
+						? "立即练习"
+						: "显示答案",
 			});
 			show.addEventListener("click", (e) => {
 				e.stopPropagation();
@@ -159,7 +159,7 @@ export function renderTimelineQuizCard(
 			if (quiz.status === "active" && !ready)
 				controls.createSpan({
 					cls: "hl-quiz-early-note",
-					text: "Early success will not advance mastery.",
+					text: "提前练习答对不会推进掌握。",
 				});
 			return;
 		}
@@ -177,19 +177,16 @@ export function renderTimelineQuizCard(
 		const controls = body.createDiv({ cls: "hl-quiz-card-controls" });
 		if (quiz.status === "active") {
 			for (const [result, label] of [
-				["forgot", "Didn't recall"],
-				["fuzzy", "Partly recalled"],
-				["remembered", "Recalled"],
+				["forgot", "不记得"],
+				["remembered", "记得"],
 			] as [QuizResult, string][]) {
 				const button = controls.createEl("button", { text: label });
 				if (result === "remembered") button.addClass("mod-cta");
 				button.setAttr(
 					"aria-label",
 					result === "forgot"
-						? "Didn't recall — move mastery back one step"
-						: result === "fuzzy"
-						? "Partly recalled — keep mastery and retry soon"
-						: "Recalled — advance mastery when ready"
+						? "不记得：掌握退一级并在短间隔后重试"
+						: "记得：到达练习时间时掌握进一级"
 				);
 				button.addEventListener("click", (e) => {
 					e.stopPropagation();
@@ -205,7 +202,7 @@ export function renderTimelineQuizCard(
 		} else if (quiz.status === "mastered") {
 			const revive = controls.createEl("button", {
 				cls: "mod-cta",
-				text: "Learn again",
+				text: "重新学习",
 			});
 			revive.addEventListener("click", (e) => {
 				e.stopPropagation();
@@ -214,14 +211,14 @@ export function renderTimelineQuizCard(
 		} else if (quiz.status === "paused") {
 			const resume = controls.createEl("button", {
 				cls: "mod-cta",
-				text: "Resume learning",
+				text: "继续学习",
 			});
 			resume.addEventListener("click", (e) => {
 				e.stopPropagation();
 				void opts.update(resumeQuiz(quiz));
 			});
 		}
-		const source = controls.createEl("button", { text: "Open source" });
+		const source = controls.createEl("button", { text: "打开来源" });
 		source.addEventListener("click", (e) => {
 			e.stopPropagation();
 			opts.plugin.openSummary(entry.evId ?? "", entry.tag);

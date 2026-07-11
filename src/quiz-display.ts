@@ -62,13 +62,13 @@ export function maskSourceYear(
 }
 
 export function nextReviewLabel(quiz: QuizEntry, now = new Date()): string {
-	if (!quiz.nextReview) return "Ready";
+	if (!quiz.nextReview) return "";
 	const time = Date.parse(quiz.nextReview);
-	if (Number.isNaN(time) || time <= now.getTime()) return "Ready";
+	if (Number.isNaN(time) || time <= now.getTime()) return "";
 	const minutes = Math.ceil((time - now.getTime()) / 60_000);
-	if (minutes < 60) return `In ${minutes} min`;
+	if (minutes < 60) return `${minutes} 分钟后可推进`;
 	const hours = Math.ceil(minutes / 60);
-	if (hours < 24) return `In ${hours} hr`;
+	if (hours < 24) return `${hours} 小时后可推进`;
 	const days = Math.ceil(hours / 24);
-	return `In ${days} day${days === 1 ? "" : "s"}`;
+	return `${days} 天后可推进`;
 }

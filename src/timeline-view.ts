@@ -240,8 +240,8 @@ export class TimelineView extends ItemView {
 				this.bar.show === "all-quizzes"
 			) {
 				const practice = new ButtonComponent(row);
-				practice.setButtonText("Practice this layout");
-				practice.setTooltip("Practice this layout");
+				practice.setButtonText("练习布局");
+				practice.setTooltip("练习此布局中的题目");
 				practice.buttonEl.addClass("hl-practice-layout");
 				practice.onClick(() => this.practiceLayout());
 			}

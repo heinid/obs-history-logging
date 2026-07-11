@@ -110,12 +110,12 @@ export class QuizManagerModal extends Modal {
 			);
 			main.createDiv({
 				cls: "hl-quiz-manage-meta",
-				text: `${quiz.status} · Mastery ${quiz.progress}/${
+				text: `${quiz.status} · 掌握 ${quiz.progress}/${
 					this.plugin.settings.quizMasterySteps
-				} · ${nextReviewLabel(quiz)}`,
+				}${nextReviewLabel(quiz) ? ` · ${nextReviewLabel(quiz)}` : ""}`,
 			});
 
-			const practice = row.createEl("button", { text: "Practice" });
+			const practice = row.createEl("button", { text: "练习" });
 			practice.disabled = quiz.status !== "active";
 			practice.addEventListener("click", () => {
 				this.close();
@@ -134,25 +134,25 @@ export class QuizManagerModal extends Modal {
 				const actions = row.createDiv({ cls: "hl-quiz-inline-actions" });
 				more.remove();
 				if (quiz.status === "mastered")
-					this.actionButton(actions, "Learn again", () =>
+					this.actionButton(actions, "重新学习", () =>
 						this.changeQuiz(reviveQuiz(quiz))
 					);
 				else if (quiz.status === "paused")
-					this.actionButton(actions, "Resume learning", () =>
+					this.actionButton(actions, "继续学习", () =>
 						this.changeQuiz(resumeQuiz(quiz))
 					);
 				else if (quiz.status === "active")
-					this.actionButton(actions, "Pause learning", () =>
+					this.actionButton(actions, "暂停学习", () =>
 						this.changeQuiz(pauseQuiz(quiz))
 					);
-				this.actionButton(actions, "Delete", () => this.confirmDelete(quiz));
+				this.actionButton(actions, "删除", () => this.confirmDelete(quiz));
 			});
 		}
 
 		const foot = host.createDiv({ cls: "hl-modal-foot hl-quiz-manager-foot" });
 		const add = foot.createEl("button", {
 			cls: "mod-cta",
-			text: "New quiz",
+			text: "新建题目",
 		});
 		add.addEventListener("click", () => this.renderEditor(undefined, "year"));
 	}
@@ -261,7 +261,7 @@ export class QuizManagerModal extends Modal {
 					() => undefined
 				);
 				source.readOnly = true;
-				const make = form.createEl("button", { text: "Make cloze" });
+				const make = form.createEl("button", { text: "生成挖空" });
 				make.addEventListener("click", () => {
 					sourceSelection = source.value.slice(
 						source.selectionStart,
@@ -315,18 +315,18 @@ export class QuizManagerModal extends Modal {
 
 		const foot = host.createDiv({ cls: "hl-modal-foot" });
 		if (existing || this.eventQuizzes.length) {
-			const back = foot.createEl("button", { text: "Back" });
+			const back = foot.createEl("button", { text: "返回" });
 			back.addEventListener("click", () => this.renderManager());
 		}
 		const spacer = foot.createSpan({ cls: "hl-modal-foot-spacer" });
 		void spacer;
-		const save = foot.createEl("button", { text: "Save" });
+		const save = foot.createEl("button", { text: "保存" });
 		save.addEventListener("click", () =>
 			void this.saveEditor(existing, kind, question, answer, hint, false)
 		);
 		const practice = foot.createEl("button", {
 			cls: "mod-cta",
-			text: "Save & practice now",
+			text: "保存并练习",
 		});
 		practice.addEventListener("click", () =>
 			void this.saveEditor(existing, kind, question, answer, hint, true)
@@ -423,13 +423,14 @@ export class QuizPracticeModal extends Modal {
 
 		const head = host.createDiv({ cls: "hl-quiz-practice-head" });
 		head.createSpan({
-			text: `Progress ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
+			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
 		});
 		const ready = isQuizReady(quiz);
-		head.createSpan({
-			cls: ready ? "hl-quiz-ready" : "hl-quiz-cooling",
-			text: ready ? "Ready" : nextReviewLabel(quiz),
-		});
+		if (!ready)
+			head.createSpan({
+				cls: "hl-quiz-cooling",
+				text: nextReviewLabel(quiz),
+			});
 
 		const question = host.createDiv({ cls: "hl-quiz-practice-question" });
 		void MarkdownRenderer.render(
@@ -444,11 +445,11 @@ export class QuizPracticeModal extends Modal {
 			if (!ready)
 				host.createDiv({
 					cls: "hl-quiz-early-note",
-					text: "Early success is recorded but does not advance mastery.",
+					text: "提前练习答对不会推进掌握。",
 				});
 			const show = host.createEl("button", {
 				cls: "mod-cta hl-quiz-show-answer",
-				text: ready ? "Show answer" : "Practice now",
+				text: ready ? "显示答案" : "立即练习",
 			});
 			show.addEventListener("click", () => {
 				this.revealed = true;
@@ -479,19 +480,16 @@ export class QuizPracticeModal extends Modal {
 		}
 		const actions = host.createDiv({ cls: "hl-quiz-review-actions" });
 		for (const [result, label] of [
-			["forgot", "Didn't recall"],
-			["fuzzy", "Partly recalled"],
-			["remembered", "Recalled"],
+			["forgot", "不记得"],
+			["remembered", "记得"],
 		] as [QuizResult, string][]) {
 			const button = actions.createEl("button", { text: label });
 			if (result === "remembered") button.addClass("mod-cta");
 			button.setAttr(
 				"aria-label",
 				result === "forgot"
-					? "Didn't recall — move mastery back one step"
-					: result === "fuzzy"
-					? "Partly recalled — keep mastery and retry soon"
-					: "Recalled — advance mastery when ready"
+					? "不记得：掌握退一级并在短间隔后重试"
+					: "记得：到达练习时间时掌握进一级"
 			);
 			button.addEventListener("click", () => void this.rate(result));
 		}
@@ -509,8 +507,8 @@ export class QuizPracticeModal extends Modal {
 		await this.plugin.refreshTimelines();
 		new Notice(
 			updated.status === "mastered"
-				? "Quiz mastered and archived."
-				: `Quiz progress: ${updated.progress}/${this.plugin.settings.quizMasterySteps}`
+				? "题目已掌握并归档。"
+				: `掌握进度：${updated.progress}/${this.plugin.settings.quizMasterySteps}`
 		);
 		this.close();
 	}

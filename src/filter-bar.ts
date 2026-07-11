@@ -202,6 +202,7 @@ export class FilterBar {
 		const showWrap = lensRow.createDiv({ cls: "hl-lens hl-show" });
 		showWrap.createSpan({ cls: "hl-lens-label", text: "Show" });
 		const showSel = showWrap.createEl("select", { cls: "hl-lens-select" });
+		showSel.setAttr("aria-label", "Timeline content: events or quizzes");
 		for (const [value, label] of [
 			["events", "Events"],
 			["active-quizzes", "Active quizzes"],

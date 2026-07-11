@@ -118,7 +118,7 @@ export function renderQuizBackstage(
 			else summary.setText(evId);
 			if (group.some((quiz) => quiz.status === "mastered")) {
 				const revive = head.createEl("button", {
-					text: "Learn mastered again",
+					text: "重新学习已掌握题",
 				});
 				revive.addEventListener("click", () =>
 					void (async () => {
@@ -164,15 +164,15 @@ function renderQuizRow(
 		cls: "hl-quiz-manage-meta",
 		text: `${quiz.kind === "qa" ? "Q&A" : quiz.kind} · ${
 			quiz.status
-		} · Mastery ${quiz.progress}/${
+		} · 掌握 ${quiz.progress}/${
 			plugin.settings.quizMasterySteps
-		} · ${nextReviewLabel(quiz)} · ${
+		}${nextReviewLabel(quiz) ? ` · ${nextReviewLabel(quiz)}` : ""} · ${
 			quiz.attempts.length
 		} attempts · ${quiz.cycles.filter((cycle) => cycle.completedAt).length} cycles`,
 	});
 
 	const actions = row.createDiv({ cls: "hl-quiz-backstage-actions" });
-	const practice = actions.createEl("button", { text: "Practice" });
+	const practice = actions.createEl("button", { text: "练习" });
 	practice.disabled = quiz.status !== "active";
 	practice.addEventListener("click", () =>
 		new QuizPracticeModal(plugin.app, plugin, quiz.id).open()
@@ -191,7 +191,7 @@ function renderQuizRow(
 			)
 		);
 	} else {
-		const rebind = actions.createEl("button", { text: "Rebind" });
+		const rebind = actions.createEl("button", { text: "重新绑定" });
 		rebind.addEventListener("click", () =>
 			new RebindQuizModal(plugin, quiz, events, onChanged).open()
 		);
@@ -199,10 +199,10 @@ function renderQuizRow(
 	const state = actions.createEl("button", {
 		text:
 			quiz.status === "mastered"
-				? "Learn again"
+				? "重新学习"
 				: quiz.status === "paused"
-				? "Resume learning"
-				: "Pause learning",
+				? "继续学习"
+				: "暂停学习",
 	});
 	state.disabled = quiz.status === "retired";
 	state.addEventListener("click", () =>

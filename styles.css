@@ -14,12 +14,15 @@
 /* Constrain content to a readable line length, centered in the pane. In
    parallel mode the wide pane is filled by adding more track columns, not by
    widening the cards. */
-.hl-timeline-list,
-.hl-timeline-bar {
+.hl-timeline-list {
 	max-width: 46em;
 	margin-inline: auto;
 }
 .hl-timeline-bar {
+	width: 100%;
+	max-width: none;
+	box-sizing: border-box;
+	margin-inline: auto;
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
@@ -37,12 +40,6 @@
 	width: 100%;
 	gap: 6px;
 	align-items: center;
-	min-width: 0;
-}
-.hl-bar-controls {
-	overflow: hidden;
-}
-.hl-bar-controls > * {
 	min-width: 0;
 }
 /* Query builder: committed chips + a free-text draft in one box. */
@@ -118,16 +115,6 @@
 	align-items: center;
 	gap: 4px;
 }
-.hl-bar-controls .hl-lens {
-	flex: 1 1 0;
-	overflow: hidden;
-}
-.hl-bar-controls .hl-groupby {
-	flex-grow: 0.72;
-}
-.hl-bar-controls .hl-show {
-	flex-grow: 0.92;
-}
 .hl-lens-icon {
 	display: inline-flex;
 	color: var(--text-faint);
@@ -144,17 +131,9 @@
 }
 .hl-lens-select {
 	font-size: 0.9em;
-	max-width: 100%;
-}
-.hl-bar-controls .hl-lens-select {
-	flex: 1 1 0;
-	width: 0;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
 .hl-bar-spacer {
-	flex: 0 1 16px;
+	flex: 1 1 auto;
 }
 /* Saved-view menu button: bookmark + name + dirty dot. */
 .hl-view-btn {
@@ -166,7 +145,7 @@
 	max-width: 16em;
 }
 .hl-bar-controls .hl-view-btn {
-	flex: 0.75 1 7em;
+	flex: 0 1 16em;
 	min-width: 0;
 	overflow: hidden;
 	white-space: nowrap;
@@ -1894,11 +1873,11 @@ input.hl-tag-chip-input:focus-visible {
 	flex: 1 1 100%;
 }
 .hl-practice-layout {
-	flex: 0.85 1 8em;
+	flex: 0 1 10em;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	max-width: 100%;
+	max-width: 10em;
 	white-space: nowrap;
 }
 
@@ -2032,6 +2011,32 @@ input.hl-tag-chip-input:focus-visible {
 	flex-wrap: wrap;
 	gap: 4px;
 	max-width: 100%;
+}
+
+@container (max-width: 760px) {
+	.hl-bar-controls .hl-lens-label {
+		display: none;
+	}
+	.hl-bar-controls .hl-lens-select {
+		max-width: 9em;
+	}
+	.hl-bar-controls .hl-view-btn,
+	.hl-bar-controls .hl-practice-layout {
+		max-width: 8em;
+	}
+}
+
+@container (max-width: 560px) {
+	.hl-bar-controls .hl-lens-icon {
+		display: none;
+	}
+	.hl-bar-controls .hl-lens-select {
+		max-width: 6.5em;
+	}
+	.hl-bar-controls .hl-view-btn,
+	.hl-bar-controls .hl-practice-layout {
+		max-width: 6em;
+	}
 }
 
 @container (max-width: 700px) {
