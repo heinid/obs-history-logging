@@ -43,11 +43,18 @@ export const DEFAULT_QUIZ_SCHEDULE: QuizSchedule = {
 	retryMinutes: 5,
 };
 
-export function isQuizReady(quiz: QuizEntry, now = new Date()): boolean {
+export function isQuizReady(
+	quiz: QuizEntry,
+	now = new Date(),
+	schedule = DEFAULT_QUIZ_SCHEDULE
+): boolean {
 	if (quiz.status !== "active") return false;
 	if (!quiz.nextReview) return true;
 	const due = Date.parse(quiz.nextReview);
-	return Number.isNaN(due) || due <= now.getTime();
+	if (Number.isNaN(due) || due <= now.getTime()) return true;
+	const maximumDelay =
+		Math.max(0, schedule.retryMinutes, ...schedule.intervalMinutes) * 60_000;
+	return due - now.getTime() > maximumDelay;
 }
 
 export function reviewQuiz(
@@ -58,7 +65,7 @@ export function reviewQuiz(
 ): QuizEntry {
 	const at = now.toISOString();
 	const before = quiz.progress;
-	const early = !isQuizReady(quiz, now);
+	const early = !isQuizReady(quiz, now, schedule);
 	const next: QuizEntry = {
 		...quiz,
 		attempts: [...quiz.attempts],

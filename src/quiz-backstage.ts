@@ -14,6 +14,7 @@ import {
 import {
 	nextReviewLabel,
 	quizQuestion,
+	quizSchedule,
 } from "./quiz-display";
 import { QuizPracticeModal } from "./quiz-modal";
 import { describeYear, parseYearTag } from "./year-tag";
@@ -156,13 +157,18 @@ function renderQuizRow(
 		"",
 		plugin
 	);
+	const reviewLabel = nextReviewLabel(
+		quiz,
+		new Date(),
+		quizSchedule(plugin.settings)
+	);
 	content.createDiv({
 		cls: "hl-quiz-manage-meta",
 		text: `${quizKindLabel(quiz)} · ${
 			quiz.status === "mastered" ? "学过" : "在学"
-		} · 掌握 ${quiz.progress}/${
-			plugin.settings.quizMasterySteps
-		}${nextReviewLabel(quiz) ? ` · ${nextReviewLabel(quiz)}` : ""}`,
+		} · 掌握 ${quiz.progress}/${plugin.settings.quizMasterySteps}${
+			reviewLabel ? ` · ${reviewLabel}` : ""
+		}`,
 	});
 
 	const actions = row.createDiv({ cls: "hl-quiz-backstage-actions" });

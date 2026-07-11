@@ -1,5 +1,10 @@
 import { EventEntry } from "./types";
-import { QuizEntry, QuizSchedule } from "./quiz";
+import {
+	DEFAULT_QUIZ_SCHEDULE,
+	QuizEntry,
+	QuizSchedule,
+	isQuizReady,
+} from "./quiz";
 import { HistoryLoggingSettings } from "./settings";
 import { describeYear, parseYearTag } from "./year-tag";
 
@@ -59,10 +64,13 @@ export function maskSourceYear(
 	return masked;
 }
 
-export function nextReviewLabel(quiz: QuizEntry, now = new Date()): string {
-	if (!quiz.nextReview) return "";
+export function nextReviewLabel(
+	quiz: QuizEntry,
+	now = new Date(),
+	schedule = DEFAULT_QUIZ_SCHEDULE
+): string {
+	if (!quiz.nextReview || isQuizReady(quiz, now, schedule)) return "";
 	const time = Date.parse(quiz.nextReview);
-	if (Number.isNaN(time) || time <= now.getTime()) return "";
 	const minutes = Math.ceil((time - now.getTime()) / 60_000);
 	if (minutes < 60) return `${minutes} 分钟后可推进`;
 	const hours = Math.ceil(minutes / 60);

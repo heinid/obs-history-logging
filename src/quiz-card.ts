@@ -4,6 +4,7 @@ import { TimelineEntry } from "./scan";
 import {
 	QuizEntry,
 	QuizResult,
+	QuizSchedule,
 	isQuizReady,
 	reviewQuiz,
 	reviveQuiz,
@@ -33,7 +34,8 @@ export function renderTimelineQuizCard(
 	}
 ): HTMLElement {
 	const card = parent.createDiv({ cls: "hl-card hl-quiz-card" });
-	const ordered = [...quizzes].sort(compareQuizzes);
+	const schedule = quizSchedule(opts.plugin.settings);
+	const ordered = [...quizzes].sort((a, b) => compareQuizzes(a, b, schedule));
 	let position = Math.min(opts.position, Math.max(0, ordered.length - 1));
 	let revealed = false;
 	let hintShown = false;
@@ -47,7 +49,7 @@ export function renderTimelineQuizCard(
 		card.empty();
 		const quiz = ordered[position];
 		if (!quiz) return;
-		const ready = isQuizReady(quiz);
+		const ready = isQuizReady(quiz, new Date(), schedule);
 		card.toggleClass(
 			"hl-quiz-cooling-card",
 			quiz.status === "active" && !ready
@@ -110,11 +112,13 @@ export function renderTimelineQuizCard(
 		);
 
 		const status = body.createDiv({ cls: "hl-quiz-card-status" });
-		const schedule =
-			quiz.status === "mastered" ? "学过" : nextReviewLabel(quiz);
+		const reviewState =
+			quiz.status === "mastered"
+				? "学过"
+				: nextReviewLabel(quiz, new Date(), schedule);
 		status.createSpan({
 			text: `掌握 ${quiz.progress}/${opts.plugin.settings.quizMasterySteps}${
-				schedule ? ` · ${schedule}` : ""
+				reviewState ? ` · ${reviewState}` : ""
 			}`,
 		});
 
@@ -191,7 +195,7 @@ export function renderTimelineQuizCard(
 						quiz,
 						result,
 						new Date(),
-						quizSchedule(opts.plugin.settings)
+						schedule
 					);
 					void opts.update(updated);
 				});
@@ -225,8 +229,15 @@ function addHintToggle(
 	});
 }
 
-function compareQuizzes(a: QuizEntry, b: QuizEntry): number {
-	const ready = Number(isQuizReady(b)) - Number(isQuizReady(a));
+function compareQuizzes(
+	a: QuizEntry,
+	b: QuizEntry,
+	schedule: QuizSchedule
+): number {
+	const now = new Date();
+	const ready =
+		Number(isQuizReady(b, now, schedule)) -
+		Number(isQuizReady(a, now, schedule));
 	if (ready) return ready;
 	const aForgot = a.attempts[a.attempts.length - 1]?.result === "forgot";
 	const bForgot = b.attempts[b.attempts.length - 1]?.result === "forgot";

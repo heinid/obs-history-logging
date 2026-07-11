@@ -91,17 +91,14 @@ export class QuizManagerModal extends Modal {
 		this.renderHead(host, `Quiz（${this.eventQuizzes.length}）`);
 
 		const list = host.createDiv({ cls: "hl-quiz-manage-list" });
+		const schedule = quizSchedule(this.plugin.settings);
 		for (const quiz of this.eventQuizzes) {
+			const reviewLabel = nextReviewLabel(quiz, new Date(), schedule);
 			const row = list.createDiv({ cls: "hl-quiz-manage-row" });
 			const main = row.createDiv({ cls: "hl-quiz-manage-main" });
 			main.createDiv({
 				cls: "hl-quiz-kind",
-				text:
-					quiz.kind === "year"
-						? "Year"
-						: quiz.kind === "cloze"
-						? "Cloze"
-						: "Q&A",
+				text: quizKindLabel(quiz.kind),
 			});
 			const question = main.createDiv({ cls: "hl-quiz-manage-question" });
 			void MarkdownRenderer.render(
@@ -117,7 +114,7 @@ export class QuizManagerModal extends Modal {
 					quiz.status === "mastered" ? "学过" : "在学"
 				} · 掌握 ${quiz.progress}/${
 					this.plugin.settings.quizMasterySteps
-				}${nextReviewLabel(quiz) ? ` · ${nextReviewLabel(quiz)}` : ""}`,
+				}${reviewLabel ? ` · ${reviewLabel}` : ""}`,
 			});
 
 			const practice = row.createEl("button", { text: "练习" });
@@ -199,25 +196,27 @@ export class QuizManagerModal extends Modal {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-quiz-modal");
-		this.renderHead(host, existing ? "Edit Quiz" : "New Quiz");
 
 		let kind = existing?.kind ?? initialKind;
-		const tabs = host.createDiv({ cls: "hl-quiz-kind-tabs" });
-		const form = host.createDiv({ cls: "hl-quiz-form" });
+		this.renderHead(host, existing ? `Edit ${quizKindLabel(kind)}` : "New Quiz");
 		const kinds: [QuizKind, string][] = [
 			["year", "Year"],
 			["cloze", "Cloze"],
 			["qa", "Q&A"],
 		];
 		const tabEls = new Map<QuizKind, HTMLElement>();
-		for (const [value, label] of kinds) {
-			const tab = tabs.createSpan({ cls: "hl-quiz-kind-tab", text: label });
-			tabEls.set(value, tab);
-			tab.addEventListener("click", () => {
-				kind = value;
-				paintForm();
-			});
+		if (!existing) {
+			const tabs = host.createDiv({ cls: "hl-quiz-kind-tabs" });
+			for (const [value, label] of kinds) {
+				const tab = tabs.createSpan({ cls: "hl-quiz-kind-tab", text: label });
+				tabEls.set(value, tab);
+				tab.addEventListener("click", () => {
+					kind = value;
+					paintForm();
+				});
+			}
 		}
+		const form = host.createDiv({ cls: "hl-quiz-form" });
 
 		let question = existing?.question ?? "";
 		let answer = existing?.answer ?? "";
@@ -435,11 +434,12 @@ export class QuizPracticeModal extends Modal {
 		state.createSpan({
 			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
 		});
-		const ready = isQuizReady(quiz);
+		const schedule = quizSchedule(this.plugin.settings);
+		const ready = isQuizReady(quiz, new Date(), schedule);
 		if (!ready)
 			state.createSpan({
 				cls: "hl-quiz-cooling",
-				text: nextReviewLabel(quiz),
+				text: nextReviewLabel(quiz, new Date(), schedule),
 			});
 
 		const surface = host.createDiv({ cls: "hl-quiz-practice-surface" });
@@ -602,6 +602,12 @@ function emptyQuiz(sourceEvId: string): QuizEntry {
 		attempts: [],
 		cycles: [],
 	};
+}
+
+function quizKindLabel(kind: QuizKind): string {
+	if (kind === "year") return "Year";
+	if (kind === "cloze") return "Cloze";
+	return "Q&A";
 }
 
 function makeCloze(

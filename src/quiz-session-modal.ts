@@ -54,7 +54,8 @@ export class QuizSessionModal extends Modal {
 		}
 		const quiz = this.quizzes[this.index];
 		const event = this.events.get(quiz.sourceEvId);
-		const ready = isQuizReady(quiz);
+		const schedule = quizSchedule(this.plugin.settings);
+		const ready = isQuizReady(quiz, new Date(), schedule);
 
 		const head = host.createDiv({ cls: "hl-quiz-session-head" });
 		head.createSpan({
@@ -71,9 +72,9 @@ export class QuizSessionModal extends Modal {
 		);
 		host.createDiv({
 			cls: "hl-quiz-session-mastery",
-			text: `掌握 ${quiz.progress}/${
-				this.plugin.settings.quizMasterySteps
-			}${ready ? "" : ` · ${nextReviewLabel(quiz)}`}`,
+			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}${
+				ready ? "" : ` · ${nextReviewLabel(quiz, new Date(), schedule)}`
+			}`,
 		});
 		if (!this.revealed) {
 			if (!ready)

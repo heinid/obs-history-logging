@@ -49,7 +49,7 @@ import {
 	reviewQuiz,
 	reviveQuiz,
 } from "../src/quiz";
-import { quizQuestion } from "../src/quiz-display";
+import { nextReviewLabel, quizQuestion } from "../src/quiz-display";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -286,6 +286,12 @@ const afterOne = reviewQuiz(quiz, "remembered", t0, DEFAULT_QUIZ_SCHEDULE);
 eq("quiz success advances", afterOne.progress, 1);
 eq("quiz first interval", afterOne.nextReview, "2026-07-10T10:10:00.000Z");
 eq("quiz cooling not ready", isQuizReady(afterOne, t0), false);
+const invalidFuture = {
+	...afterOne,
+	nextReview: "2099-12-31T23:59:00.000Z",
+};
+eq("invalid future quiz is ready", isQuizReady(invalidFuture, t0), true);
+eq("invalid future label hidden", nextReviewLabel(invalidFuture, t0), "");
 const early = reviewQuiz(
 	afterOne,
 	"remembered",
