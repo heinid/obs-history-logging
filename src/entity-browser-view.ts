@@ -162,6 +162,7 @@ export class EntityBrowserView extends ItemView {
 			entity,
 			occ: (occ.get(entity.id) ?? []).sort((a, b) => a.key - b.key),
 		}));
+		this.snapshot();
 		this.render();
 	}
 
@@ -286,7 +287,7 @@ export class EntityBrowserView extends ItemView {
 		this.bodyEl = root.createDiv({ cls: "hl-eb-body" });
 		if (cur.kind === "entities") this.renderEntities(this.bodyEl, cur);
 		else if (cur.kind === "types") this.renderTypes(this.bodyEl, cur);
-		else if (cur.kind === "quizzes")
+		else if (cur.kind === "quizzes") {
 			renderQuizBackstage(
 				this.bodyEl,
 				this.plugin,
@@ -295,6 +296,8 @@ export class EntityBrowserView extends ItemView {
 				cur,
 				() => this.reload()
 			);
+			this.bodyEl.scrollTop = cur.scroll;
+		}
 		else void this.renderEntity(this.bodyEl, cur);
 		// Refresh the tab title (Obsidian re-reads getDisplayText on layout
 		// change; trigger it via the leaf's internal header update if present).
