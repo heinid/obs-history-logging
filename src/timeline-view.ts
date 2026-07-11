@@ -574,8 +574,6 @@ export class TimelineView extends ItemView {
 					Math.max(this.barHeight() + 60, box.height * 0.3);
 				anchor.el.addClass("hl-flash-band");
 				window.setTimeout(() => anchor.el.removeClass("hl-flash-band"), 1300);
-				this.navCollapsed = true;
-				paintCollapsed();
 			});
 			this.navItems.push({ anchor, el: item });
 		}
