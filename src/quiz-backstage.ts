@@ -173,7 +173,7 @@ function renderQuizRow(
 
 	const actions = row.createDiv({ cls: "hl-quiz-backstage-actions" });
 	const practice = actions.createEl("button", { cls: "hl-icon-btn" });
-	setIcon(practice, "play");
+	setIcon(practice, "brain");
 	practice.setAttr("aria-label", "练习");
 	practice.setAttr("title", "练习");
 	practice.disabled = quiz.status !== "active";
