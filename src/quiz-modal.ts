@@ -51,10 +51,10 @@ export class QuizManagerModal extends Modal {
 		const editQuiz = this.editQuizId
 			? this.eventQuizzes.find((quiz) => quiz.id === this.editQuizId)
 			: undefined;
-		if (editQuiz) this.renderEditor(editQuiz);
+		this.renderManager();
+		if (editQuiz) this.openEditor(editQuiz);
 		else if (!this.eventQuizzes.length || this.clozeAnswer)
-			this.renderEditor(undefined, this.clozeAnswer ? "cloze" : "year");
-		else this.renderManager();
+			this.openEditor(undefined, this.clozeAnswer ? "cloze" : "year");
 	}
 
 	private async reload(): Promise<void> {
@@ -74,22 +74,11 @@ export class QuizManagerModal extends Modal {
 			.sort((a, b) => a.created.localeCompare(b.created));
 	}
 
-	private renderHead(host: HTMLElement, title: string): void {
-		const head = host.createDiv({ cls: "hl-modal-head hl-quiz-modal-head" });
-		const decoded = parseYearTag(this.tag);
-		head.createSpan({
-			cls: "hl-modal-year",
-			text: decoded ? describeYear(decoded) : this.tag,
-		});
-		head.createSpan({ cls: "hl-modal-tag", text: title });
-	}
-
 	private renderManager(): void {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-quiz-modal");
-		host.removeClass("hl-quiz-editor");
-		this.renderHead(host, `Quiz（${this.eventQuizzes.length}）`);
+		renderQuizModalHead(host, this.tag, `Quiz（${this.eventQuizzes.length}）`);
 
 		const list = host.createDiv({ cls: "hl-quiz-manage-list" });
 		const schedule = quizSchedule(this.plugin.settings);
@@ -132,7 +121,7 @@ export class QuizManagerModal extends Modal {
 			const edit = row.createEl("button", { cls: "hl-icon-btn" });
 			setIcon(edit, "pencil");
 			edit.setAttr("aria-label", "编辑这个 Quiz");
-			edit.addEventListener("click", () => this.renderEditor(quiz));
+			edit.addEventListener("click", () => this.openEditor(quiz));
 
 			const more = row.createEl("button", { cls: "hl-icon-btn" });
 			setIcon(more, "more-horizontal");
@@ -153,7 +142,25 @@ export class QuizManagerModal extends Modal {
 			cls: "mod-cta",
 			text: "New Quiz",
 		});
-		add.addEventListener("click", () => this.renderEditor(undefined, "year"));
+		add.addEventListener("click", () => this.openEditor(undefined, "year"));
+	}
+
+	private openEditor(existing?: QuizEntry, initialKind: QuizKind = "qa"): void {
+		new QuizEditorModal(this.app, this.plugin, {
+			event: this.event ?? { id: this.evId, tag: this.tag, summary: "" },
+			tag: this.tag,
+			quizIds: new Set(this.quizzes.keys()),
+			existing,
+			initialKind,
+			clozeAnswer: existing ? "" : this.clozeAnswer,
+			ensure: async () => {
+				if (this.ensured) return true;
+				if (!(await this.ensure!())) return false;
+				this.ensured = true;
+				return true;
+			},
+			onSaved: () => void this.refreshManager(),
+		}).open();
 	}
 
 	private async refreshManager(): Promise<void> {
@@ -190,20 +197,49 @@ export class QuizManagerModal extends Modal {
 					await this.plugin.store.removeQuiz(quiz.id);
 					await this.plugin.refreshTimelines();
 					await this.reload();
-					if (this.eventQuizzes.length) this.renderManager();
-					else this.renderEditor(undefined, "year");
+					this.renderManager();
 				})()
 		).open();
 	}
 
-	private renderEditor(existing?: QuizEntry, initialKind: QuizKind = "qa"): void {
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+interface QuizEditorOptions {
+	event: EventEntry;
+	tag: string;
+	quizIds: Set<string>;
+	existing?: QuizEntry;
+	initialKind: QuizKind;
+	clozeAnswer: string;
+	ensure: () => Promise<boolean>;
+	onSaved: () => void;
+}
+
+export class QuizEditorModal extends Modal {
+	constructor(
+		app: App,
+		private plugin: HistoryLoggingPlugin,
+		private opts: QuizEditorOptions
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
 		const host = this.contentEl;
+		const existing = this.opts.existing;
 		host.empty();
 		host.addClass("hl-quiz-modal");
 		host.addClass("hl-quiz-editor");
 
-		let kind = existing?.kind ?? initialKind;
-		this.renderHead(host, existing ? `Edit ${quizKindLabel(kind)}` : "New Quiz");
+		let kind = existing?.kind ?? this.opts.initialKind;
+		renderQuizModalHead(
+			host,
+			this.opts.tag,
+			existing ? `Edit ${quizKindLabel(kind)}` : "New Quiz"
+		);
 		const kinds: [QuizKind, string][] = [
 			["year", "Year"],
 			["cloze", "Cloze"],
@@ -226,8 +262,8 @@ export class QuizManagerModal extends Modal {
 		let question = existing?.question ?? "";
 		let answer = existing?.answer ?? "";
 		let hint = existing?.hint ?? "";
-		let sourceSelection = this.clozeAnswer;
-		const summary = stripDbMarkers(this.event?.summary ?? "");
+		let sourceSelection = this.opts.clozeAnswer;
+		const summary = stripDbMarkers(this.opts.event.summary ?? "");
 		if (!existing && kind === "year")
 			question = summary || "这件事发生在哪一年？";
 		if (!existing && kind === "cloze" && sourceSelection)
@@ -310,10 +346,10 @@ export class QuizManagerModal extends Modal {
 					cls: "hl-quiz-year-answer",
 					text: quizAnswer(
 						{
-							...(existing ?? emptyQuiz(this.evId)),
+							...(existing ?? emptyQuiz(this.opts.event.id)),
 							kind: "year",
 						},
-						this.event
+						this.opts.event
 					),
 				});
 			textArea(form, "提示（可选）", hint, "提示", (value) => (hint = value));
@@ -321,26 +357,24 @@ export class QuizManagerModal extends Modal {
 		paintForm();
 
 		const foot = host.createDiv({ cls: "hl-modal-foot" });
-		if (existing || this.eventQuizzes.length) {
-			const back = foot.createEl("button", { text: "返回" });
-			back.addEventListener("click", () => this.renderManager());
-		}
+		const cancel = foot.createEl("button", { text: "取消" });
+		cancel.addEventListener("click", () => this.close());
 		const spacer = foot.createSpan({ cls: "hl-modal-foot-spacer" });
 		void spacer;
 		const save = foot.createEl("button", { text: "保存" });
 		save.addEventListener("click", () =>
-			void this.saveEditor(existing, kind, question, answer, hint, false)
+			void this.save(existing, kind, question, answer, hint, false)
 		);
 		const practice = foot.createEl("button", {
 			cls: "mod-cta",
 			text: "保存并练习",
 		});
 		practice.addEventListener("click", () =>
-			void this.saveEditor(existing, kind, question, answer, hint, true)
+			void this.save(existing, kind, question, answer, hint, true)
 		);
 	}
 
-	private async saveEditor(
+	private async save(
 		existing: QuizEntry | undefined,
 		kind: QuizKind,
 		question: string,
@@ -356,23 +390,21 @@ export class QuizManagerModal extends Modal {
 			new Notice("请先填写答案。");
 			return;
 		}
-		if (!this.ensured) {
-			if (!(await this.ensure!())) return;
-			this.ensured = true;
-		}
-		const source = await this.plugin.store.getEvent(this.evId);
-		if (!source || source.tag !== this.tag)
+		if (!(await this.opts.ensure())) return;
+		const evId = this.opts.event.id;
+		const source = await this.plugin.store.getEvent(evId);
+		if (!source || source.tag !== this.opts.tag)
 			await this.plugin.store.upsertEvent({
-				id: this.evId,
-				tag: this.tag,
+				id: evId,
+				tag: this.opts.tag,
 				summary: source?.summary ?? "",
 			});
 		const now = new Date().toISOString();
 		const quiz: QuizEntry = existing
 			? { ...existing, kind, question, answer, hint, updated: now }
 			: {
-					...emptyQuiz(this.evId),
-					id: generateId((id) => this.quizzes.has(id)),
+					...emptyQuiz(evId),
+					id: generateId((id) => this.opts.quizIds.has(id)),
 					kind,
 					question,
 					answer,
@@ -383,18 +415,31 @@ export class QuizManagerModal extends Modal {
 			  };
 		await this.plugin.store.upsertQuiz(quiz);
 		await this.plugin.refreshTimelines();
-		if (practice) {
-			this.close();
-			new QuizPracticeModal(this.app, this.plugin, quiz.id).open();
-			return;
-		}
-		await this.reload();
-		this.renderManager();
+		this.close();
+		if (practice)
+			new QuizPracticeModal(this.app, this.plugin, quiz.id, () =>
+				this.opts.onSaved()
+			).open();
+		else this.opts.onSaved();
 	}
 
 	onClose(): void {
 		this.contentEl.empty();
 	}
+}
+
+function renderQuizModalHead(
+	host: HTMLElement,
+	tag: string,
+	title: string
+): void {
+	const head = host.createDiv({ cls: "hl-modal-head hl-quiz-modal-head" });
+	const decoded = parseYearTag(tag);
+	head.createSpan({
+		cls: "hl-modal-year",
+		text: decoded ? describeYear(decoded) : tag,
+	});
+	head.createSpan({ cls: "hl-modal-tag", text: title });
 }
 
 export class QuizPracticeModal extends Modal {
