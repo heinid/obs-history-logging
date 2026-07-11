@@ -98,10 +98,10 @@ export class QuizManagerModal extends Modal {
 				cls: "hl-quiz-kind",
 				text:
 					quiz.kind === "year"
-						? "年份题"
+						? "Year"
 						: quiz.kind === "cloze"
-						? "填空题"
-						: "问答题",
+						? "Cloze"
+						: "Q&A",
 			});
 			const question = main.createDiv({ cls: "hl-quiz-manage-question" });
 			void MarkdownRenderer.render(
@@ -123,8 +123,9 @@ export class QuizManagerModal extends Modal {
 			const practice = row.createEl("button", { text: "练习" });
 			practice.disabled = quiz.status !== "active";
 			practice.addEventListener("click", () => {
-				this.close();
-				new QuizPracticeModal(this.app, this.plugin, quiz.id).open();
+				new QuizPracticeModal(this.app, this.plugin, quiz.id, () =>
+					void this.refreshManager()
+				).open();
 			});
 
 			const edit = row.createEl("button", { cls: "hl-icon-btn" });
@@ -149,9 +150,14 @@ export class QuizManagerModal extends Modal {
 		const foot = host.createDiv({ cls: "hl-modal-foot hl-quiz-manager-foot" });
 		const add = foot.createEl("button", {
 			cls: "mod-cta",
-			text: "新建题目",
+			text: "New Quiz",
 		});
 		add.addEventListener("click", () => this.renderEditor(undefined, "year"));
+	}
+
+	private async refreshManager(): Promise<void> {
+		await this.reload();
+		this.renderManager();
 	}
 
 	private actionButton(
@@ -193,15 +199,15 @@ export class QuizManagerModal extends Modal {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-quiz-modal");
-		this.renderHead(host, existing ? "编辑 Quiz" : "新建 Quiz");
+		this.renderHead(host, existing ? "Edit Quiz" : "New Quiz");
 
 		let kind = existing?.kind ?? initialKind;
 		const tabs = host.createDiv({ cls: "hl-quiz-kind-tabs" });
 		const form = host.createDiv({ cls: "hl-quiz-form" });
 		const kinds: [QuizKind, string][] = [
-			["year", "年份题"],
-			["cloze", "填空题"],
-			["qa", "问答题"],
+			["year", "Year"],
+			["cloze", "Cloze"],
+			["qa", "Q&A"],
 		];
 		const tabEls = new Map<QuizKind, HTMLElement>();
 		for (const [value, label] of kinds) {
@@ -396,7 +402,8 @@ export class QuizPracticeModal extends Modal {
 	constructor(
 		app: App,
 		private plugin: HistoryLoggingPlugin,
-		private quizId: string
+		private quizId: string,
+		private onClosed?: () => void
 	) {
 		super(app);
 	}
@@ -575,6 +582,7 @@ export class QuizPracticeModal extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
+		this.onClosed?.();
 	}
 }
 

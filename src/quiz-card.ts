@@ -131,14 +131,11 @@ export function renderTimelineQuizCard(
 
 		if (!revealed) {
 			const controls = body.createDiv({ cls: "hl-quiz-card-controls" });
-			if (quiz.hint && !hintShown) {
-				const hint = controls.createEl("button", { text: "提示" });
-				hint.addEventListener("click", (e) => {
-					e.stopPropagation();
-					hintShown = true;
+			if (quiz.hint)
+				addHintToggle(controls, hintShown, () => {
+					hintShown = !hintShown;
 					paint();
 				});
-			}
 			const show = controls.createEl("button", {
 				cls: "mod-cta",
 				text:
@@ -170,6 +167,11 @@ export function renderTimelineQuizCard(
 			);
 		}
 		const controls = body.createDiv({ cls: "hl-quiz-card-controls" });
+		if (quiz.hint)
+			addHintToggle(controls, hintShown, () => {
+				hintShown = !hintShown;
+				paint();
+			});
 		if (quiz.status === "active") {
 			for (const [result, label] of [
 				["forgot", "不记得"],
@@ -204,15 +206,23 @@ export function renderTimelineQuizCard(
 				void opts.update(reviveQuiz(quiz));
 			});
 		}
-		const source = controls.createEl("button", { text: "打开来源" });
-		source.addEventListener("click", (e) => {
-			e.stopPropagation();
-			opts.plugin.openSummary(entry.evId ?? "", entry.tag);
-		});
 	};
 
 	paint();
 	return card;
+}
+
+function addHintToggle(
+	controls: HTMLElement,
+	shown: boolean,
+	toggle: () => void
+): void {
+	const hint = controls.createEl("button", { text: "提示" });
+	hint.setAttr("aria-pressed", String(shown));
+	hint.addEventListener("click", (event) => {
+		event.stopPropagation();
+		toggle();
+	});
 }
 
 function compareQuizzes(a: QuizEntry, b: QuizEntry): number {

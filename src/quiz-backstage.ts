@@ -264,7 +264,7 @@ class RebindQuizModal extends FuzzySuggestModal<EventEntry> {
 }
 
 function quizKindLabel(quiz: QuizEntry): string {
-	if (quiz.kind === "year") return "年份题";
-	if (quiz.kind === "cloze") return "填空题";
-	return "问答题";
+	if (quiz.kind === "year") return "Year";
+	if (quiz.kind === "cloze") return "Cloze";
+	return "Q&A";
 }

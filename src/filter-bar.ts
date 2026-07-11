@@ -200,14 +200,14 @@ export class FilterBar {
 		});
 
 		const showWrap = lensRow.createDiv({ cls: "hl-lens hl-show" });
-		showWrap.createSpan({ cls: "hl-lens-label", text: "显示" });
+		showWrap.createSpan({ cls: "hl-lens-label", text: "Show" });
 		const showSel = showWrap.createEl("select", { cls: "hl-lens-select" });
-		showSel.setAttr("aria-label", "时间轴显示事件或 Quiz");
+		showSel.setAttr("aria-label", "Show events or quizzes");
 		for (const [value, label] of [
-			["events", "事件"],
-			["active-quizzes", "在学"],
-			["mastered-quizzes", "学过"],
-			["all-quizzes", "全部"],
+			["events", "Events"],
+			["active-quizzes", "Active"],
+			["mastered-quizzes", "Mastered"],
+			["all-quizzes", "All"],
 		] as [TimelineShow, string][])
 			showSel.createEl("option", { value, text: label });
 		showSel.value = this.show;
