@@ -9,7 +9,7 @@ import {
 } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { TimelineEntry, scanVault } from "./scan";
-import { describeYear, parseYearTag, truncateTag } from "./year-tag";
+import { describeYear, parseYearTag } from "./year-tag";
 import { Profile } from "./profiles";
 import { EraSystem, eraAt } from "./eras";
 import { matchesQuery, parseQuery } from "./query";
@@ -406,7 +406,15 @@ export class TimelineView extends ItemView {
 		});
 		this.bar.setCount(visible.length, displayedEntries.length);
 
-		if (visible.length === 0) {
+		// Lens and grouping are decoupled, as in the grid: headings stay the
+		// neutral century/decade sections, the lens adds era bands (the full
+		// skeleton, counts included) interleaved at their starting years.
+		const system = this.bar.lens
+			? this.eraSystems.find((s) => s.name === this.bar.lens) ?? null
+			: null;
+		const grouped = this.bar.groupBy !== "none";
+
+		if (visible.length === 0 && (!grouped || !system)) {
 			list.createDiv({
 				cls: "hl-empty",
 				text:
@@ -416,14 +424,6 @@ export class TimelineView extends ItemView {
 			});
 			return;
 		}
-
-		// Lens and grouping are decoupled, as in the grid: headings stay the
-		// neutral century/decade sections, the lens adds era bands (the full
-		// skeleton, counts included) interleaved at their starting years.
-		const system = this.bar.lens
-			? this.eraSystems.find((s) => s.name === this.bar.lens) ?? null
-			: null;
-		const grouped = this.bar.groupBy !== "none";
 
 		const anchors: EraAnchor[] = [];
 		const eraCounts = new Map<string, number>();
@@ -452,13 +452,10 @@ export class TimelineView extends ItemView {
 			}
 		};
 
-		// With "show empty periods" on, headings are also emitted for the
-		// buckets that contain no events, so the list's vertical extent stays
-		// proportional to real time — the same rule the multi-track grid
-		// always applies. The filled range is the era-system coverage when a
-		// lens is set (open-ended last era capped at the latest event),
-		// otherwise the span between the first and last event.
-		const fill = grouped && this.plugin.settings.fillEmptyPeriods;
+		// Every grouped timeline keeps its full chronological skeleton, including
+		// empty buckets. A lens supplies its era-system coverage; without one the
+		// range runs from the first through the last visible event.
+		const fill = grouped;
 		const span = this.bar.groupBy === "decade" ? 10 : 100;
 		let cursor: number | null = null;
 		if (fill && system && system.boundaries.length)
@@ -478,7 +475,7 @@ export class TimelineView extends ItemView {
 			if (cursor === null) cursor = bucket;
 			emitEmpty(bucket);
 			if (grouped) {
-				const { label } = this.groupLabel(entry, null);
+				const label = bucketLabelFor(bucket, span);
 				if (label !== lastGroup) {
 					const h = list.createEl("h3", { cls: "hl-group" });
 					h.createSpan({ text: label });
@@ -621,22 +618,6 @@ export class TimelineView extends ItemView {
 		this.navItems.forEach(({ anchor, el }) =>
 			el.toggleClass("hl-era-nav-current", current !== null && anchor.name === current)
 		);
-	}
-
-	private groupLabel(
-		entry: TimelineEntry,
-		system: EraSystem | null
-	): { label: string; sub: string } {
-		if (system) {
-			const hit = eraAt(system, entry.decoded.sortKey);
-			// Fall back to the century heading for years the system doesn't cover.
-			if (hit) return { label: hit.name, sub: hit.range };
-			return { label: describeYear(entry.decoded), sub: "" };
-		}
-		if (this.bar.groupBy === "none") return { label: "", sub: "" };
-		const truncated = truncateTag(entry.tag, this.bar.groupBy) ?? entry.tag;
-		const gd = parseYearTag(truncated) ?? entry.decoded;
-		return { label: describeYear(gd), sub: "" };
 	}
 
 	private renderCard(parent: HTMLElement, entry: TimelineEntry): void {
