@@ -10,6 +10,7 @@ import {
 	reviveQuiz,
 } from "./quiz";
 import {
+	clozeRevealsInline,
 	nextReviewLabel,
 	quizAnswer,
 	quizQuestion,
@@ -69,16 +70,11 @@ export function renderTimelineQuizCard(
 				openEvMenu(opts.plugin, e, evId, entry.tag, tracksIn(entry.block));
 			});
 		}
-		head.createSpan({
-			cls: "hl-quiz-counter",
-			text: `Quiz ${position + 1}/${ordered.length}`,
-		});
-		head.createSpan({
-			cls: "hl-quiz-progress",
-			text: `${quiz.progress}/${opts.plugin.settings.quizMasterySteps}`,
-		});
-
 		const navigation = head.createDiv({ cls: "hl-quiz-navigation" });
+		navigation.createSpan({
+			cls: "hl-quiz-counter",
+			text: `Question ${position + 1} of ${ordered.length}`,
+		});
 		const previous = navigation.createEl("button", { cls: "hl-icon-btn" });
 		setIcon(previous, "chevron-left");
 		previous.disabled = ordered.length < 2;
@@ -108,7 +104,7 @@ export function renderTimelineQuizCard(
 		const question = body.createDiv({ cls: "hl-quiz-question" });
 		void MarkdownRenderer.render(
 			opts.plugin.app,
-			quizQuestion(quiz, event),
+			quizQuestion(quiz, event, revealed),
 			question,
 			entry.filePath,
 			opts.plugin
@@ -116,12 +112,15 @@ export function renderTimelineQuizCard(
 
 		const status = body.createDiv({ cls: "hl-quiz-card-status" });
 		status.createSpan({
-			text:
+			text: `Mastery ${quiz.progress}/${
+				opts.plugin.settings.quizMasterySteps
+			} · ${
 				quiz.status === "mastered"
 					? "Mastered"
 					: quiz.status === "paused"
-					? "Paused"
-					: nextReviewLabel(quiz),
+					? "Learning paused"
+					: nextReviewLabel(quiz)
+			}`,
 		});
 
 		if (hintShown && quiz.hint) {
@@ -165,23 +164,33 @@ export function renderTimelineQuizCard(
 			return;
 		}
 
-		const answer = body.createDiv({ cls: "hl-quiz-answer" });
-		void MarkdownRenderer.render(
-			opts.plugin.app,
-			quizAnswer(quiz, event),
-			answer,
-			entry.filePath,
-			opts.plugin
-		);
+		if (!clozeRevealsInline(quiz)) {
+			const answer = body.createDiv({ cls: "hl-quiz-answer" });
+			void MarkdownRenderer.render(
+				opts.plugin.app,
+				quizAnswer(quiz, event),
+				answer,
+				entry.filePath,
+				opts.plugin
+			);
+		}
 		const controls = body.createDiv({ cls: "hl-quiz-card-controls" });
 		if (quiz.status === "active") {
 			for (const [result, label] of [
-				["forgot", "Forgot"],
-				["fuzzy", "Fuzzy"],
-				["remembered", "Remembered"],
+				["forgot", "Didn't recall"],
+				["fuzzy", "Partly recalled"],
+				["remembered", "Recalled"],
 			] as [QuizResult, string][]) {
 				const button = controls.createEl("button", { text: label });
 				if (result === "remembered") button.addClass("mod-cta");
+				button.setAttr(
+					"aria-label",
+					result === "forgot"
+						? "Didn't recall — move mastery back one step"
+						: result === "fuzzy"
+						? "Partly recalled — keep mastery and retry soon"
+						: "Recalled — advance mastery when ready"
+				);
 				button.addEventListener("click", (e) => {
 					e.stopPropagation();
 					const updated = reviewQuiz(
@@ -196,7 +205,7 @@ export function renderTimelineQuizCard(
 		} else if (quiz.status === "mastered") {
 			const revive = controls.createEl("button", {
 				cls: "mod-cta",
-				text: "Revive",
+				text: "Learn again",
 			});
 			revive.addEventListener("click", (e) => {
 				e.stopPropagation();
@@ -205,7 +214,7 @@ export function renderTimelineQuizCard(
 		} else if (quiz.status === "paused") {
 			const resume = controls.createEl("button", {
 				cls: "mod-cta",
-				text: "Resume",
+				text: "Resume learning",
 			});
 			resume.addEventListener("click", (e) => {
 				e.stopPropagation();

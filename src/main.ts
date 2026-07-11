@@ -288,7 +288,8 @@ export default class HistoryLoggingPlugin extends Plugin {
 		id: string,
 		tag: string,
 		clozeAnswer = "",
-		ensure?: () => Promise<boolean>
+		ensure?: () => Promise<boolean>,
+		editQuizId = ""
 	): void {
 		new QuizManagerModal(
 			this.app,
@@ -296,7 +297,8 @@ export default class HistoryLoggingPlugin extends Plugin {
 			id,
 			tag,
 			clozeAnswer,
-			ensure
+			ensure,
+			editQuizId
 		).open();
 	}
 

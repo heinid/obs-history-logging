@@ -68,6 +68,7 @@ export class TimelineView extends ItemView {
 	private eraAnchors: EraAnchor[][] = [];
 	private navEl?: HTMLElement;
 	private navSizer?: ResizeObserver;
+	private navCollapsed = false;
 	// Re-places the era gutter bands when the grid's geometry changes.
 	private gridSizer?: ResizeObserver;
 	private navItems: { anchor: EraAnchor; el: HTMLElement }[] = [];
@@ -534,13 +535,31 @@ export class TimelineView extends ItemView {
 		this.navSizer.observe(this.contentEl);
 		this.navEl = wrap;
 		const nav = wrap.createDiv({ cls: "hl-era-nav" });
-		if (this.tracks.length > 1)
-			nav.createDiv({
-				cls: "hl-era-nav-title",
-				text: trackLabel(this.tracks[this.active], this.active),
-			});
+		const title = nav.createEl("button", { cls: "hl-era-nav-title" });
+		title.createSpan({
+			cls: "hl-era-nav-title-text",
+			text:
+				this.tracks.length > 1
+					? trackLabel(this.tracks[this.active], this.active)
+					: "Periods",
+		});
+		const toggle = title.createSpan({ cls: "hl-era-nav-toggle" });
+		const list = nav.createDiv({ cls: "hl-era-nav-list" });
+		const paintCollapsed = (): void => {
+			nav.toggleClass("is-collapsed", this.navCollapsed);
+			title.setAttr("aria-expanded", String(!this.navCollapsed));
+			title.setAttr(
+				"aria-label",
+				this.navCollapsed ? "Expand period navigator" : "Collapse period navigator"
+			);
+			setIcon(toggle, this.navCollapsed ? "chevron-down" : "chevron-up");
+		};
+		title.addEventListener("click", () => {
+			this.navCollapsed = !this.navCollapsed;
+			paintCollapsed();
+		});
 		for (const anchor of anchors) {
-			const item = nav.createDiv({ cls: "hl-era-nav-item" });
+			const item = list.createDiv({ cls: "hl-era-nav-item" });
 			item.toggleClass("hl-era-nav-empty", anchor.count === 0);
 			item.createSpan({ text: `${anchor.name} (${anchor.count})` });
 			if (anchor.range)
@@ -555,9 +574,12 @@ export class TimelineView extends ItemView {
 					Math.max(this.barHeight() + 60, box.height * 0.3);
 				anchor.el.addClass("hl-flash-band");
 				window.setTimeout(() => anchor.el.removeClass("hl-flash-band"), 1300);
+				this.navCollapsed = true;
+				paintCollapsed();
 			});
 			this.navItems.push({ anchor, el: item });
 		}
+		paintCollapsed();
 		this.paintNavCurrent();
 	}
 

@@ -328,6 +328,16 @@ export class LiveEditor {
 						if (u.docChanged) opts.onChange?.(u.state.doc.toString());
 						if (u.docChanged || u.selectionSet) self.updateSuggest();
 					}),
+					EditorView.domEventHandlers({
+						mousedown: (event, view) => {
+							if (event.button !== 0) return false;
+							const target = event.target as HTMLElement;
+							if (target.closest(".cm-line")) return false;
+							event.preventDefault();
+							view.focus();
+							return true;
+						},
+					}),
 				],
 			}),
 		});

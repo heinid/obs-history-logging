@@ -18,6 +18,7 @@ import {
 	reviveQuiz,
 } from "./quiz";
 import {
+	clozeRevealsInline,
 	nextReviewLabel,
 	quizAnswer,
 	quizQuestion,
@@ -40,7 +41,8 @@ export class QuizManagerModal extends Modal {
 		private evId: string,
 		private tag: string,
 		private clozeAnswer = "",
-		private ensure?: () => Promise<boolean>
+		private ensure?: () => Promise<boolean>,
+		private editQuizId = ""
 	) {
 		super(app);
 		this.ensured = !ensure;
@@ -48,7 +50,11 @@ export class QuizManagerModal extends Modal {
 
 	async onOpen(): Promise<void> {
 		await this.reload();
-		if (!this.eventQuizzes.length || this.clozeAnswer)
+		const editQuiz = this.editQuizId
+			? this.eventQuizzes.find((quiz) => quiz.id === this.editQuizId)
+			: undefined;
+		if (editQuiz) this.renderEditor(editQuiz);
+		else if (!this.eventQuizzes.length || this.clozeAnswer)
 			this.renderEditor(undefined, this.clozeAnswer ? "cloze" : "year");
 		else this.renderManager();
 	}
@@ -94,20 +100,22 @@ export class QuizManagerModal extends Modal {
 				cls: "hl-quiz-kind",
 				text: quiz.kind === "qa" ? "Q&A" : quiz.kind,
 			});
-			main.createDiv({
-				cls: "hl-quiz-manage-question",
-				text: quizQuestion(quiz, this.event).replace(/\s+/g, " ").trim(),
-			});
+			const question = main.createDiv({ cls: "hl-quiz-manage-question" });
+			void MarkdownRenderer.render(
+				this.app,
+				stripDbMarkers(quizQuestion(quiz, this.event)),
+				question,
+				"",
+				this.plugin
+			);
 			main.createDiv({
 				cls: "hl-quiz-manage-meta",
-				text: `${quiz.status} · ${quiz.progress}/${
+				text: `${quiz.status} · Mastery ${quiz.progress}/${
 					this.plugin.settings.quizMasterySteps
 				} · ${nextReviewLabel(quiz)}`,
 			});
 
-			const practice = row.createEl("button", { cls: "hl-icon-btn" });
-			setIcon(practice, "play");
-			practice.setAttr("aria-label", "Practice now");
+			const practice = row.createEl("button", { text: "Practice" });
 			practice.disabled = quiz.status !== "active";
 			practice.addEventListener("click", () => {
 				this.close();
@@ -126,15 +134,15 @@ export class QuizManagerModal extends Modal {
 				const actions = row.createDiv({ cls: "hl-quiz-inline-actions" });
 				more.remove();
 				if (quiz.status === "mastered")
-					this.actionButton(actions, "Revive", () =>
+					this.actionButton(actions, "Learn again", () =>
 						this.changeQuiz(reviveQuiz(quiz))
 					);
 				else if (quiz.status === "paused")
-					this.actionButton(actions, "Resume", () =>
+					this.actionButton(actions, "Resume learning", () =>
 						this.changeQuiz(resumeQuiz(quiz))
 					);
 				else if (quiz.status === "active")
-					this.actionButton(actions, "Pause", () =>
+					this.actionButton(actions, "Pause learning", () =>
 						this.changeQuiz(pauseQuiz(quiz))
 					);
 				this.actionButton(actions, "Delete", () => this.confirmDelete(quiz));
@@ -426,7 +434,7 @@ export class QuizPracticeModal extends Modal {
 		const question = host.createDiv({ cls: "hl-quiz-practice-question" });
 		void MarkdownRenderer.render(
 			this.app,
-			quizQuestion(quiz, this.event),
+			quizQuestion(quiz, this.event, this.revealed),
 			question,
 			"",
 			this.plugin
@@ -459,22 +467,32 @@ export class QuizPracticeModal extends Modal {
 				this.plugin
 			);
 		}
-		const answer = host.createDiv({ cls: "hl-quiz-practice-answer" });
-		void MarkdownRenderer.render(
-			this.app,
-			quizAnswer(quiz, this.event),
-			answer,
-			"",
-			this.plugin
-		);
+		if (!clozeRevealsInline(quiz)) {
+			const answer = host.createDiv({ cls: "hl-quiz-practice-answer" });
+			void MarkdownRenderer.render(
+				this.app,
+				quizAnswer(quiz, this.event),
+				answer,
+				"",
+				this.plugin
+			);
+		}
 		const actions = host.createDiv({ cls: "hl-quiz-review-actions" });
 		for (const [result, label] of [
-			["forgot", "Forgot"],
-			["fuzzy", "Fuzzy"],
-			["remembered", "Remembered"],
+			["forgot", "Didn't recall"],
+			["fuzzy", "Partly recalled"],
+			["remembered", "Recalled"],
 		] as [QuizResult, string][]) {
 			const button = actions.createEl("button", { text: label });
 			if (result === "remembered") button.addClass("mod-cta");
+			button.setAttr(
+				"aria-label",
+				result === "forgot"
+					? "Didn't recall — move mastery back one step"
+					: result === "fuzzy"
+					? "Partly recalled — keep mastery and retry soon"
+					: "Recalled — advance mastery when ready"
+			);
 			button.addEventListener("click", () => void this.rate(result));
 		}
 	}

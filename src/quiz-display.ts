@@ -5,7 +5,8 @@ import { describeYear, parseYearTag } from "./year-tag";
 
 export function quizQuestion(
 	quiz: QuizEntry,
-	event: EventEntry | undefined
+	event: EventEntry | undefined,
+	revealCloze = false
 ): string {
 	const question =
 		quiz.question.trim() ||
@@ -13,9 +14,15 @@ export function quizQuestion(
 		(quiz.kind === "year"
 			? "When did this event happen?"
 			: "Untitled quiz");
+	if (quiz.kind === "cloze" && revealCloze && question.includes("____"))
+		return question.replace("____", `==${quiz.answer.trim()}==`);
 	return quiz.kind === "year"
 		? maskSourceYear(question, event)
 		: question;
+}
+
+export function clozeRevealsInline(quiz: QuizEntry): boolean {
+	return quiz.kind === "cloze" && quiz.question.includes("____");
 }
 
 export function quizAnswer(

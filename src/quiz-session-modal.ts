@@ -2,7 +2,12 @@ import { App, MarkdownRenderer, Modal } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { EventEntry } from "./types";
 import { QuizEntry, QuizResult, isQuizReady, reviewQuiz } from "./quiz";
-import { quizAnswer, quizQuestion, quizSchedule } from "./quiz-display";
+import {
+	clozeRevealsInline,
+	quizAnswer,
+	quizQuestion,
+	quizSchedule,
+} from "./quiz-display";
 
 export class QuizSessionModal extends Modal {
 	private quizzes: QuizEntry[] = [];
@@ -51,19 +56,24 @@ export class QuizSessionModal extends Modal {
 		const ready = isQuizReady(quiz);
 
 		const head = host.createDiv({ cls: "hl-quiz-session-head" });
-		head.createSpan({ text: `${this.index + 1} / ${this.quizzes.length}` });
 		head.createSpan({
-			text: `Progress ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
+			text: `Question ${this.index + 1} of ${this.quizzes.length}`,
 		});
 
 		const question = host.createDiv({ cls: "hl-quiz-practice-question" });
 		void MarkdownRenderer.render(
 			this.app,
-			quizQuestion(quiz, event),
+			quizQuestion(quiz, event, this.revealed),
 			question,
 			"",
 			this.plugin
 		);
+		host.createDiv({
+			cls: "hl-quiz-session-mastery",
+			text: `Mastery ${quiz.progress}/${
+				this.plugin.settings.quizMasterySteps
+			} · ${ready ? "Ready" : "Cooling down"}`,
+		});
 		if (!this.revealed) {
 			if (!ready)
 				host.createDiv({
@@ -93,22 +103,32 @@ export class QuizSessionModal extends Modal {
 			return;
 		}
 
-		const answer = host.createDiv({ cls: "hl-quiz-practice-answer" });
-		void MarkdownRenderer.render(
-			this.app,
-			quizAnswer(quiz, event),
-			answer,
-			"",
-			this.plugin
-		);
+		if (!clozeRevealsInline(quiz)) {
+			const answer = host.createDiv({ cls: "hl-quiz-practice-answer" });
+			void MarkdownRenderer.render(
+				this.app,
+				quizAnswer(quiz, event),
+				answer,
+				"",
+				this.plugin
+			);
+		}
 		const actions = host.createDiv({ cls: "hl-quiz-review-actions" });
 		for (const [result, label] of [
-			["forgot", "Forgot"],
-			["fuzzy", "Fuzzy"],
-			["remembered", "Remembered"],
+			["forgot", "Didn't recall"],
+			["fuzzy", "Partly recalled"],
+			["remembered", "Recalled"],
 		] as [QuizResult, string][]) {
 			const button = actions.createEl("button", { text: label });
 			if (result === "remembered") button.addClass("mod-cta");
+			button.setAttr(
+				"aria-label",
+				result === "forgot"
+					? "Didn't recall — move mastery back one step"
+					: result === "fuzzy"
+					? "Partly recalled — keep mastery and retry soon"
+					: "Recalled — advance mastery when ready"
+			);
 			button.addEventListener("click", () => void this.rate(quiz, result));
 		}
 	}
@@ -133,9 +153,9 @@ export class QuizSessionModal extends Modal {
 	private renderResults(host: HTMLElement): void {
 		host.createEl("h2", { text: "Practice complete" });
 		const summary = host.createDiv({ cls: "hl-quiz-session-results" });
-		summary.createDiv({ text: `Remembered ${this.results.remembered}` });
-		summary.createDiv({ text: `Fuzzy ${this.results.fuzzy}` });
-		summary.createDiv({ text: `Forgot ${this.results.forgot}` });
+		summary.createDiv({ text: `Recalled ${this.results.remembered}` });
+		summary.createDiv({ text: `Partly recalled ${this.results.fuzzy}` });
+		summary.createDiv({ text: `Didn't recall ${this.results.forgot}` });
 		if (this.weakIds.size) {
 			const retry = host.createEl("button", {
 				text: `Retest ${this.weakIds.size} weak quiz${

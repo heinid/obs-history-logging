@@ -249,6 +249,20 @@ eq(
 	),
 	"カエサル暗殺（____）"
 );
+eq(
+	"cloze stays blank before reveal",
+	quizQuestion({ ...quiz, kind: "cloze", question: "カエサルは____された", answer: "暗殺" }, undefined),
+	"カエサルは____された"
+);
+eq(
+	"cloze reveals answer inline",
+	quizQuestion(
+		{ ...quiz, kind: "cloze", question: "カエサルは____された", answer: "暗殺" },
+		undefined,
+		true
+	),
+	"カエサルは==暗殺==された"
+);
 
 const t0 = new Date("2026-07-10T10:00:00.000Z");
 const afterOne = reviewQuiz(quiz, "remembered", t0, DEFAULT_QUIZ_SCHEDULE);

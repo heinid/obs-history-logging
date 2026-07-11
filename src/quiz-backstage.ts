@@ -20,6 +20,7 @@ import {
 import { QuizPracticeModal } from "./quiz-modal";
 import { describeYear, parseYearTag } from "./year-tag";
 import { ConfirmModal } from "./name-modal";
+import { stripDbMarkers } from "./db-marker";
 
 export type QuizBackstageStatus = "all" | QuizStatus;
 
@@ -105,12 +106,20 @@ export function renderQuizBackstage(
 						: event.tag ?? evId
 					: "Orphaned source",
 			});
-			head.createSpan({
-				cls: "hl-quiz-event-summary",
-				text: event?.summary.replace(/\s+/g, " ").trim().slice(0, 100) ?? evId,
-			});
+			const summary = head.createDiv({ cls: "hl-quiz-event-summary" });
+			if (event)
+				void MarkdownRenderer.render(
+					plugin.app,
+					stripDbMarkers(event.summary),
+					summary,
+					"",
+					plugin
+				);
+			else summary.setText(evId);
 			if (group.some((quiz) => quiz.status === "mastered")) {
-				const revive = head.createEl("button", { text: "Revive mastered" });
+				const revive = head.createEl("button", {
+					text: "Learn mastered again",
+				});
 				revive.addEventListener("click", () =>
 					void (async () => {
 						const all = await plugin.store.readQuizzes();
@@ -146,24 +155,24 @@ function renderQuizRow(
 	const question = content.createDiv({ cls: "hl-quiz-backstage-question" });
 	void MarkdownRenderer.render(
 		plugin.app,
-		quizQuestion(quiz, event),
+		stripDbMarkers(quizQuestion(quiz, event)),
 		question,
 		"",
 		plugin
 	);
 	content.createDiv({
 		cls: "hl-quiz-manage-meta",
-		text: `${quiz.kind === "qa" ? "Q&A" : quiz.kind} · ${quiz.status} · ${
-			quiz.progress
-		}/${plugin.settings.quizMasterySteps} · ${nextReviewLabel(quiz)} · ${
+		text: `${quiz.kind === "qa" ? "Q&A" : quiz.kind} · ${
+			quiz.status
+		} · Mastery ${quiz.progress}/${
+			plugin.settings.quizMasterySteps
+		} · ${nextReviewLabel(quiz)} · ${
 			quiz.attempts.length
 		} attempts · ${quiz.cycles.filter((cycle) => cycle.completedAt).length} cycles`,
 	});
 
 	const actions = row.createDiv({ cls: "hl-quiz-backstage-actions" });
-	const practice = actions.createEl("button", { cls: "hl-icon-btn" });
-	setIcon(practice, "play");
-	practice.setAttr("aria-label", "Practice");
+	const practice = actions.createEl("button", { text: "Practice" });
 	practice.disabled = quiz.status !== "active";
 	practice.addEventListener("click", () =>
 		new QuizPracticeModal(plugin.app, plugin, quiz.id).open()
@@ -171,9 +180,15 @@ function renderQuizRow(
 	if (event) {
 		const edit = actions.createEl("button", { cls: "hl-icon-btn" });
 		setIcon(edit, "pencil");
-		edit.setAttr("aria-label", "Manage event quizzes");
+		edit.setAttr("aria-label", "Edit this quiz");
 		edit.addEventListener("click", () =>
-			plugin.openQuizManager(quiz.sourceEvId, event.tag ?? "")
+			plugin.openQuizManager(
+				quiz.sourceEvId,
+				event.tag ?? "",
+				"",
+				undefined,
+				quiz.id
+			)
 		);
 	} else {
 		const rebind = actions.createEl("button", { text: "Rebind" });
@@ -184,10 +199,10 @@ function renderQuizRow(
 	const state = actions.createEl("button", {
 		text:
 			quiz.status === "mastered"
-				? "Revive"
+				? "Learn again"
 				: quiz.status === "paused"
-				? "Resume"
-				: "Pause",
+				? "Resume learning"
+				: "Pause learning",
 	});
 	state.disabled = quiz.status === "retired";
 	state.addEventListener("click", () =>
