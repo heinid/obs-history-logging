@@ -1858,6 +1858,17 @@ input.hl-tag-chip-input:focus-visible {
 .hl-quiz-waiting-card .hl-quiz-card-body {
 	opacity: 0.65;
 }
+.hl-year-peek .hl-year,
+.hl-year-peek .hl-tag {
+	filter: blur(5px);
+	transition: filter 120ms ease;
+}
+.hl-year-peek:hover .hl-year,
+.hl-year-peek:hover .hl-tag,
+.hl-year-peek:active .hl-year,
+.hl-year-peek:active .hl-tag {
+	filter: none;
+}
 .hl-quiz-wait-note {
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);

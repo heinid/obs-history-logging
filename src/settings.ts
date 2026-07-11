@@ -36,6 +36,9 @@ export interface HistoryLoggingSettings {
 	// after a new quiz is first remembered, and passing it completes step 1.
 	quizRemindRecheck: boolean;
 	quizRecheckMinutes: number;
+	// Mask head years on quiz cards not already locked by an unmastered
+	// year quiz; hover (or tap) to peek.
+	quizHoverHideYears: boolean;
 }
 
 export interface EvMenuView {
@@ -57,6 +60,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	quizRetryMinutes: 10,
 	quizRemindRecheck: false,
 	quizRecheckMinutes: 10,
+	quizHoverHideYears: false,
 };
 
 export const EVENTS_FILE = "events.md";
@@ -210,6 +214,21 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
+
+		new Setting(containerEl)
+			.setName("Quiz 卡年份需悬停显示")
+			.setDesc(
+				"开启后，Quiz 卡头部的年份平时被遮住，悬停（移动端轻点）才显示。带未学过年份卡的事件始终遮住年份，不受此开关影响。"
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.quizHoverHideYears)
+					.onChange(async (value) => {
+						this.plugin.settings.quizHoverHideYears = value;
+						await this.plugin.saveSettings();
+						await this.plugin.refreshTimelines();
+					})
+			);
 
 		new Setting(containerEl)
 			.setName("Entity languages")

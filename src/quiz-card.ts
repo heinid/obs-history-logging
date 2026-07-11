@@ -59,12 +59,23 @@ export function renderTimelineQuizCard(
 		);
 
 		const head = card.createDiv({ cls: "hl-card-head hl-quiz-card-head" });
-		const hideYear = quiz.kind === "year" && !revealed;
-		head.createSpan({
+		// While this event still has an unmastered year quiz, the head year
+		// would spoil it, so every sibling card keeps it masked.
+		const yearLocked = ordered.some(
+			(q) => q.kind === "year" && q.status !== "mastered"
+		);
+		const hideYear = yearLocked || (quiz.kind === "year" && !revealed);
+		const peekYear =
+			!hideYear && opts.plugin.settings.quizHoverHideYears;
+		const yearHost = peekYear
+			? head.createSpan({ cls: "hl-year-peek" })
+			: head;
+		if (peekYear) yearHost.setAttr("aria-label", "悬停显示年份");
+		yearHost.createSpan({
 			cls: "hl-year",
 			text: hideYear ? "年份？" : describeYear(entry.decoded),
 		});
-		if (!hideYear) head.createSpan({ cls: "hl-tag", text: entry.tag });
+		if (!hideYear) yearHost.createSpan({ cls: "hl-tag", text: entry.tag });
 		if (entry.evId) {
 			const evId = entry.evId;
 			const symbol = head.createSpan({ cls: "hl-ev-symbol", text: EV_SYMBOL });
