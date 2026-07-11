@@ -51,10 +51,13 @@ export class QuizManagerModal extends Modal {
 		const editQuiz = this.editQuizId
 			? this.eventQuizzes.find((quiz) => quiz.id === this.editQuizId)
 			: undefined;
+		if (!editQuiz && (!this.eventQuizzes.length || this.clozeAnswer)) {
+			this.modalEl.hide();
+			this.openEditor(undefined, this.clozeAnswer ? "cloze" : "year");
+			return;
+		}
 		this.renderManager();
 		if (editQuiz) this.openEditor(editQuiz);
-		else if (!this.eventQuizzes.length || this.clozeAnswer)
-			this.openEditor(undefined, this.clozeAnswer ? "cloze" : "year");
 	}
 
 	private async reload(): Promise<void> {
@@ -160,11 +163,17 @@ export class QuizManagerModal extends Modal {
 				return true;
 			},
 			onSaved: () => void this.refreshManager(),
+			onClosed: () => void this.refreshManager(),
 		}).open();
 	}
 
 	private async refreshManager(): Promise<void> {
 		await this.reload();
+		if (!this.eventQuizzes.length) {
+			this.close();
+			return;
+		}
+		this.modalEl.show();
 		this.renderManager();
 	}
 
@@ -196,8 +205,7 @@ export class QuizManagerModal extends Modal {
 				void (async () => {
 					await this.plugin.store.removeQuiz(quiz.id);
 					await this.plugin.refreshTimelines();
-					await this.reload();
-					this.renderManager();
+					await this.refreshManager();
 				})()
 		).open();
 	}
@@ -216,6 +224,7 @@ interface QuizEditorOptions {
 	clozeAnswer: string;
 	ensure: () => Promise<boolean>;
 	onSaved: () => void;
+	onClosed: () => void;
 }
 
 export class QuizEditorModal extends Modal {
@@ -425,6 +434,7 @@ export class QuizEditorModal extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
+		this.opts.onClosed();
 	}
 }
 
