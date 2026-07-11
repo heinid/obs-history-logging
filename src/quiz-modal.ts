@@ -51,13 +51,17 @@ export class QuizManagerModal extends Modal {
 		const editQuiz = this.editQuizId
 			? this.eventQuizzes.find((quiz) => quiz.id === this.editQuizId)
 			: undefined;
-		if (!editQuiz && (!this.eventQuizzes.length || this.clozeAnswer)) {
+		if (editQuiz) {
+			this.modalEl.hide();
+			this.openEditor(editQuiz, "qa", true);
+			return;
+		}
+		if (!this.eventQuizzes.length || this.clozeAnswer) {
 			this.modalEl.hide();
 			this.openEditor(undefined, this.clozeAnswer ? "cloze" : "year");
 			return;
 		}
 		this.renderManager();
-		if (editQuiz) this.openEditor(editQuiz);
 	}
 
 	private async reload(): Promise<void> {
@@ -148,7 +152,11 @@ export class QuizManagerModal extends Modal {
 		add.addEventListener("click", () => this.openEditor(undefined, "year"));
 	}
 
-	private openEditor(existing?: QuizEntry, initialKind: QuizKind = "qa"): void {
+	private openEditor(
+		existing?: QuizEntry,
+		initialKind: QuizKind = "qa",
+		standalone = false
+	): void {
 		new QuizEditorModal(this.app, this.plugin, {
 			event: this.event ?? { id: this.evId, tag: this.tag, summary: "" },
 			tag: this.tag,
@@ -162,8 +170,8 @@ export class QuizManagerModal extends Modal {
 				this.ensured = true;
 				return true;
 			},
-			onSaved: () => void this.refreshManager(),
-			onClosed: () => void this.refreshManager(),
+			onSaved: standalone ? () => this.close() : () => void this.refreshManager(),
+			onClosed: standalone ? () => this.close() : () => void this.refreshManager(),
 		}).open();
 	}
 
