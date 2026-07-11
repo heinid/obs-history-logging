@@ -206,9 +206,18 @@ export class EntityBrowserView extends ItemView {
 	}
 
 	private bodyScroll(): number {
-		if (this.current().kind === "entities")
-			return this.scrollEl?.scrollTop ?? 0;
+		const kind = this.current().kind;
+		if (kind === "entities") return this.scrollEl?.scrollTop ?? 0;
+		if (kind === "quizzes") return this.quizScrollEl()?.scrollTop ?? 0;
 		return this.bodyEl?.scrollTop ?? 0;
+	}
+
+	// The quiz backstage scrolls in its own inner list, not in the body.
+	private quizScrollEl(): HTMLElement | null {
+		return (
+			this.bodyEl?.querySelector<HTMLElement>(".hl-quiz-backstage-list") ??
+			null
+		);
 	}
 
 	private push(frame: NavFrame): void {
@@ -312,7 +321,8 @@ export class EntityBrowserView extends ItemView {
 				cur,
 				() => this.reload()
 			);
-			this.restoreBodyScroll(this.bodyEl, cur.scroll);
+			const scroller = this.quizScrollEl();
+			if (scroller) this.restoreBodyScroll(scroller, cur.scroll);
 		}
 		else void this.renderEntity(this.bodyEl, cur);
 		// Refresh the tab title (Obsidian re-reads getDisplayText on layout
