@@ -127,6 +127,9 @@
 .hl-lens-select {
 	font-size: 0.9em;
 }
+.hl-show .hl-lens-select {
+	max-width: 9em;
+}
 .hl-bar-spacer {
 	flex: 1;
 }
@@ -1862,12 +1865,7 @@ input.hl-tag-chip-input:focus-visible {
 	flex: 1 1 100%;
 }
 .hl-practice-layout {
-	flex: 0 1 auto;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	max-width: 10em;
-	white-space: nowrap;
+	flex: 0 0 auto;
 }
 
 .hl-quiz-practice,

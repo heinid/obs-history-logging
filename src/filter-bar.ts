@@ -205,9 +205,9 @@ export class FilterBar {
 		showSel.setAttr("aria-label", "Timeline content: events or quizzes");
 		for (const [value, label] of [
 			["events", "Events"],
-			["active-quizzes", "Active quizzes"],
-			["mastered-quizzes", "Mastered quizzes"],
-			["all-quizzes", "All quizzes"],
+			["active-quizzes", "Active"],
+			["mastered-quizzes", "Mastered"],
+			["all-quizzes", "All"],
 		] as [TimelineShow, string][])
 			showSel.createEl("option", { value, text: label });
 		showSel.value = this.show;

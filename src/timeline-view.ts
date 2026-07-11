@@ -240,9 +240,11 @@ export class TimelineView extends ItemView {
 				this.bar.show === "all-quizzes"
 			) {
 				const practice = new ButtonComponent(row);
-				practice.setButtonText("Practice this layout");
 				practice.setTooltip("Practice this layout");
 				practice.buttonEl.addClass("hl-practice-layout");
+				practice.buttonEl.addClass("hl-icon-btn");
+				practice.buttonEl.setAttr("aria-label", "Practice this layout");
+				setIcon(practice.buttonEl, "brain");
 				practice.onClick(() => this.practiceLayout());
 			}
 			// Add a comparison column: the new track starts empty and becomes
