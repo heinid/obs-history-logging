@@ -31,11 +31,14 @@ import {
 	ENTITY_BROWSER_VIEW_TYPE,
 	EntityBrowserView,
 } from "./entity-browser-view";
-import { QuizManagerModal } from "./quiz-modal";
+import { QuizManagerModal, QuizPracticeModal } from "./quiz-modal";
+import { QuizEntry } from "./quiz";
+import { quizSchedule } from "./quiz-display";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
 	store!: DataStore;
+	private quizReminders = new Map<string, number>();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -387,6 +390,42 @@ export default class HistoryLoggingPlugin extends Plugin {
 		}).open();
 	}
 
+	// After a short wait (forgot retry or first-learn recheck), surface the
+	// quiz again with a global notice that opens the practice modal directly.
+	// Day-scale intervals are picked up on the next visit instead.
+	remindQuizWhenReady(quiz: QuizEntry): void {
+		const pending = this.quizReminders.get(quiz.id);
+		if (pending !== undefined) {
+			window.clearTimeout(pending);
+			this.quizReminders.delete(quiz.id);
+		}
+		if (quiz.status !== "active" || !quiz.nextReview) return;
+		const due = Date.parse(quiz.nextReview);
+		if (Number.isNaN(due)) return;
+		const delay = due - Date.now();
+		const schedule = quizSchedule(this.settings);
+		const horizon =
+			Math.max(0, schedule.retryMinutes, schedule.recheckMinutes) * 60_000;
+		if (delay <= 0 || delay > horizon) return;
+		const timer = window.setTimeout(() => {
+			this.quizReminders.delete(quiz.id);
+			const notice = new Notice("有 1 道 Quiz 可以练习了，点击开始。", 30_000);
+			notice.noticeEl.addEventListener("click", () => {
+				notice.hide();
+				new QuizPracticeModal(this.app, this, quiz.id).open();
+			});
+			void this.refreshTimelines();
+		}, delay);
+		this.quizReminders.set(quiz.id, timer);
+		this.register(() => {
+			const active = this.quizReminders.get(quiz.id);
+			if (active === timer) {
+				window.clearTimeout(timer);
+				this.quizReminders.delete(quiz.id);
+			}
+		});
+	}
+
 	// Settings live in `<dataFolder>/settings.json` inside the vault so they
 	// sync with it (`.obsidian` may be excluded from sync). The plugin-folder
 	// data.json is kept as a device-local fallback and migration source.
@@ -416,6 +455,25 @@ export default class HistoryLoggingPlugin extends Plugin {
 				console.error("history-logging: bad settings.json", err);
 			}
 			break;
+		}
+		this.migrateQuizSchedule();
+	}
+
+	// The old minute-scale defaults ([10, 1440] with a 5-minute retry) treated
+	// the 10-minute recheck as a mastery step; move them to day-scale steps.
+	private migrateQuizSchedule(): void {
+		const intervals = this.settings.quizIntervalsMinutes;
+		if (
+			intervals.length === 2 &&
+			intervals[0] === 10 &&
+			intervals[1] === 24 * 60
+		) {
+			this.settings.quizIntervalsMinutes = [
+				...DEFAULT_SETTINGS.quizIntervalsMinutes,
+			];
+			if (this.settings.quizRetryMinutes === 5)
+				this.settings.quizRetryMinutes =
+					DEFAULT_SETTINGS.quizRetryMinutes;
 		}
 	}
 

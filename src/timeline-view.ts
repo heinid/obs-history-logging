@@ -31,7 +31,8 @@ import { dbMarkersToHtml, stripDbMarkers } from "./db-marker";
 import { addEventForEntry } from "./commands";
 import { openEvMenu } from "./ev-menu";
 import { tracksIn } from "./tracks";
-import { QuizEntry } from "./quiz";
+import { QuizEntry, isQuizReady, isQuizWaiting } from "./quiz";
+import { quizSchedule } from "./quiz-display";
 import { renderTimelineQuizCard } from "./quiz-card";
 import { TimelineShow } from "./layouts";
 import { QuizSessionModal } from "./quiz-session-modal";
@@ -716,8 +717,16 @@ export class TimelineView extends ItemView {
 		if (!entry.evId) return [];
 		return [...this.quizzes.values()].filter((quiz) => {
 			if (quiz.sourceEvId !== entry.evId) return false;
-			if (this.bar.show === "active-quizzes")
-				return quiz.status === "active";
+			// Active is the "due now" queue: remembered cards leave it until
+			// their next day-scale review, while short waits stay parked.
+			if (this.bar.show === "active-quizzes") {
+				if (quiz.status !== "active") return false;
+				const schedule = quizSchedule(this.plugin.settings);
+				return (
+					isQuizReady(quiz, new Date(), schedule) ||
+					isQuizWaiting(quiz, new Date(), schedule)
+				);
+			}
 			if (this.bar.show === "mastered-quizzes")
 				return quiz.status === "mastered";
 			if (this.bar.show === "all-quizzes")

@@ -42,8 +42,10 @@ export function quizSchedule(settings: HistoryLoggingSettings): QuizSchedule {
 		masterySteps: Math.max(1, settings.quizMasterySteps),
 		intervalMinutes: settings.quizIntervalsMinutes.length
 			? settings.quizIntervalsMinutes
-			: [10, 24 * 60],
+			: [24 * 60, 3 * 24 * 60],
 		retryMinutes: Math.max(0, settings.quizRetryMinutes),
+		recheckMinutes: Math.max(0, settings.quizRecheckMinutes),
+		remindRecheck: settings.quizRemindRecheck,
 	};
 }
 
@@ -72,9 +74,9 @@ export function nextReviewLabel(
 	if (!quiz.nextReview || isQuizReady(quiz, now, schedule)) return "";
 	const time = Date.parse(quiz.nextReview);
 	const minutes = Math.ceil((time - now.getTime()) / 60_000);
-	if (minutes < 60) return `${minutes} 分钟后可推进`;
+	if (minutes < 60) return `${minutes} 分钟后可练`;
 	const hours = Math.ceil(minutes / 60);
-	if (hours < 24) return `${hours} 小时后可推进`;
+	if (hours < 24) return `${hours} 小时后可练`;
 	const days = Math.ceil(hours / 24);
-	return `${days} 天后可推进`;
+	return days <= 1 ? "明天可练" : `${days} 天后可练`;
 }

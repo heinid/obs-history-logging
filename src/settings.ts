@@ -27,10 +27,15 @@ export interface HistoryLoggingSettings {
 	evMenuViews: EvMenuView[];
 	// Successful scheduled recalls required before a quiz is archived.
 	quizMasterySteps: number;
-	// Delay after each non-final successful recall, in minutes.
+	// Delay after each non-final successful recall, in minutes
+	// (day-scale steps: today → tomorrow → three days later).
 	quizIntervalsMinutes: number[];
-	// Delay after a fuzzy / forgotten scheduled recall, in minutes.
+	// Wait after "forgot", in minutes; the card stays parked until then.
 	quizRetryMinutes: number;
+	// Optional first-learn recheck: a global notice fires this many minutes
+	// after a new quiz is first remembered, and passing it completes step 1.
+	quizRemindRecheck: boolean;
+	quizRecheckMinutes: number;
 }
 
 export interface EvMenuView {
@@ -48,8 +53,10 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	evActions: [],
 	evMenuViews: [],
 	quizMasterySteps: 3,
-	quizIntervalsMinutes: [10, 24 * 60],
-	quizRetryMinutes: 5,
+	quizIntervalsMinutes: [24 * 60, 3 * 24 * 60],
+	quizRetryMinutes: 10,
+	quizRemindRecheck: false,
+	quizRecheckMinutes: 10,
 };
 
 export const EVENTS_FILE = "events.md";
@@ -131,28 +138,36 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("记得后的间隔")
+			.setName("记得后的间隔（天）")
 			.setDesc(
-				"每次选择“记得”后的等待分钟数，以逗号分隔。默认：10 分钟，然后 1 天（1440）。"
+				"每次选择“记得”后等待的天数，以逗号分隔。默认：1, 3（明天，然后三天后）。"
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder("10, 1440")
-					.setValue(this.plugin.settings.quizIntervalsMinutes.join(", "))
+					.setPlaceholder("1, 3")
+					.setValue(
+						this.plugin.settings.quizIntervalsMinutes
+							.map((m) => m / (24 * 60))
+							.join(", ")
+					)
 					.onChange(async (value) => {
 						const intervals = value
 							.split(",")
 							.map((part) => Number(part.trim()))
 							.filter((n) => Number.isFinite(n) && n >= 0);
 						if (!intervals.length) return;
-						this.plugin.settings.quizIntervalsMinutes = intervals;
+						this.plugin.settings.quizIntervalsMinutes = intervals.map(
+							(d) => Math.round(d * 24 * 60)
+						);
 						await this.plugin.saveSettings();
 					})
 			);
 
 		new Setting(containerEl)
-			.setName("不记得后的重试间隔")
-			.setDesc("选择“不记得”后，再次可练习所需的分钟数。")
+			.setName("不记得后的等待（分钟）")
+			.setDesc(
+				"选择“不记得”后卡片进入等待，这些分钟后恢复可练，并弹出全局提醒。"
+			)
 			.addText((text) => {
 				text.inputEl.type = "number";
 				text.inputEl.min = "0";
@@ -162,6 +177,36 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 						const parsed = Number(value);
 						if (!Number.isFinite(parsed) || parsed < 0) return;
 						this.plugin.settings.quizRetryMinutes = parsed;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("新学后提醒复核")
+			.setDesc(
+				"开启后，新题第一次“记得”不直接推进，而是稍后弹出全局提醒复核一次，复核通过才完成第一步。"
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.quizRemindRecheck)
+					.onChange(async (value) => {
+						this.plugin.settings.quizRemindRecheck = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("复核等待（分钟）")
+			.setDesc("新学后到复核提醒之间的分钟数。")
+			.addText((text) => {
+				text.inputEl.type = "number";
+				text.inputEl.min = "1";
+				text
+					.setValue(String(this.plugin.settings.quizRecheckMinutes))
+					.onChange(async (value) => {
+						const parsed = Number(value);
+						if (!Number.isFinite(parsed) || parsed < 1) return;
+						this.plugin.settings.quizRecheckMinutes = parsed;
 						await this.plugin.saveSettings();
 					});
 			});

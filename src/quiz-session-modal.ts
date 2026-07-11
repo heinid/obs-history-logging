@@ -77,11 +77,6 @@ export class QuizSessionModal extends Modal {
 			}`,
 		});
 		if (!this.revealed) {
-			if (!ready)
-				host.createDiv({
-					cls: "hl-quiz-early-note",
-					text: "提前练习答对不会推进掌握。",
-				});
 			if (quiz.hint) {
 				const details = host.createEl("details", { cls: "hl-quiz-hint" });
 				details.createEl("summary", { text: "提示" });
@@ -96,7 +91,7 @@ export class QuizSessionModal extends Modal {
 			}
 			const show = host.createEl("button", {
 				cls: "mod-cta hl-quiz-show-answer",
-				text: ready ? "显示答案" : "立即练习",
+				text: "显示答案",
 			});
 			show.addEventListener("click", () => {
 				this.revealed = true;
@@ -116,6 +111,22 @@ export class QuizSessionModal extends Modal {
 			);
 		}
 		const actions = host.createDiv({ cls: "hl-quiz-review-actions" });
+		if (!ready) {
+			actions.createSpan({
+				cls: "hl-quiz-wait-note",
+				text: nextReviewLabel(quiz, new Date(), schedule),
+			});
+			const next = actions.createEl("button", {
+				cls: "mod-cta",
+				text: "下一题",
+			});
+			next.addEventListener("click", () => {
+				this.index++;
+				this.revealed = false;
+				this.render();
+			});
+			return;
+		}
 		for (const [result, label] of [
 			["forgot", "不记得"],
 			["remembered", "记得"],
@@ -125,8 +136,8 @@ export class QuizSessionModal extends Modal {
 			button.setAttr(
 				"aria-label",
 				result === "forgot"
-					? "不记得：掌握退一级并在短间隔后重试"
-					: "记得：到达练习时间时掌握进一级"
+					? "不记得：掌握退一级并进入等待"
+					: "记得：掌握进一级"
 			);
 			button.addEventListener("click", () => void this.rate(quiz, result));
 		}
@@ -140,6 +151,7 @@ export class QuizSessionModal extends Modal {
 			quizSchedule(this.plugin.settings)
 		);
 		await this.plugin.store.upsertQuiz(updated);
+		this.plugin.remindQuizWhenReady(updated);
 		this.results[result]++;
 		if (result === "remembered") this.weakIds.delete(quiz.id);
 		else this.weakIds.add(quiz.id);

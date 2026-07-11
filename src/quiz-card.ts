@@ -6,6 +6,7 @@ import {
 	QuizResult,
 	QuizSchedule,
 	isQuizReady,
+	isQuizWaiting,
 	reviewQuiz,
 	reviveQuiz,
 } from "./quiz";
@@ -50,9 +51,11 @@ export function renderTimelineQuizCard(
 		const quiz = ordered[position];
 		if (!quiz) return;
 		const ready = isQuizReady(quiz, new Date(), schedule);
+		const waiting = isQuizWaiting(quiz, new Date(), schedule);
+		card.toggleClass("hl-quiz-waiting-card", waiting);
 		card.toggleClass(
 			"hl-quiz-cooling-card",
-			quiz.status === "active" && !ready
+			quiz.status === "active" && !ready && !waiting
 		);
 
 		const head = card.createDiv({ cls: "hl-card-head hl-quiz-card-head" });
@@ -142,21 +145,15 @@ export function renderTimelineQuizCard(
 				});
 			const show = controls.createEl("button", {
 				cls: "mod-cta",
-				text:
-					quiz.status === "active" && !ready
-						? "立即练习"
-						: "显示答案",
+				text: "显示答案",
 			});
+			show.disabled = waiting;
+			if (waiting) show.setAttr("aria-label", "等待中，稍后再练");
 			show.addEventListener("click", (e) => {
 				e.stopPropagation();
 				revealed = true;
 				paint();
 			});
-			if (quiz.status === "active" && !ready)
-				controls.createSpan({
-					cls: "hl-quiz-early-note",
-					text: "提前练习答对不会推进掌握。",
-				});
 			return;
 		}
 
@@ -176,7 +173,7 @@ export function renderTimelineQuizCard(
 				hintShown = !hintShown;
 				paint();
 			});
-		if (quiz.status === "active") {
+		if (quiz.status === "active" && ready) {
 			for (const [result, label] of [
 				["forgot", "不记得"],
 				["remembered", "记得"],
@@ -186,8 +183,8 @@ export function renderTimelineQuizCard(
 				button.setAttr(
 					"aria-label",
 					result === "forgot"
-						? "不记得：掌握退一级并在短间隔后重试"
-						: "记得：到达练习时间时掌握进一级"
+						? "不记得：掌握退一级并进入等待"
+						: "记得：掌握进一级"
 				);
 				button.addEventListener("click", (e) => {
 					e.stopPropagation();
@@ -197,9 +194,15 @@ export function renderTimelineQuizCard(
 						new Date(),
 						schedule
 					);
+					opts.plugin.remindQuizWhenReady(updated);
 					void opts.update(updated);
 				});
 			}
+		} else if (quiz.status === "active") {
+			controls.createSpan({
+				cls: "hl-quiz-wait-note",
+				text: nextReviewLabel(quiz, new Date(), schedule),
+			});
 		} else if (quiz.status === "mastered") {
 			const revive = controls.createEl("button", {
 				cls: "mod-cta",

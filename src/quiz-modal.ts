@@ -88,6 +88,7 @@ export class QuizManagerModal extends Modal {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-quiz-modal");
+		host.removeClass("hl-quiz-editor");
 		this.renderHead(host, `Quiz（${this.eventQuizzes.length}）`);
 
 		const list = host.createDiv({ cls: "hl-quiz-manage-list" });
@@ -117,7 +118,10 @@ export class QuizManagerModal extends Modal {
 				}${reviewLabel ? ` · ${reviewLabel}` : ""}`,
 			});
 
-			const practice = row.createEl("button", { text: "练习" });
+			const practice = row.createEl("button", { cls: "hl-icon-btn" });
+			setIcon(practice, "play");
+			practice.setAttr("aria-label", "练习");
+			practice.setAttr("title", "练习");
 			practice.disabled = quiz.status !== "active";
 			practice.addEventListener("click", () => {
 				new QuizPracticeModal(this.app, this.plugin, quiz.id, () =>
@@ -196,6 +200,7 @@ export class QuizManagerModal extends Modal {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-quiz-modal");
+		host.addClass("hl-quiz-editor");
 
 		let kind = existing?.kind ?? initialKind;
 		this.renderHead(host, existing ? `Edit ${quizKindLabel(kind)}` : "New Quiz");
@@ -450,11 +455,6 @@ export class QuizPracticeModal extends Modal {
 				? describeYear(decoded)
 				: this.event?.tag ?? "来源事件已不存在",
 		});
-		if (!ready)
-			context.createSpan({
-				cls: "hl-quiz-early-note",
-				text: "提前练习答对不会推进掌握",
-			});
 
 		const questionPanel = surface.createDiv({
 			cls: `hl-quiz-practice-panel hl-quiz-practice-question-panel${
@@ -546,6 +546,19 @@ export class QuizPracticeModal extends Modal {
 			});
 			return;
 		}
+		if (!ready || quiz.status !== "active") {
+			if (quiz.status === "active")
+				actions.createSpan({
+					cls: "hl-quiz-wait-note",
+					text: nextReviewLabel(quiz, new Date(), schedule),
+				});
+			const done = actions.createEl("button", {
+				cls: "mod-cta",
+				text: "关闭",
+			});
+			done.addEventListener("click", () => this.close());
+			return;
+		}
 		for (const [result, label] of [
 			["forgot", "不记得"],
 			["remembered", "记得"],
@@ -555,8 +568,8 @@ export class QuizPracticeModal extends Modal {
 			button.setAttr(
 				"aria-label",
 				result === "forgot"
-					? "不记得：掌握退一级并在短间隔后重试"
-					: "记得：到达练习时间时掌握进一级"
+					? "不记得：掌握退一级并进入等待"
+					: "记得：掌握进一级"
 			);
 			button.addEventListener("click", () => void this.rate(result));
 		}
@@ -571,6 +584,7 @@ export class QuizPracticeModal extends Modal {
 			quizSchedule(this.plugin.settings)
 		);
 		await this.plugin.store.upsertQuiz(updated);
+		this.plugin.remindQuizWhenReady(updated);
 		await this.plugin.refreshTimelines();
 		new Notice(
 			updated.status === "mastered"

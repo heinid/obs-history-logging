@@ -46,6 +46,7 @@ import {
 	DEFAULT_QUIZ_SCHEDULE,
 	QuizEntry,
 	isQuizReady,
+	isQuizWaiting,
 	reviewQuiz,
 	reviveQuiz,
 } from "../src/quiz";
@@ -284,8 +285,9 @@ eq(
 const t0 = new Date("2026-07-10T10:00:00.000Z");
 const afterOne = reviewQuiz(quiz, "remembered", t0, DEFAULT_QUIZ_SCHEDULE);
 eq("quiz success advances", afterOne.progress, 1);
-eq("quiz first interval", afterOne.nextReview, "2026-07-10T10:10:00.000Z");
+eq("quiz first interval is one day", afterOne.nextReview, "2026-07-11T10:00:00.000Z");
 eq("quiz cooling not ready", isQuizReady(afterOne, t0), false);
+eq("day-scale wait is not the parked state", isQuizWaiting(afterOne, t0), false);
 const invalidFuture = {
 	...afterOne,
 	nextReview: "2099-12-31T23:59:00.000Z",
@@ -308,22 +310,61 @@ const forgot = reviewQuiz(
 	DEFAULT_QUIZ_SCHEDULE
 );
 eq("early forgot regresses", forgot.progress, 0);
-eq("forgot retry interval", forgot.nextReview, "2026-07-10T10:10:00.000Z");
+eq("forgot retry interval", forgot.nextReview, "2026-07-10T10:15:00.000Z");
+eq(
+	"forgot card is parked as waiting",
+	isQuizWaiting(forgot, new Date("2026-07-10T10:05:00.000Z")),
+	true
+);
+eq(
+	"forgot card ready after wait",
+	isQuizReady(forgot, new Date("2026-07-10T10:15:00.000Z")),
+	true
+);
 const afterTwo = reviewQuiz(
 	afterOne,
 	"remembered",
-	new Date("2026-07-10T10:10:00.000Z"),
+	new Date("2026-07-11T10:00:00.000Z"),
 	DEFAULT_QUIZ_SCHEDULE
 );
-eq("quiz second interval", afterTwo.nextReview, "2026-07-11T10:10:00.000Z");
+eq("quiz second interval is three days", afterTwo.nextReview, "2026-07-14T10:00:00.000Z");
 const mastered = reviewQuiz(
 	afterTwo,
 	"remembered",
-	new Date("2026-07-11T10:10:00.000Z"),
+	new Date("2026-07-14T10:00:00.000Z"),
 	DEFAULT_QUIZ_SCHEDULE
 );
 eq("quiz third success masters", mastered.status, "mastered");
-eq("quiz mastery records cycle", mastered.cycles[0].completedAt, "2026-07-11T10:10:00.000Z");
+eq("quiz mastery records cycle", mastered.cycles[0].completedAt, "2026-07-14T10:00:00.000Z");
+
+// optional first-learn recheck
+const recheckSchedule = { ...DEFAULT_QUIZ_SCHEDULE, remindRecheck: true };
+const recheckPending = reviewQuiz(quiz, "remembered", t0, recheckSchedule);
+eq("recheck defers first step", recheckPending.progress, 0);
+eq("recheck flag set", recheckPending.pendingRecheck, true);
+eq("recheck due in ten minutes", recheckPending.nextReview, "2026-07-10T10:10:00.000Z");
+eq(
+	"recheck card is parked as waiting",
+	isQuizWaiting(recheckPending, t0, recheckSchedule),
+	true
+);
+const recheckPassed = reviewQuiz(
+	recheckPending,
+	"remembered",
+	new Date("2026-07-10T10:10:00.000Z"),
+	recheckSchedule
+);
+eq("passed recheck completes step 1", recheckPassed.progress, 1);
+eq("passed recheck clears flag", recheckPassed.pendingRecheck, false);
+eq("passed recheck schedules next day", recheckPassed.nextReview, "2026-07-11T10:10:00.000Z");
+const recheckFailed = reviewQuiz(
+	recheckPending,
+	"forgot",
+	new Date("2026-07-10T10:10:00.000Z"),
+	recheckSchedule
+);
+eq("failed recheck keeps progress at 0", recheckFailed.progress, 0);
+eq("failed recheck retries in ten minutes", recheckFailed.nextReview, "2026-07-10T10:20:00.000Z");
 const revived = reviveQuiz(mastered, new Date("2026-08-01T00:00:00.000Z"));
 eq("quiz revive resets progress", revived.progress, 0);
 eq("quiz revive adds cycle", revived.cycles.length, 2);

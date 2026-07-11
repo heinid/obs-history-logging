@@ -22,6 +22,7 @@ export interface QuizEntry {
 	status: QuizStatus;
 	progress: number;
 	nextReview?: string;
+	pendingRecheck?: boolean;
 	created: string;
 	updated: string;
 	question: string;
@@ -35,12 +36,16 @@ export interface QuizSchedule {
 	masterySteps: number;
 	intervalMinutes: number[];
 	retryMinutes: number;
+	recheckMinutes: number;
+	remindRecheck: boolean;
 }
 
 export const DEFAULT_QUIZ_SCHEDULE: QuizSchedule = {
 	masterySteps: 3,
-	intervalMinutes: [10, 24 * 60],
-	retryMinutes: 5,
+	intervalMinutes: [24 * 60, 3 * 24 * 60],
+	retryMinutes: 10,
+	recheckMinutes: 10,
+	remindRecheck: false,
 };
 
 export function isQuizReady(
@@ -53,8 +58,30 @@ export function isQuizReady(
 	const due = Date.parse(quiz.nextReview);
 	if (Number.isNaN(due) || due <= now.getTime()) return true;
 	const maximumDelay =
-		Math.max(0, schedule.retryMinutes, ...schedule.intervalMinutes) * 60_000;
+		Math.max(
+			0,
+			schedule.retryMinutes,
+			schedule.recheckMinutes,
+			...schedule.intervalMinutes
+		) * 60_000;
 	return due - now.getTime() > maximumDelay;
+}
+
+// An active quiz sitting out a short wait (forgot retry or first-learn
+// recheck) stays visibly parked in the Active view; day-scale intervals
+// simply drop it from the queue instead.
+export function isQuizWaiting(
+	quiz: QuizEntry,
+	now = new Date(),
+	schedule = DEFAULT_QUIZ_SCHEDULE
+): boolean {
+	if (quiz.status !== "active" || !quiz.nextReview) return false;
+	if (isQuizReady(quiz, now, schedule)) return false;
+	const due = Date.parse(quiz.nextReview);
+	if (Number.isNaN(due)) return false;
+	const horizon =
+		Math.max(0, schedule.retryMinutes, schedule.recheckMinutes) * 60_000;
+	return due - now.getTime() <= horizon;
 }
 
 export function reviewQuiz(
@@ -76,7 +103,14 @@ export function reviewQuiz(
 	if (!next.cycles.length)
 		next.cycles.push({ startedAt: quiz.created || at });
 
-	if (result === "remembered" && !early) {
+	if (result === "remembered" && !early && shouldRecheck(quiz, schedule)) {
+		next.pendingRecheck = true;
+		next.nextReview = addMinutes(
+			now,
+			Math.max(0, schedule.recheckMinutes)
+		);
+	} else if (result === "remembered" && !early) {
+		next.pendingRecheck = false;
 		next.progress = Math.min(
 			Math.max(1, schedule.masterySteps),
 			before + 1
@@ -93,6 +127,7 @@ export function reviewQuiz(
 			);
 		}
 	} else if (result === "forgot") {
+		next.pendingRecheck = false;
 		next.progress = Math.max(0, before - 1);
 		next.status = "active";
 		next.nextReview = addMinutes(now, Math.max(0, schedule.retryMinutes));
@@ -110,6 +145,14 @@ export function reviewQuiz(
 	return next;
 }
 
+function shouldRecheck(quiz: QuizEntry, schedule: QuizSchedule): boolean {
+	return (
+		schedule.remindRecheck &&
+		quiz.progress === 0 &&
+		!quiz.pendingRecheck
+	);
+}
+
 export function reviveQuiz(quiz: QuizEntry, now = new Date()): QuizEntry {
 	const at = now.toISOString();
 	return {
@@ -117,6 +160,7 @@ export function reviveQuiz(quiz: QuizEntry, now = new Date()): QuizEntry {
 		status: "active",
 		progress: 0,
 		nextReview: undefined,
+		pendingRecheck: false,
 		updated: at,
 		attempts: [...quiz.attempts],
 		cycles: [...quiz.cycles.map((cycle) => ({ ...cycle })), { startedAt: at }],

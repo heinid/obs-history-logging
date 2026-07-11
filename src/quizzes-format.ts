@@ -75,7 +75,9 @@ function parseQuizBlock(id: string, block: string): QuizEntry {
 			const progress = Number(value);
 			if (Number.isInteger(progress) && progress >= 0)
 				quiz.progress = progress;
-		} else if (key === "nextReview" && value.trim())
+		} else if (key === "pendingRecheck")
+			quiz.pendingRecheck = value.trim() === "true" || undefined;
+		else if (key === "nextReview" && value.trim())
 			quiz.nextReview = value.trim();
 		else if (key === "created" && value.trim()) quiz.created = value.trim();
 		else if (key === "updated" && value.trim()) quiz.updated = value.trim();
@@ -163,6 +165,7 @@ export function serializeQuizzesFile(
 		parts.push(`status: ${quiz.status}`);
 		parts.push(`progress: ${quiz.progress}`);
 		if (quiz.nextReview) parts.push(`nextReview: ${quiz.nextReview}`);
+		if (quiz.pendingRecheck) parts.push("pendingRecheck: true");
 		parts.push(`created: ${quiz.created}`);
 		parts.push(`updated: ${quiz.updated}`);
 		parts.push("");

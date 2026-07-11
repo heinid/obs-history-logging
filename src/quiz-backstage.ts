@@ -172,7 +172,10 @@ function renderQuizRow(
 	});
 
 	const actions = row.createDiv({ cls: "hl-quiz-backstage-actions" });
-	const practice = actions.createEl("button", { text: "练习" });
+	const practice = actions.createEl("button", { cls: "hl-icon-btn" });
+	setIcon(practice, "play");
+	practice.setAttr("aria-label", "练习");
+	practice.setAttr("title", "练习");
 	practice.disabled = quiz.status !== "active";
 	practice.addEventListener("click", () =>
 		new QuizPracticeModal(plugin.app, plugin, quiz.id).open()
