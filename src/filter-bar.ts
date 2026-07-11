@@ -158,7 +158,7 @@ export class FilterBar {
 		this.paintChips();
 
 		// Row 2 — lens (pure grouping, never filters) and the saved-view menu.
-		const lensRow = bar.createDiv({ cls: "hl-bar-row" });
+		const lensRow = bar.createDiv({ cls: "hl-bar-row hl-bar-controls" });
 		const lensWrap = lensRow.createDiv({ cls: "hl-lens" });
 		const lIcon = lensWrap.createSpan({ cls: "hl-lens-icon" });
 		setIcon(lIcon, "glasses");

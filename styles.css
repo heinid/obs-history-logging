@@ -33,10 +33,16 @@
 }
 .hl-bar-row {
 	display: flex;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;
 	width: 100%;
 	gap: 6px;
 	align-items: center;
+	min-width: 0;
+}
+.hl-bar-controls {
+	overflow: hidden;
+}
+.hl-bar-controls > * {
 	min-width: 0;
 }
 /* Query builder: committed chips + a free-text draft in one box. */
@@ -112,6 +118,16 @@
 	align-items: center;
 	gap: 4px;
 }
+.hl-bar-controls .hl-lens {
+	flex: 1 1 0;
+	overflow: hidden;
+}
+.hl-bar-controls .hl-groupby {
+	flex-grow: 0.72;
+}
+.hl-bar-controls .hl-show {
+	flex-grow: 0.92;
+}
 .hl-lens-icon {
 	display: inline-flex;
 	color: var(--text-faint);
@@ -130,8 +146,15 @@
 	font-size: 0.9em;
 	max-width: 100%;
 }
+.hl-bar-controls .hl-lens-select {
+	flex: 1 1 0;
+	width: 0;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
 .hl-bar-spacer {
-	flex: 1 1 24px;
+	flex: 0 1 16px;
 }
 /* Saved-view menu button: bookmark + name + dirty dot. */
 .hl-view-btn {
@@ -141,6 +164,12 @@
 	padding: 3px 8px;
 	font-size: 0.9em;
 	max-width: 16em;
+}
+.hl-bar-controls .hl-view-btn {
+	flex: 0.75 1 7em;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
 }
 .hl-view-icon,
 .hl-view-caret {
@@ -1865,8 +1894,12 @@ input.hl-tag-chip-input:focus-visible {
 	flex: 1 1 100%;
 }
 .hl-practice-layout {
+	flex: 0.85 1 8em;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	max-width: 100%;
-	white-space: normal;
+	white-space: nowrap;
 }
 
 .hl-quiz-practice,
@@ -2012,9 +2045,6 @@ input.hl-tag-chip-input:focus-visible {
 }
 
 @media (max-width: 700px) {
-	.hl-show {
-		flex-basis: 100%;
-	}
 	.hl-quiz-backstage-row {
 		align-items: flex-start;
 		flex-direction: column;

@@ -241,6 +241,7 @@ export class TimelineView extends ItemView {
 			) {
 				const practice = new ButtonComponent(row);
 				practice.setButtonText("Practice this layout");
+				practice.setTooltip("Practice this layout");
 				practice.buttonEl.addClass("hl-practice-layout");
 				practice.onClick(() => this.practiceLayout());
 			}
