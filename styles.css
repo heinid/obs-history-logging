@@ -16,7 +16,7 @@
    widening the cards. */
 .hl-timeline-list,
 .hl-timeline-bar {
-	max-width: 46em;
+	max-width: 52em;
 	margin-inline: auto;
 }
 .hl-timeline-bar {
@@ -24,16 +24,17 @@
 	flex-wrap: wrap;
 	gap: 6px;
 	align-items: center;
-	padding: 6px 4px 10px;
+	padding: 6px 0 10px;
 	position: sticky;
 	top: 0;
 	background: var(--background-primary);
 	z-index: 2;
+	container-type: inline-size;
 }
 .hl-bar-row {
 	display: flex;
 	width: 100%;
-	gap: 6px;
+	gap: 5px;
 	align-items: center;
 	min-width: 0;
 }
@@ -108,7 +109,8 @@
 .hl-lens {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: 3px;
+	min-width: 0;
 }
 .hl-lens-icon {
 	display: inline-flex;
@@ -126,21 +128,40 @@
 }
 .hl-lens-select {
 	font-size: 0.9em;
+	min-width: 0;
+}
+.hl-bar-row > .hl-lens:first-child {
+	flex: 0 1 18em;
+}
+.hl-bar-row > .hl-lens:first-child .hl-lens-select {
+	flex: 1 1 8em;
+	width: 14.5em;
+	max-width: 14.5em;
+}
+.hl-groupby .hl-lens-select {
+	flex: 1 1 5.5em;
+	width: 8em;
+	max-width: 8em;
 }
 .hl-show .hl-lens-select {
-	max-width: 9em;
+	flex: 1 1 4.5em;
+	width: 7em;
+	max-width: 7em;
 }
 .hl-bar-spacer {
-	flex: 1;
+	flex: 1 1 0;
+	min-width: 0;
 }
 /* Saved-view menu button: bookmark + name + dirty dot. */
 .hl-view-btn {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	padding: 3px 8px;
+	padding: 3px 6px;
 	font-size: 0.9em;
-	max-width: 16em;
+	max-width: 11em;
+	min-width: 0;
+	flex: 0 1 auto;
 }
 .hl-view-icon,
 .hl-view-caret {
@@ -162,7 +183,31 @@
 	font-weight: 700;
 }
 .hl-icon-btn {
-	padding: 4px 6px;
+	padding: 4px 5px;
+}
+@container (max-width: 45em) {
+	.hl-timeline-bar .hl-bar-row {
+		gap: 4px;
+	}
+	.hl-timeline-bar .hl-lens-label,
+	.hl-timeline-bar .hl-lens-icon {
+		display: none;
+	}
+	.hl-timeline-bar .hl-bar-row > .hl-lens:first-child {
+		flex-basis: 12em;
+	}
+	.hl-timeline-bar .hl-bar-row > .hl-lens:first-child .hl-lens-select {
+		width: 10em;
+	}
+	.hl-timeline-bar .hl-groupby .hl-lens-select {
+		width: 6.5em;
+	}
+	.hl-timeline-bar .hl-show .hl-lens-select {
+		width: 6em;
+	}
+	.hl-timeline-bar .hl-view-btn {
+		max-width: 7em;
+	}
 }
 .hl-group {
 	margin: 14px 0 6px;

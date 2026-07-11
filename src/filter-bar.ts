@@ -154,22 +154,6 @@ export class FilterBar {
 		});
 		new TagSuggest(this.plugin.app, this.inputEl);
 		box.addEventListener("click", () => this.inputEl.focus());
-		const showWrap = filterRow.createDiv({ cls: "hl-lens hl-show" });
-		const showSel = showWrap.createEl("select", { cls: "hl-lens-select" });
-		showSel.setAttr("aria-label", "Timeline content: events or quizzes");
-		for (const [value, label] of [
-			["events", "Events"],
-			["active-quizzes", "Active"],
-			["mastered-quizzes", "Mastered"],
-			["all-quizzes", "All"],
-		] as [TimelineShow, string][])
-			showSel.createEl("option", { value, text: label });
-		showSel.value = this.show;
-		showSel.addEventListener("change", () => {
-			this.show = showSel.value as TimelineShow;
-			this.emit();
-			this.render(this.barEl);
-		});
 		this.countEl = filterRow.createSpan({ cls: "hl-count" });
 		this.paintChips();
 
@@ -213,6 +197,24 @@ export class FilterBar {
 		groupSel.addEventListener("change", () => {
 			this.groupBy = groupSel.value as GroupBy;
 			this.emit();
+		});
+
+		const showWrap = lensRow.createDiv({ cls: "hl-lens hl-show" });
+		showWrap.createSpan({ cls: "hl-lens-label", text: "Show" });
+		const showSel = showWrap.createEl("select", { cls: "hl-lens-select" });
+		showSel.setAttr("aria-label", "Timeline content: events or quizzes");
+		for (const [value, label] of [
+			["events", "Events"],
+			["active-quizzes", "Active"],
+			["mastered-quizzes", "Mastered"],
+			["all-quizzes", "All"],
+		] as [TimelineShow, string][])
+			showSel.createEl("option", { value, text: label });
+		showSel.value = this.show;
+		showSel.addEventListener("change", () => {
+			this.show = showSel.value as TimelineShow;
+			this.emit();
+			this.render(this.barEl);
 		});
 
 		const spacer = lensRow.createDiv({ cls: "hl-bar-spacer" });
