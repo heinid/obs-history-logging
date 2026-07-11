@@ -106,15 +106,15 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Quiz memory cycle")
+			.setName("Quiz 学习阶段")
 			.setDesc(
-				"Shared recall steps and delays. Delays are earliest practice times, never deadlines."
+				"Quiz 只分为“在学”和“学过”。间隔表示最早可推进掌握的时间，不是截止时间。"
 			)
 			.setHeading();
 
 		new Setting(containerEl)
-			.setName("Successful recalls")
-			.setDesc("Archive a quiz after this many scheduled remembered answers.")
+			.setName("达到“学过”所需次数")
+			.setDesc("按计划选择“记得”达到这个次数后，Quiz 进入“学过”。")
 			.addText((text) => {
 				text.inputEl.type = "number";
 				text.inputEl.min = "1";
@@ -131,9 +131,9 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Success intervals")
+			.setName("记得后的间隔")
 			.setDesc(
-				"Comma-separated delays in minutes after each success. Default: 10 minutes, then 1 day (1440)."
+				"每次选择“记得”后的等待分钟数，以逗号分隔。默认：10 分钟，然后 1 天（1440）。"
 			)
 			.addText((text) =>
 				text
@@ -151,8 +151,8 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Retry delay")
-			.setDesc("Minutes before a fuzzy or forgotten quiz becomes ready again.")
+			.setName("不记得后的重试间隔")
+			.setDesc("选择“不记得”后，再次可练习所需的分钟数。")
 			.addText((text) => {
 				text.inputEl.type = "number";
 				text.inputEl.min = "0";

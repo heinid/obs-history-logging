@@ -1,6 +1,7 @@
 import {
 	MasteryCycle,
 	QuizAttempt,
+	DEFAULT_QUIZ_SCHEDULE,
 	QuizEntry,
 	QuizKind,
 	QuizResult,
@@ -10,12 +11,8 @@ import {
 export const QUIZZES_HEADER = "# History Logging — quizzes";
 
 const KINDS = new Set<QuizKind>(["year", "cloze", "qa"]);
-const STATUSES = new Set<QuizStatus>([
-	"active",
-	"paused",
-	"mastered",
-	"retired",
-]);
+const STATUSES = new Set<QuizStatus>(["active", "mastered"]);
+const LEGACY_STATUSES = new Set(["paused", "retired"]);
 const RESULTS = new Set<QuizResult>(["remembered", "fuzzy", "forgot"]);
 
 export function parseQuizzesFile(content: string): Map<string, QuizEntry> {
@@ -58,6 +55,7 @@ function parseQuizBlock(id: string, block: string): QuizEntry {
 		attempts: [],
 		cycles: [],
 	};
+	let storedStatus = "active";
 	const firstSection = block.search(/^###\s+/m);
 	const metadata = firstSection >= 0 ? block.slice(0, firstSection) : block;
 	for (const raw of metadata.split("\n")) {
@@ -67,8 +65,12 @@ function parseQuizBlock(id: string, block: string): QuizEntry {
 		if (key === "sourceEvId") quiz.sourceEvId = value.trim();
 		else if (key === "kind" && KINDS.has(value.trim() as QuizKind))
 			quiz.kind = value.trim() as QuizKind;
-		else if (key === "status" && STATUSES.has(value.trim() as QuizStatus))
-			quiz.status = value.trim() as QuizStatus;
+		else if (
+			key === "status" &&
+			(STATUSES.has(value.trim() as QuizStatus) ||
+				LEGACY_STATUSES.has(value.trim()))
+		)
+			storedStatus = value.trim();
 		else if (key === "progress") {
 			const progress = Number(value);
 			if (Number.isInteger(progress) && progress >= 0)
@@ -85,6 +87,12 @@ function parseQuizBlock(id: string, block: string): QuizEntry {
 	quiz.hint = sections.get("hint") ?? "";
 	quiz.attempts = parseAttempts(sections.get("attempts") ?? "");
 	quiz.cycles = parseCycles(sections.get("cycles") ?? "");
+	quiz.status =
+		storedStatus === "mastered" ||
+		(LEGACY_STATUSES.has(storedStatus) &&
+			quiz.progress >= DEFAULT_QUIZ_SCHEDULE.masterySteps)
+			? "mastered"
+			: "active";
 	return quiz;
 }
 

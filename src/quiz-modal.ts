@@ -12,8 +12,6 @@ import {
 	QuizKind,
 	QuizResult,
 	isQuizReady,
-	pauseQuiz,
-	resumeQuiz,
 	reviewQuiz,
 	reviveQuiz,
 } from "./quiz";
@@ -90,7 +88,7 @@ export class QuizManagerModal extends Modal {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-quiz-modal");
-		this.renderHead(host, `Quizzes (${this.eventQuizzes.length})`);
+		this.renderHead(host, `Quiz（${this.eventQuizzes.length}）`);
 
 		const list = host.createDiv({ cls: "hl-quiz-manage-list" });
 		for (const quiz of this.eventQuizzes) {
@@ -98,7 +96,12 @@ export class QuizManagerModal extends Modal {
 			const main = row.createDiv({ cls: "hl-quiz-manage-main" });
 			main.createDiv({
 				cls: "hl-quiz-kind",
-				text: quiz.kind === "qa" ? "Q&A" : quiz.kind,
+				text:
+					quiz.kind === "year"
+						? "年份题"
+						: quiz.kind === "cloze"
+						? "填空题"
+						: "问答题",
 			});
 			const question = main.createDiv({ cls: "hl-quiz-manage-question" });
 			void MarkdownRenderer.render(
@@ -110,7 +113,9 @@ export class QuizManagerModal extends Modal {
 			);
 			main.createDiv({
 				cls: "hl-quiz-manage-meta",
-				text: `${quiz.status} · 掌握 ${quiz.progress}/${
+				text: `${
+					quiz.status === "mastered" ? "学过" : "在学"
+				} · 掌握 ${quiz.progress}/${
 					this.plugin.settings.quizMasterySteps
 				}${nextReviewLabel(quiz) ? ` · ${nextReviewLabel(quiz)}` : ""}`,
 			});
@@ -124,26 +129,18 @@ export class QuizManagerModal extends Modal {
 
 			const edit = row.createEl("button", { cls: "hl-icon-btn" });
 			setIcon(edit, "pencil");
-			edit.setAttr("aria-label", "Edit quiz");
+			edit.setAttr("aria-label", "编辑这个 Quiz");
 			edit.addEventListener("click", () => this.renderEditor(quiz));
 
 			const more = row.createEl("button", { cls: "hl-icon-btn" });
 			setIcon(more, "more-horizontal");
-			more.setAttr("aria-label", "More quiz actions");
+			more.setAttr("aria-label", "更多 Quiz 操作");
 			more.addEventListener("click", () => {
 				const actions = row.createDiv({ cls: "hl-quiz-inline-actions" });
 				more.remove();
 				if (quiz.status === "mastered")
 					this.actionButton(actions, "重新学习", () =>
 						this.changeQuiz(reviveQuiz(quiz))
-					);
-				else if (quiz.status === "paused")
-					this.actionButton(actions, "继续学习", () =>
-						this.changeQuiz(resumeQuiz(quiz))
-					);
-				else if (quiz.status === "active")
-					this.actionButton(actions, "暂停学习", () =>
-						this.changeQuiz(pauseQuiz(quiz))
 					);
 				this.actionButton(actions, "删除", () => this.confirmDelete(quiz));
 			});
@@ -178,9 +175,9 @@ export class QuizManagerModal extends Modal {
 	private confirmDelete(quiz: QuizEntry): void {
 		new ConfirmModal(
 			this.app,
-			"Delete quiz",
-			"Delete this quiz and all of its attempt history?",
-			"Delete",
+			"删除 Quiz",
+			"删除这个 Quiz 及其全部练习记录？",
+			"删除",
 			() =>
 				void (async () => {
 					await this.plugin.store.removeQuiz(quiz.id);
@@ -196,15 +193,15 @@ export class QuizManagerModal extends Modal {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-quiz-modal");
-		this.renderHead(host, existing ? "Edit quiz" : "New quiz");
+		this.renderHead(host, existing ? "编辑 Quiz" : "新建 Quiz");
 
 		let kind = existing?.kind ?? initialKind;
 		const tabs = host.createDiv({ cls: "hl-quiz-kind-tabs" });
 		const form = host.createDiv({ cls: "hl-quiz-form" });
 		const kinds: [QuizKind, string][] = [
-			["year", "Year"],
-			["cloze", "Cloze"],
-			["qa", "Q&A"],
+			["year", "年份题"],
+			["cloze", "填空题"],
+			["qa", "问答题"],
 		];
 		const tabEls = new Map<QuizKind, HTMLElement>();
 		for (const [value, label] of kinds) {
@@ -222,7 +219,7 @@ export class QuizManagerModal extends Modal {
 		let sourceSelection = this.clozeAnswer;
 		const summary = stripDbMarkers(this.event?.summary ?? "");
 		if (!existing && kind === "year")
-			question = summary || "When did this event happen?";
+			question = summary || "这件事发生在哪一年？";
 		if (!existing && kind === "cloze" && sourceSelection)
 			({ question, answer } = makeCloze(summary, sourceSelection));
 
@@ -251,13 +248,13 @@ export class QuizManagerModal extends Modal {
 			if (kind === "cloze" && !existing) {
 				form.createDiv({
 					cls: "hl-quiz-help",
-					text: "Select the answer in the event summary, then make the cloze.",
+					text: "在事件总结中选中答案，再生成填空。",
 				});
 				const source = textArea(
 					form,
-					"Event summary",
+					"事件总结",
 					summary,
-					"Write an event summary first",
+					"请先填写事件总结",
 					() => undefined
 				);
 				source.readOnly = true;
@@ -268,7 +265,7 @@ export class QuizManagerModal extends Modal {
 						source.selectionEnd
 					);
 					if (!sourceSelection.trim()) {
-						new Notice("Select the answer text first.");
+						new Notice("请先选中要挖空的答案。");
 						return;
 					}
 					({ question, answer } = makeCloze(source.value, sourceSelection));
@@ -279,23 +276,23 @@ export class QuizManagerModal extends Modal {
 			if (kind === "year")
 				form.createDiv({
 					cls: "hl-quiz-help",
-					text: "The answer always follows the event's year tag.",
+					text: "答案始终跟随事件的年份标签。",
 				});
 			textArea(
 				form,
-				"Question",
+				"问题",
 				question,
 				kind === "year"
-					? "Event summary shown on the front"
-					: "Question (Markdown supported)",
+					? "题目正面显示的事件内容"
+					: "问题（支持 Markdown）",
 				(value) => (question = value)
 			);
 			if (kind !== "year")
 				textArea(
 					form,
-					"Answer",
+					"答案",
 					answer,
-					"Answer (Markdown supported)",
+					"答案（支持 Markdown）",
 					(value) => (answer = value)
 				);
 			else
@@ -309,7 +306,7 @@ export class QuizManagerModal extends Modal {
 						this.event
 					),
 				});
-			textArea(form, "Hint (optional)", hint, "Hint", (value) => (hint = value));
+			textArea(form, "提示（可选）", hint, "提示", (value) => (hint = value));
 		};
 		paintForm();
 
@@ -342,11 +339,11 @@ export class QuizManagerModal extends Modal {
 		practice: boolean
 	): Promise<void> {
 		if (!question.trim()) {
-			new Notice("Write a question first.");
+			new Notice("请先填写问题。");
 			return;
 		}
 		if (kind !== "year" && !answer.trim()) {
-			new Notice("Write an answer first.");
+			new Notice("请先填写答案。");
 			return;
 		}
 		if (!this.ensured) {
@@ -394,6 +391,7 @@ export class QuizPracticeModal extends Modal {
 	private quiz?: QuizEntry;
 	private event?: EventEntry;
 	private revealed = false;
+	private hintShown = false;
 
 	constructor(
 		app: App,
@@ -417,22 +415,52 @@ export class QuizPracticeModal extends Modal {
 		host.addClass("hl-quiz-practice");
 		const quiz = this.quiz;
 		if (!quiz) {
-			host.createDiv({ cls: "hl-empty", text: "Quiz not found." });
+			host.createDiv({ cls: "hl-empty", text: "找不到这个 Quiz。" });
 			return;
 		}
 
 		const head = host.createDiv({ cls: "hl-quiz-practice-head" });
-		head.createSpan({
+		head.createSpan({ cls: "hl-quiz-practice-title", text: "Quiz" });
+		const state = head.createDiv({ cls: "hl-quiz-practice-state" });
+		state.createSpan({
+			text: quiz.status === "mastered" ? "学过" : "在学",
+		});
+		state.createSpan({
 			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
 		});
 		const ready = isQuizReady(quiz);
 		if (!ready)
-			head.createSpan({
+			state.createSpan({
 				cls: "hl-quiz-cooling",
 				text: nextReviewLabel(quiz),
 			});
 
-		const question = host.createDiv({ cls: "hl-quiz-practice-question" });
+		const surface = host.createDiv({ cls: "hl-quiz-practice-surface" });
+		const context = surface.createDiv({ cls: "hl-quiz-practice-context" });
+		const decoded = this.event?.tag ? parseYearTag(this.event.tag) : null;
+		context.createSpan({
+			text: decoded
+				? describeYear(decoded)
+				: this.event?.tag ?? "来源事件已不存在",
+		});
+		if (!ready)
+			context.createSpan({
+				cls: "hl-quiz-early-note",
+				text: "提前练习答对不会推进掌握",
+			});
+
+		const questionPanel = surface.createDiv({
+			cls: `hl-quiz-practice-panel hl-quiz-practice-question-panel${
+				clozeRevealsInline(quiz) ? " is-cloze" : ""
+			}`,
+		});
+		questionPanel.createDiv({
+			cls: "hl-quiz-practice-label",
+			text: clozeRevealsInline(quiz) ? "填空" : "问题",
+		});
+		const question = questionPanel.createDiv({
+			cls: "hl-quiz-practice-question",
+		});
 		void MarkdownRenderer.render(
 			this.app,
 			quizQuestion(quiz, this.event, this.revealed),
@@ -441,35 +469,44 @@ export class QuizPracticeModal extends Modal {
 			this.plugin
 		);
 
-		if (!this.revealed) {
-			if (!ready)
-				host.createDiv({
-					cls: "hl-quiz-early-note",
-					text: "提前练习答对不会推进掌握。",
-				});
-			const show = host.createEl("button", {
-				cls: "mod-cta hl-quiz-show-answer",
-				text: ready ? "显示答案" : "立即练习",
-			});
-			show.addEventListener("click", () => {
-				this.revealed = true;
-				this.render();
-			});
-			return;
-		}
-
-		if (quiz.hint) {
-			const hint = host.createDiv({ cls: "hl-quiz-hint" });
+		if (this.hintShown && quiz.hint) {
+			const hint = questionPanel.createDiv({ cls: "hl-quiz-practice-hint" });
+			hint.createSpan({ text: "提示" });
+			const hintBody = hint.createDiv();
 			void MarkdownRenderer.render(
 				this.app,
 				quiz.hint,
-				hint,
+				hintBody,
 				"",
 				this.plugin
 			);
 		}
-		if (!clozeRevealsInline(quiz)) {
-			const answer = host.createDiv({ cls: "hl-quiz-practice-answer" });
+
+		const answerPanel = surface.createDiv({
+			cls: `hl-quiz-practice-panel hl-quiz-practice-answer-panel${
+				this.revealed ? " is-revealed" : ""
+			}`,
+		});
+		answerPanel.createDiv({
+			cls: "hl-quiz-practice-label",
+			text: "答案",
+		});
+		if (!this.revealed) {
+			answerPanel.createDiv({
+				cls: "hl-quiz-practice-placeholder",
+				text: clozeRevealsInline(quiz)
+					? "先在心里补全空缺，再显示答案"
+					: "先在心里回答，再显示答案",
+			});
+		} else if (clozeRevealsInline(quiz)) {
+			answerPanel.createDiv({
+				cls: "hl-quiz-practice-inline-note",
+				text: "答案已在上方空缺处原位显示",
+			});
+		} else {
+			const answer = answerPanel.createDiv({
+				cls: "hl-quiz-practice-answer",
+			});
 			void MarkdownRenderer.render(
 				this.app,
 				quizAnswer(quiz, this.event),
@@ -478,7 +515,30 @@ export class QuizPracticeModal extends Modal {
 				this.plugin
 			);
 		}
-		const actions = host.createDiv({ cls: "hl-quiz-review-actions" });
+
+		const footer = host.createDiv({ cls: "hl-quiz-practice-footer" });
+		const auxiliary = footer.createDiv({
+			cls: "hl-quiz-practice-auxiliary",
+		});
+		if (quiz.hint && !this.hintShown) {
+			const hint = auxiliary.createEl("button", { text: "提示" });
+			hint.addEventListener("click", () => {
+				this.hintShown = true;
+				this.render();
+			});
+		}
+		const actions = footer.createDiv({ cls: "hl-quiz-review-actions" });
+		if (!this.revealed) {
+			const show = actions.createEl("button", {
+				cls: "mod-cta hl-quiz-show-answer",
+				text: "显示答案",
+			});
+			show.addEventListener("click", () => {
+				this.revealed = true;
+				this.render();
+			});
+			return;
+		}
 		for (const [result, label] of [
 			["forgot", "不记得"],
 			["remembered", "记得"],
@@ -507,7 +567,7 @@ export class QuizPracticeModal extends Modal {
 		await this.plugin.refreshTimelines();
 		new Notice(
 			updated.status === "mastered"
-				? "题目已掌握并归档。"
+				? "这个 Quiz 已学过。"
 				: `掌握进度：${updated.progress}/${this.plugin.settings.quizMasterySteps}`
 		);
 		this.close();

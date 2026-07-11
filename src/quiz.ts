@@ -1,5 +1,5 @@
 export type QuizKind = "year" | "cloze" | "qa";
-export type QuizStatus = "active" | "paused" | "mastered" | "retired";
+export type QuizStatus = "active" | "mastered";
 export type QuizResult = "remembered" | "fuzzy" | "forgot";
 
 export interface QuizAttempt {
@@ -113,19 +113,6 @@ export function reviveQuiz(quiz: QuizEntry, now = new Date()): QuizEntry {
 		updated: at,
 		attempts: [...quiz.attempts],
 		cycles: [...quiz.cycles.map((cycle) => ({ ...cycle })), { startedAt: at }],
-	};
-}
-
-export function pauseQuiz(quiz: QuizEntry, now = new Date()): QuizEntry {
-	return { ...quiz, status: "paused", updated: now.toISOString() };
-}
-
-export function resumeQuiz(quiz: QuizEntry, now = new Date()): QuizEntry {
-	return {
-		...quiz,
-		status: "active",
-		nextReview: undefined,
-		updated: now.toISOString(),
 	};
 }
 

@@ -5,7 +5,6 @@ import {
 	QuizEntry,
 	QuizResult,
 	isQuizReady,
-	resumeQuiz,
 	reviewQuiz,
 	reviveQuiz,
 } from "./quiz";
@@ -58,13 +57,13 @@ export function renderTimelineQuizCard(
 		const hideYear = quiz.kind === "year" && !revealed;
 		head.createSpan({
 			cls: "hl-year",
-			text: hideYear ? "Year ?" : describeYear(entry.decoded),
+			text: hideYear ? "年份？" : describeYear(entry.decoded),
 		});
 		if (!hideYear) head.createSpan({ cls: "hl-tag", text: entry.tag });
 		if (entry.evId) {
 			const evId = entry.evId;
 			const symbol = head.createSpan({ cls: "hl-ev-symbol", text: EV_SYMBOL });
-			symbol.setAttr("aria-label", "Event actions");
+			symbol.setAttr("aria-label", "事件操作");
 			symbol.addEventListener("click", (e) => {
 				e.stopPropagation();
 				openEvMenu(opts.plugin, e, evId, entry.tag, tracksIn(entry.block));
@@ -73,12 +72,12 @@ export function renderTimelineQuizCard(
 		const navigation = head.createDiv({ cls: "hl-quiz-navigation" });
 		navigation.createSpan({
 			cls: "hl-quiz-counter",
-			text: `Question ${position + 1} of ${ordered.length}`,
+			text: `第 ${position + 1} 题，共 ${ordered.length} 题`,
 		});
 		const previous = navigation.createEl("button", { cls: "hl-icon-btn" });
 		setIcon(previous, "chevron-left");
 		previous.disabled = ordered.length < 2;
-		previous.setAttr("aria-label", "Previous quiz");
+		previous.setAttr("aria-label", "上一个 Quiz");
 		previous.addEventListener("click", (e) => {
 			e.stopPropagation();
 			position = (position - 1 + ordered.length) % ordered.length;
@@ -90,7 +89,7 @@ export function renderTimelineQuizCard(
 		const next = navigation.createEl("button", { cls: "hl-icon-btn" });
 		setIcon(next, "chevron-right");
 		next.disabled = ordered.length < 2;
-		next.setAttr("aria-label", "Next quiz");
+		next.setAttr("aria-label", "下一个 Quiz");
 		next.addEventListener("click", (e) => {
 			e.stopPropagation();
 			position = (position + 1) % ordered.length;
@@ -112,11 +111,7 @@ export function renderTimelineQuizCard(
 
 		const status = body.createDiv({ cls: "hl-quiz-card-status" });
 		const schedule =
-			quiz.status === "mastered"
-				? "已掌握"
-				: quiz.status === "paused"
-				? "已暂停学习"
-				: nextReviewLabel(quiz);
+			quiz.status === "mastered" ? "学过" : nextReviewLabel(quiz);
 		status.createSpan({
 			text: `掌握 ${quiz.progress}/${opts.plugin.settings.quizMasterySteps}${
 				schedule ? ` · ${schedule}` : ""
@@ -207,15 +202,6 @@ export function renderTimelineQuizCard(
 			revive.addEventListener("click", (e) => {
 				e.stopPropagation();
 				void opts.update(reviveQuiz(quiz));
-			});
-		} else if (quiz.status === "paused") {
-			const resume = controls.createEl("button", {
-				cls: "mod-cta",
-				text: "继续学习",
-			});
-			resume.addEventListener("click", (e) => {
-				e.stopPropagation();
-				void opts.update(resumeQuiz(quiz));
 			});
 		}
 		const source = controls.createEl("button", { text: "打开来源" });

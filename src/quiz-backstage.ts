@@ -9,8 +9,6 @@ import { EventEntry } from "./types";
 import {
 	QuizEntry,
 	QuizStatus,
-	pauseQuiz,
-	resumeQuiz,
 	reviveQuiz,
 } from "./quiz";
 import {
@@ -41,16 +39,14 @@ export function renderQuizBackstage(
 	const search = bar.createEl("input", {
 		cls: "hl-eb-search",
 		type: "search",
-		placeholder: "Search quizzes…",
+		placeholder: "搜索 Quiz、答案或事件…",
 	});
 	search.value = state.query;
 	const status = bar.createEl("select", { cls: "dropdown hl-eb-select" });
 	for (const [value, label] of [
-		["all", "All"],
-		["active", "Learning"],
-		["paused", "Paused"],
-		["mastered", "Mastered"],
-		["retired", "Retired"],
+		["all", "全部"],
+		["active", "在学"],
+		["mastered", "学过"],
 	] as [QuizBackstageStatus, string][])
 		status.createEl("option", { value, text: label });
 	status.value = state.status;
@@ -74,7 +70,7 @@ export function renderQuizBackstage(
 		host.querySelector(".hl-quiz-backstage-count")?.remove();
 		const count = createDiv({
 			cls: "hl-eb-count hl-quiz-backstage-count",
-			text: `${filtered.length} of ${quizzes.length} quizzes`,
+			text: `${filtered.length} / ${quizzes.length} 个 Quiz`,
 		});
 		list.insertAdjacentElement("beforebegin", count);
 
@@ -88,8 +84,8 @@ export function renderQuizBackstage(
 			list.createDiv({
 				cls: "hl-eb-empty",
 				text: quizzes.length
-					? "No quizzes match."
-					: "No quizzes yet. Open an event's ⌛ menu to create one.",
+					? "没有符合条件的 Quiz。"
+					: "还没有 Quiz。请从事件的 ⌛ 菜单创建。",
 			});
 			return;
 		}
@@ -104,7 +100,7 @@ export function renderQuizBackstage(
 					? decoded
 						? describeYear(decoded)
 						: event.tag ?? evId
-					: "Orphaned source",
+					: "来源事件已不存在",
 			});
 			const summary = head.createDiv({ cls: "hl-quiz-event-summary" });
 			if (event)
@@ -162,13 +158,11 @@ function renderQuizRow(
 	);
 	content.createDiv({
 		cls: "hl-quiz-manage-meta",
-		text: `${quiz.kind === "qa" ? "Q&A" : quiz.kind} · ${
-			quiz.status
+		text: `${quizKindLabel(quiz)} · ${
+			quiz.status === "mastered" ? "学过" : "在学"
 		} · 掌握 ${quiz.progress}/${
 			plugin.settings.quizMasterySteps
-		}${nextReviewLabel(quiz) ? ` · ${nextReviewLabel(quiz)}` : ""} · ${
-			quiz.attempts.length
-		} attempts · ${quiz.cycles.filter((cycle) => cycle.completedAt).length} cycles`,
+		}${nextReviewLabel(quiz) ? ` · ${nextReviewLabel(quiz)}` : ""}`,
 	});
 
 	const actions = row.createDiv({ cls: "hl-quiz-backstage-actions" });
@@ -180,7 +174,7 @@ function renderQuizRow(
 	if (event) {
 		const edit = actions.createEl("button", { cls: "hl-icon-btn" });
 		setIcon(edit, "pencil");
-		edit.setAttr("aria-label", "Edit this quiz");
+		edit.setAttr("aria-label", "编辑这个 Quiz");
 		edit.addEventListener("click", () =>
 			plugin.openQuizManager(
 				quiz.sourceEvId,
@@ -196,35 +190,21 @@ function renderQuizRow(
 			new RebindQuizModal(plugin, quiz, events, onChanged).open()
 		);
 	}
-	const state = actions.createEl("button", {
-		text:
-			quiz.status === "mastered"
-				? "重新学习"
-				: quiz.status === "paused"
-				? "继续学习"
-				: "暂停学习",
-	});
-	state.disabled = quiz.status === "retired";
-	state.addEventListener("click", () =>
-		void updateQuiz(
-			plugin,
-			quiz.status === "mastered"
-				? reviveQuiz(quiz)
-				: quiz.status === "paused"
-				? resumeQuiz(quiz)
-				: pauseQuiz(quiz),
-			onChanged
-		)
-	);
+	if (quiz.status === "mastered") {
+		const relearn = actions.createEl("button", { text: "重新学习" });
+		relearn.addEventListener("click", () =>
+			void updateQuiz(plugin, reviveQuiz(quiz), onChanged)
+		);
+	}
 	const remove = actions.createEl("button", { cls: "hl-icon-btn" });
 	setIcon(remove, "trash-2");
-	remove.setAttr("aria-label", "Delete quiz");
+	remove.setAttr("aria-label", "删除这个 Quiz");
 	remove.addEventListener("click", () =>
 		new ConfirmModal(
 			plugin.app,
-			"Delete quiz",
-			"Delete this quiz and all of its attempt history?",
-			"Delete",
+			"删除 Quiz",
+			"删除这个 Quiz 及其全部练习记录？",
+			"删除",
 			() =>
 				void (async () => {
 					await plugin.store.removeQuiz(quiz.id);
@@ -256,7 +236,7 @@ class RebindQuizModal extends FuzzySuggestModal<EventEntry> {
 	) {
 		super(plugin.app);
 		this.entries = [...events.values()];
-		this.setPlaceholder("Rebind quiz to an event…");
+		this.setPlaceholder("重新绑定 Quiz 的来源事件…");
 	}
 
 	getItems(): EventEntry[] {
@@ -278,7 +258,13 @@ class RebindQuizModal extends FuzzySuggestModal<EventEntry> {
 			});
 			await this.plugin.refreshTimelines();
 			await this.onChanged();
-			new Notice("Quiz source rebound.");
+			new Notice("Quiz 已重新绑定来源事件。");
 		})();
 	}
+}
+
+function quizKindLabel(quiz: QuizEntry): string {
+	if (quiz.kind === "year") return "年份题";
+	if (quiz.kind === "cloze") return "填空题";
+	return "问答题";
 }

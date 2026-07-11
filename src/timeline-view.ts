@@ -283,7 +283,7 @@ export class TimelineView extends ItemView {
 			)
 			.map((quiz) => quiz.id);
 		if (!quizIds.length) {
-			new Notice("No active quizzes match this layout.");
+			new Notice("这个布局中没有“在学”的 Quiz。");
 			return;
 		}
 		new QuizSessionModal(this.app, this.plugin, quizIds).open();
@@ -410,7 +410,7 @@ export class TimelineView extends ItemView {
 				text:
 					this.bar.show === "events"
 						? "No dated notes match."
-						: "No quizzes match this view.",
+						: "这个视图中没有符合条件的 Quiz。",
 			});
 			return;
 		}
@@ -715,18 +715,13 @@ export class TimelineView extends ItemView {
 	private quizzesForEntry(entry: TimelineEntry): QuizEntry[] {
 		if (!entry.evId) return [];
 		return [...this.quizzes.values()].filter((quiz) => {
-			if (quiz.sourceEvId !== entry.evId || quiz.status === "retired")
-				return false;
+			if (quiz.sourceEvId !== entry.evId) return false;
 			if (this.bar.show === "active-quizzes")
 				return quiz.status === "active";
 			if (this.bar.show === "mastered-quizzes")
 				return quiz.status === "mastered";
 			if (this.bar.show === "all-quizzes")
-				return (
-					quiz.status === "active" ||
-					quiz.status === "paused" ||
-					quiz.status === "mastered"
-				);
+				return quiz.status === "active" || quiz.status === "mastered";
 			return false;
 		});
 	}

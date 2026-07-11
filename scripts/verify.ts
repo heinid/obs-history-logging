@@ -231,8 +231,25 @@ const quiz: QuizEntry = {
 	cycles: [{ startedAt: "2026-07-10T10:00:00.000Z" }],
 };
 const quizMap = new Map([[quiz.id, quiz]]);
-const quizRound = parseQuizzesFile(serializeQuizzesFile(quizMap));
+const serializedQuiz = serializeQuizzesFile(quizMap);
+const quizRound = parseQuizzesFile(serializedQuiz);
 eq("quiz roundtrip", quizRound.get(quiz.id), quiz);
+eq(
+	"legacy paused quiz migrates to learning",
+	parseQuizzesFile(serializedQuiz.replace("status: active", "status: paused")).get(
+		quiz.id
+	)?.status,
+	"active"
+);
+eq(
+	"legacy retired completed quiz migrates to learned",
+	parseQuizzesFile(
+		serializedQuiz
+			.replace("status: active", "status: retired")
+			.replace("progress: 0", "progress: 3")
+	).get(quiz.id)?.status,
+	"mastered"
+);
 eq(
 	"year quiz masks source year",
 	quizQuestion(

@@ -58,7 +58,7 @@ export class QuizSessionModal extends Modal {
 
 		const head = host.createDiv({ cls: "hl-quiz-session-head" });
 		head.createSpan({
-			text: `Question ${this.index + 1} of ${this.quizzes.length}`,
+			text: `第 ${this.index + 1} 题，共 ${this.quizzes.length} 题`,
 		});
 
 		const question = host.createDiv({ cls: "hl-quiz-practice-question" });

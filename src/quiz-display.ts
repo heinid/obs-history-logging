@@ -11,9 +11,7 @@ export function quizQuestion(
 	const question =
 		quiz.question.trim() ||
 		(quiz.kind === "year" ? event?.summary.trim() : "") ||
-		(quiz.kind === "year"
-			? "When did this event happen?"
-			: "Untitled quiz");
+		(quiz.kind === "year" ? "这件事发生在哪一年？" : "未命名 Quiz");
 	if (quiz.kind === "cloze" && revealCloze && question.includes("____"))
 		return question.replace("____", `==${quiz.answer.trim()}==`);
 	return quiz.kind === "year"
@@ -31,7 +29,7 @@ export function quizAnswer(
 ): string {
 	if (quiz.kind !== "year") return quiz.answer;
 	const decoded = event?.tag ? parseYearTag(event.tag) : null;
-	return decoded ? describeYear(decoded) : event?.tag ?? "Source year unavailable";
+	return decoded ? describeYear(decoded) : event?.tag ?? "来源年份不可用";
 }
 
 export function quizSchedule(settings: HistoryLoggingSettings): QuizSchedule {
