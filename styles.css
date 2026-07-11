@@ -2171,6 +2171,14 @@ input.hl-tag-chip-input:focus-visible {
 	padding: 8px 10px;
 	background: var(--background-secondary);
 }
+.hl-quiz-event-open {
+	margin-left: auto;
+	opacity: 0.35;
+}
+.hl-quiz-event-head:hover .hl-quiz-event-open,
+.hl-quiz-event-open:focus-visible {
+	opacity: 1;
+}
 .hl-quiz-event-year {
 	flex: 0 0 auto;
 	font-weight: 700;

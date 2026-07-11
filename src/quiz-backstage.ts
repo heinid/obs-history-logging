@@ -113,6 +113,17 @@ export function renderQuizBackstage(
 					plugin
 				);
 			else summary.setText(evId);
+			if (event) {
+				const open = head.createEl("button", {
+					cls: "hl-icon-btn hl-quiz-event-open",
+				});
+				setIcon(open, "hourglass");
+				open.setAttr("aria-label", "编辑事件总结");
+				open.setAttr("title", "编辑事件总结");
+				open.addEventListener("click", () =>
+					plugin.openSummary(evId, event.tag ?? "", () => void onChanged())
+				);
+			}
 			if (group.some((quiz) => quiz.status === "mastered")) {
 				const revive = head.createEl("button", {
 					text: "重新学习已掌握题",

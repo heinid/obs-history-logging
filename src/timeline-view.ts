@@ -41,12 +41,18 @@ export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
 
 // Identity of the topmost visible card, used to restore the reader's place
 // across a full rebuild (pixel scroll offsets drift when content changes).
-interface ScrollAnchor {
+interface CardIdentity {
 	evId: string;
 	filePath: string;
 	tag: string;
 	tagOrdinal: number;
+}
+
+interface ScrollAnchor extends CardIdentity {
 	delta: number;
+	// Cards below the anchor, tried in order when the anchor card itself
+	// vanished from the rebuilt list (e.g. its quizzes were all rated away).
+	fallbacks: CardIdentity[];
 }
 
 export class TimelineView extends ItemView {
@@ -197,22 +203,27 @@ export class TimelineView extends ItemView {
 	private captureAnchor(): ScrollAnchor | null {
 		if (this.contentEl.scrollTop <= 0) return null;
 		const top = this.contentEl.getBoundingClientRect().top + this.barHeight();
+		let anchor: ScrollAnchor | null = null;
 		for (const [entry, el] of this.cardEls) {
 			const r = el.getBoundingClientRect();
 			if (r.bottom < top) continue;
-			return {
+			const identity: CardIdentity = {
 				evId: entry.evId ?? "",
 				filePath: entry.filePath,
 				tag: entry.tag,
 				tagOrdinal: entry.tagOrdinal,
-				delta: r.top - top,
 			};
+			if (!anchor) {
+				anchor = { ...identity, delta: r.top - top, fallbacks: [] };
+				continue;
+			}
+			anchor.fallbacks.push(identity);
+			if (anchor.fallbacks.length >= 8) break;
 		}
-		return null;
+		return anchor;
 	}
 
-	private restoreAnchor(a: ScrollAnchor | null): void {
-		if (!a) return;
+	private findAnchorCard(a: CardIdentity): HTMLElement | undefined {
 		const entry =
 			(a.evId ? this.entries.find((e) => e.evId === a.evId) : undefined) ??
 			this.entries.find(
@@ -221,11 +232,25 @@ export class TimelineView extends ItemView {
 					e.tag === a.tag &&
 					e.tagOrdinal === a.tagOrdinal
 			);
-		const card = entry ? this.cardEls.get(entry) : undefined;
+		return entry ? this.cardEls.get(entry) : undefined;
+	}
+
+	private restoreAnchor(a: ScrollAnchor | null): void {
+		if (!a) return;
+		let card = this.findAnchorCard(a);
+		let delta = a.delta;
+		if (!card)
+			for (const fallback of a.fallbacks) {
+				card = this.findAnchorCard(fallback);
+				if (card) {
+					delta = 0;
+					break;
+				}
+			}
 		if (!card) return;
 		const top = this.contentEl.getBoundingClientRect().top + this.barHeight();
 		this.contentEl.scrollTop +=
-			card.getBoundingClientRect().top - top - a.delta;
+			card.getBoundingClientRect().top - top - delta;
 	}
 
 	private renderChrome(): void {
