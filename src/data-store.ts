@@ -22,6 +22,8 @@ import {
 	serializeDbTypesFile,
 	serializeEntitiesFile,
 } from "./db-format";
+import { QuizEntry } from "./quiz";
+import { parseQuizzesFile, serializeQuizzesFile } from "./quizzes-format";
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
@@ -77,6 +79,40 @@ export class DataStore {
 	async removeEvent(id: string): Promise<void> {
 		const entries = await this.readEvents();
 		if (entries.delete(id)) await this.writeEvents(entries);
+	}
+
+	private quizzesPath(): string {
+		return normalizePath(`${this.getFolder()}/quizzes.md`);
+	}
+
+	quizzesFilePath(): string {
+		return this.quizzesPath();
+	}
+
+	async readQuizzes(): Promise<Map<string, QuizEntry>> {
+		const file = this.app.vault.getAbstractFileByPath(this.quizzesPath());
+		if (!(file instanceof TFile)) return new Map();
+		return parseQuizzesFile(await this.app.vault.read(file));
+	}
+
+	async writeQuizzes(quizzes: Map<string, QuizEntry>): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeQuizzesFile(quizzes);
+		const path = this.quizzesPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
+	}
+
+	async upsertQuiz(quiz: QuizEntry): Promise<void> {
+		const quizzes = await this.readQuizzes();
+		quizzes.set(quiz.id, quiz);
+		await this.writeQuizzes(quizzes);
+	}
+
+	async removeQuiz(id: string): Promise<void> {
+		const quizzes = await this.readQuizzes();
+		if (quizzes.delete(id)) await this.writeQuizzes(quizzes);
 	}
 
 	private profilesPath(): string {

@@ -6,7 +6,7 @@
 import { Menu, Notice } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { parseYearTag } from "./year-tag";
-import { addEventForTag } from "./commands";
+import { addEventForTag, prepareEventForTag } from "./commands";
 import {
 	fillActionUrl,
 	wikipediaYearTitle,
@@ -46,6 +46,11 @@ async function openEvMenuAsync(
 			? await plugin.store.readLayouts()
 			: [];
 	const menu = new Menu();
+	const quizCount = id
+		? [...(await plugin.store.readQuizzes()).values()].filter(
+				(quiz) => quiz.sourceEvId === id
+		  ).length
+		: 0;
 
 	if (id)
 		menu.addItem((item) =>
@@ -61,6 +66,38 @@ async function openEvMenuAsync(
 				.setIcon("pencil")
 				.onClick(() =>
 					void addEventForTag(plugin, bare.filePath, bare.offset, tag)
+				)
+		);
+
+	if (id)
+		menu.addItem((item) =>
+			item
+				.setTitle(quizCount ? `Quizzes (${quizCount})…` : "Create quiz…")
+				.setIcon("circle-help")
+				.onClick(() => plugin.openQuizManager(id, tag))
+		);
+	else if (bare)
+		menu.addItem((item) =>
+			item
+				.setTitle("Create quiz…")
+				.setIcon("circle-help")
+				.onClick(
+					() =>
+						void (async () => {
+							const prepared = await prepareEventForTag(
+								plugin,
+								bare.filePath,
+								bare.offset,
+								tag
+							);
+							if (prepared)
+								plugin.openQuizManager(
+									prepared.id,
+									tag,
+									"",
+									prepared.ensure
+								);
+						})()
 				)
 		);
 
@@ -95,6 +132,7 @@ async function openEvMenuAsync(
 						v.kind === "profile"
 							? {
 									name: v.name,
+									show: "events" as const,
 									panes: [
 										{
 											filter: "",

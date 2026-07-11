@@ -31,6 +31,7 @@ import {
 	ENTITY_BROWSER_VIEW_TYPE,
 	EntityBrowserView,
 } from "./entity-browser-view";
+import { QuizManagerModal } from "./quiz-modal";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
@@ -126,6 +127,11 @@ export default class HistoryLoggingPlugin extends Plugin {
 			callback: () => void this.browseEntities("types"),
 		});
 		this.addCommand({
+			id: "browse-quizzes",
+			name: "Browse quizzes",
+			callback: () => void this.browseEntities("quizzes"),
+		});
+		this.addCommand({
 			id: "check-data-health",
 			name: "Check data health",
 			callback: () => void checkDataHealth(this),
@@ -184,11 +190,12 @@ export default class HistoryLoggingPlugin extends Plugin {
 			profile: t.profile,
 			groupBy,
 		}));
+		const show = view.getShow();
 		new NameModal(this.app, "Save layout as", "", (name) => {
 			void (async () => {
 				const layouts = await this.store.readLayouts();
 				const rest = layouts.filter((l) => l.name !== name);
-				await this.store.writeLayouts([...rest, { name, panes }]);
+				await this.store.writeLayouts([...rest, { name, show, panes }]);
 				new Notice(`Layout "${name}" saved (${panes.length} tracks).`);
 			})();
 		}).open();
@@ -229,6 +236,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 				tracks,
 				active: 0,
 				groupBy: layout.panes[0]?.groupBy ?? "century",
+				show: layout.show,
 			},
 		});
 		workspace.revealLeaf(leaf);
@@ -274,6 +282,22 @@ export default class HistoryLoggingPlugin extends Plugin {
 		ensure?: () => Promise<boolean>
 	): void {
 		new SummaryModal(this.app, this, id, tag, onSaved, ensure).open();
+	}
+
+	openQuizManager(
+		id: string,
+		tag: string,
+		clozeAnswer = "",
+		ensure?: () => Promise<boolean>
+	): void {
+		new QuizManagerModal(
+			this.app,
+			this,
+			id,
+			tag,
+			clozeAnswer,
+			ensure
+		).open();
 	}
 
 	// ⌛ menu: open (or focus) a timeline and scroll to this event's card.
@@ -324,7 +348,9 @@ export default class HistoryLoggingPlugin extends Plugin {
 	}
 
 	// Open (or focus) the backstage tab, optionally landing on a section.
-	async browseEntities(section?: "entities" | "types"): Promise<void> {
+	async browseEntities(
+		section?: "entities" | "types" | "quizzes"
+	): Promise<void> {
 		const { workspace } = this.app;
 		const existing = workspace.getLeavesOfType(ENTITY_BROWSER_VIEW_TYPE)[0];
 		if (existing) {

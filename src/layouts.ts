@@ -19,8 +19,15 @@ export interface LayoutPane {
 	profile: string;
 }
 
+export type TimelineShow =
+	| "events"
+	| "active-quizzes"
+	| "mastered-quizzes"
+	| "all-quizzes";
+
 export interface TimelineLayout {
 	name: string;
+	show: TimelineShow;
 	panes: LayoutPane[];
 }
 
@@ -47,6 +54,7 @@ export function parseLayoutsFile(content: string): TimelineLayout[] {
 		const end = i + 1 < heads.length ? heads[i + 1].start : normalised.length;
 		const body = normalised.slice(h.bodyStart, end);
 		const panes: LayoutPane[] = [];
+		let show: TimelineShow = "events";
 		let pane: LayoutPane | null = null;
 		for (const raw of body.split("\n")) {
 			const line = raw.trim();
@@ -55,17 +63,21 @@ export function parseLayoutsFile(content: string): TimelineLayout[] {
 				panes.push(pane);
 				continue;
 			}
-			if (!pane) continue;
 			const kv = /^(\w+):\s*(.*)$/.exec(line);
 			if (!kv) continue;
 			const [, key, value] = kv;
+			if (!pane && key === "show" && isTimelineShow(value.trim())) {
+				show = value.trim() as TimelineShow;
+				continue;
+			}
+			if (!pane) continue;
 			if (key === "filter") pane.filter = value.trim();
 			else if (key === "lens") pane.lens = value.trim();
 			else if (key === "groupBy") pane.groupBy = value.trim();
 			else if (key === "profile") pane.profile = value.trim();
 			// Unknown keys (e.g. the retired `sync`) are ignored.
 		}
-		if (panes.length) layouts.push({ name: h.name, panes });
+		if (panes.length) layouts.push({ name: h.name, show, panes });
 	}
 	return layouts;
 }
@@ -74,6 +86,7 @@ export function serializeLayoutsFile(layouts: TimelineLayout[]): string {
 	const parts: string[] = [LAYOUTS_HEADER, ""];
 	for (const l of layouts) {
 		parts.push(`## ${l.name}`);
+		if (l.show !== "events") parts.push(`show: ${l.show}`);
 		for (const p of l.panes) {
 			parts.push("### pane");
 			if (p.filter) parts.push(`filter: ${p.filter}`);
@@ -84,4 +97,13 @@ export function serializeLayoutsFile(layouts: TimelineLayout[]): string {
 		parts.push("");
 	}
 	return parts.join("\n").replace(/\n+$/, "\n");
+}
+
+export function isTimelineShow(value: string): value is TimelineShow {
+	return (
+		value === "events" ||
+		value === "active-quizzes" ||
+		value === "mastered-quizzes" ||
+		value === "all-quizzes"
+	);
 }

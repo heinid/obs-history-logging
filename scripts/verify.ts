@@ -41,6 +41,15 @@ import {
 	wikipediaYearUrl,
 	fillActionUrl,
 } from "../src/ev-actions";
+import { parseQuizzesFile, serializeQuizzesFile } from "../src/quizzes-format";
+import {
+	DEFAULT_QUIZ_SCHEDULE,
+	QuizEntry,
+	isQuizReady,
+	reviewQuiz,
+	reviveQuiz,
+} from "../src/quiz";
+import { quizQuestion } from "../src/quiz-display";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -196,14 +205,91 @@ eq("trackMatches name", tm[0].name, "ローマ史");
 
 // layouts round-trip
 const layouts = parseLayoutsFile(
-	"# layouts\n## 東西対照\n### pane\nfilter: #histolog/日本史\nlens: 日本史\ngroupBy: century\nprofile: 日本史\nsync: true\n### pane\nfilter: #histolog/ローマ史\nlens: ローマ史\ngroupBy: century\nsync: true\n"
+	"# layouts\n## 東西対照\nshow: active-quizzes\n### pane\nfilter: #histolog/日本史\nlens: 日本史\ngroupBy: century\nprofile: 日本史\nsync: true\n### pane\nfilter: #histolog/ローマ史\nlens: ローマ史\ngroupBy: century\nsync: true\n"
 );
 eq("layouts parsed", layouts.length, 1);
+eq("layout show", layouts[0].show, "active-quizzes");
 eq("layout panes", layouts[0].panes.length, 2);
 eq("layout pane filter", layouts[0].panes[0].filter, "#histolog/日本史");
 eq("layout pane no profile", layouts[0].panes[1].profile, "");
 const layoutRound = parseLayoutsFile(serializeLayoutsFile(layouts));
 eq("layouts roundtrip", layoutRound, layouts);
+
+// quiz data + three-stage memory state
+const quiz: QuizEntry = {
+	id: "z1y2x3w4",
+	sourceEvId: "k7f3a9x1",
+	kind: "qa",
+	status: "active",
+	progress: 0,
+	created: "2026-07-10T10:00:00.000Z",
+	updated: "2026-07-10T10:00:00.000Z",
+	question: "Why did the capital move?",
+	answer: "To strengthen central rule.\n\n- point two",
+	hint: "Think about administration.",
+	attempts: [],
+	cycles: [{ startedAt: "2026-07-10T10:00:00.000Z" }],
+};
+const quizMap = new Map([[quiz.id, quiz]]);
+const quizRound = parseQuizzesFile(serializeQuizzesFile(quizMap));
+eq("quiz roundtrip", quizRound.get(quiz.id), quiz);
+eq(
+	"year quiz masks source year",
+	quizQuestion(
+		{ ...quiz, kind: "year", question: "『種の起源』（1859）" },
+		{ id: quiz.sourceEvId, tag: "#ad/18/5/9", summary: "" }
+	),
+	"『種の起源』（____）"
+);
+eq(
+	"bc year quiz masks source year",
+	quizQuestion(
+		{ ...quiz, kind: "year", question: "カエサル暗殺（前44）" },
+		{ id: quiz.sourceEvId, tag: "#bc/00/4/4", summary: "" }
+	),
+	"カエサル暗殺（____）"
+);
+
+const t0 = new Date("2026-07-10T10:00:00.000Z");
+const afterOne = reviewQuiz(quiz, "remembered", t0, DEFAULT_QUIZ_SCHEDULE);
+eq("quiz success advances", afterOne.progress, 1);
+eq("quiz first interval", afterOne.nextReview, "2026-07-10T10:10:00.000Z");
+eq("quiz cooling not ready", isQuizReady(afterOne, t0), false);
+const early = reviewQuiz(
+	afterOne,
+	"remembered",
+	new Date("2026-07-10T10:05:00.000Z"),
+	DEFAULT_QUIZ_SCHEDULE
+);
+eq("early success does not advance", early.progress, 1);
+eq("early success keeps due time", early.nextReview, afterOne.nextReview);
+eq("early attempt marked", early.attempts[1].early, true);
+const forgot = reviewQuiz(
+	afterOne,
+	"forgot",
+	new Date("2026-07-10T10:05:00.000Z"),
+	DEFAULT_QUIZ_SCHEDULE
+);
+eq("early forgot regresses", forgot.progress, 0);
+eq("forgot retry interval", forgot.nextReview, "2026-07-10T10:10:00.000Z");
+const afterTwo = reviewQuiz(
+	afterOne,
+	"remembered",
+	new Date("2026-07-10T10:10:00.000Z"),
+	DEFAULT_QUIZ_SCHEDULE
+);
+eq("quiz second interval", afterTwo.nextReview, "2026-07-11T10:10:00.000Z");
+const mastered = reviewQuiz(
+	afterTwo,
+	"remembered",
+	new Date("2026-07-11T10:10:00.000Z"),
+	DEFAULT_QUIZ_SCHEDULE
+);
+eq("quiz third success masters", mastered.status, "mastered");
+eq("quiz mastery records cycle", mastered.cycles[0].completedAt, "2026-07-11T10:10:00.000Z");
+const revived = reviveQuiz(mastered, new Date("2026-08-01T00:00:00.000Z"));
+eq("quiz revive resets progress", revived.progress, 0);
+eq("quiz revive adds cycle", revived.cycles.length, 2);
 
 // entity db: entities.md round-trip
 const ents = new Map<string, Ent>();

@@ -1,5 +1,13 @@
 # History Logging — layouts
 
+## 日本史記憶
+show: active-quizzes
+### pane
+filter: #histolog/日本史
+lens: 日本史
+groupBy: century
+profile: 日本史
+
 ## 東西対照（日本×中国×ローマ）
 ### pane
 filter: #histolog/日本史

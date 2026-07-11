@@ -8,6 +8,12 @@ import { generateId } from "./id";
 import { ConfirmModal } from "./name-modal";
 import { renderEntityPage } from "./entity-page";
 import { describeYear, parseYearTag } from "./year-tag";
+import { QuizEntry } from "./quiz";
+import {
+	QuizBackstageStatus,
+	renderQuizBackstage,
+} from "./quiz-backstage";
+import { EventEntry } from "./types";
 
 export const ENTITY_BROWSER_VIEW_TYPE = "history-logging-entity-browser";
 
@@ -39,6 +45,12 @@ type NavFrame =
 			scroll: number;
 	  }
 	| { kind: "types"; scroll: number }
+	| {
+			kind: "quizzes";
+			query: string;
+			status: QuizBackstageStatus;
+			scroll: number;
+	  }
 	| { kind: "entity"; id: string; scroll: number };
 
 const ROW_H = 40;
@@ -50,6 +62,8 @@ export class EntityBrowserView extends ItemView {
 	private rows: Row[] = [];
 	private filtered: Row[] = [];
 	private types: DbType[] = [];
+	private quizzes: QuizEntry[] = [];
+	private events = new Map<string, EventEntry>();
 	private query = "";
 	private selectedTypes = new Set<string>();
 	private sort: SortKey = "occ";
@@ -97,7 +111,8 @@ export class EntityBrowserView extends ItemView {
 				if (
 					f.path === `${folder}/entities.md` ||
 					f.path === `${folder}/events.md` ||
-					f.path === `${folder}/db-types.md`
+					f.path === `${folder}/db-types.md` ||
+					f.path === `${folder}/quizzes.md`
 				)
 					this.scheduleReload();
 			})
@@ -119,12 +134,15 @@ export class EntityBrowserView extends ItemView {
 	}
 
 	async reload(): Promise<void> {
-		const [entities, events, types] = await Promise.all([
+		const [entities, events, types, quizzes] = await Promise.all([
 			this.plugin.store.readEntities(),
 			this.plugin.store.readEvents(),
 			this.plugin.store.readDbTypes(),
+			this.plugin.store.readQuizzes(),
 		]);
 		this.types = types;
+		this.events = events;
+		this.quizzes = [...quizzes.values()];
 		const occ = new Map<string, OccHit[]>();
 		for (const [evId, ev] of events) {
 			const ids = new Set(parseDbMarks(ev.summary).map((m) => m.id));
@@ -220,29 +238,44 @@ export class EntityBrowserView extends ItemView {
 
 		const tabs = nav.createDiv({ cls: "hl-eb-tabs" });
 		this.tabEls.clear();
-		const mkTab = (key: "entities" | "types", label: string): void => {
+		const mkTab = (
+			key: "entities" | "types" | "quizzes",
+			label: string
+		): void => {
 			const el = tabs.createSpan({ cls: "hl-eb-tab", text: label });
 			this.tabEls.set(key, el);
 			el.addEventListener("click", () => {
 				if (this.current().kind === key) return;
-				this.replace(
-					key === "entities"
-						? {
-								kind: "entities",
-								query: this.query,
-								types: [...this.selectedTypes],
-								sort: this.sort,
-								health: this.health,
-								scroll: 0,
-						  }
-						: { kind: "types", scroll: 0 }
-				);
+				if (key === "entities")
+					this.replace({
+						kind: "entities",
+						query: this.query,
+						types: [...this.selectedTypes],
+						sort: this.sort,
+						health: this.health,
+						scroll: 0,
+					});
+				else if (key === "types")
+					this.replace({ kind: "types", scroll: 0 });
+				else
+					this.replace({
+						kind: "quizzes",
+						query: "",
+						status: "active",
+						scroll: 0,
+					});
 			});
 		};
 		mkTab("entities", "词条");
 		mkTab("types", "范畴");
+		mkTab("quizzes", "Quiz");
 		const cur = this.current();
-		const activeTab = cur.kind === "types" ? "types" : "entities";
+		const activeTab =
+			cur.kind === "types"
+				? "types"
+				: cur.kind === "quizzes"
+				? "quizzes"
+				: "entities";
 		this.tabEls.get(activeTab)?.addClass("is-active");
 		if (cur.kind === "entity") {
 			const crumb = nav.createSpan({ cls: "hl-eb-crumb" });
@@ -253,6 +286,15 @@ export class EntityBrowserView extends ItemView {
 		this.bodyEl = root.createDiv({ cls: "hl-eb-body" });
 		if (cur.kind === "entities") this.renderEntities(this.bodyEl, cur);
 		else if (cur.kind === "types") this.renderTypes(this.bodyEl, cur);
+		else if (cur.kind === "quizzes")
+			renderQuizBackstage(
+				this.bodyEl,
+				this.plugin,
+				this.quizzes,
+				this.events,
+				cur,
+				() => this.reload()
+			);
 		else void this.renderEntity(this.bodyEl, cur);
 		// Refresh the tab title (Obsidian re-reads getDisplayText on layout
 		// change; trigger it via the leaf's internal header update if present).
@@ -832,19 +874,24 @@ export class EntityBrowserView extends ItemView {
 	}
 
 	// External entry points (commands) land on a specific section.
-	showSection(section: "entities" | "types"): void {
+	showSection(section: "entities" | "types" | "quizzes"): void {
 		if (this.current().kind === section) return;
-		this.replace(
-			section === "types"
-				? { kind: "types", scroll: 0 }
-				: {
-						kind: "entities",
-						query: "",
-						types: [],
-						sort: this.sort,
-						health: "all",
-						scroll: 0,
-				  }
-		);
+		if (section === "types") this.replace({ kind: "types", scroll: 0 });
+		else if (section === "quizzes")
+			this.replace({
+				kind: "quizzes",
+				query: "",
+				status: "active",
+				scroll: 0,
+			});
+		else
+			this.replace({
+				kind: "entities",
+				query: "",
+				types: [],
+				sort: this.sort,
+				health: "all",
+				scroll: 0,
+			});
 	}
 }

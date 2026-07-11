@@ -57,6 +57,8 @@ export interface LiveEditorOptions {
 	onOpenEntity?: (id: string) => void;
 	// Right-click actions on a folded entity marker.
 	onOpenEntityPage?: (id: string) => void;
+	// Create a cloze quiz from selected plain text.
+	onCreateQuiz?: (selection: string) => void;
 	// Internal: wired by LiveEditor to open the folded-marker right-click menu.
 	onEntityMenu?: (id: string, word: string, e: MouseEvent) => void;
 	// Entity annotation support (completion dropdown + right-click menu).
@@ -640,6 +642,15 @@ export class LiveEditor {
 			if (hint) row.createSpan({ cls: "hl-le-suggest-meta", text: hint });
 			return row;
 		};
+		if (this.opts.onCreateQuiz)
+			mk("?", "Create cloze quiz", `“${clean.slice(0, 24)}”`).addEventListener(
+				"mousedown",
+				(ev) => {
+					ev.preventDefault();
+					this.closePopover();
+					this.opts.onCreateQuiz?.(clean);
+				}
+			);
 		// Entities whose label/alias matches the selection get a one-click row.
 		const lower = word.toLowerCase();
 		const matches = ann
@@ -701,6 +712,15 @@ export class LiveEditor {
 				row.createSpan({ cls: "hl-le-suggest-meta", text: hint });
 			return row;
 		};
+		if (this.opts.onCreateQuiz)
+			mk("?", "Create cloze quiz", "Use selection as answer").addEventListener(
+				"mousedown",
+				(ev) => {
+					ev.preventDefault();
+					this.closePopover();
+					this.opts.onCreateQuiz?.(clean);
+				}
+			);
 		mk("⧉", "复制干净文本", markCount ? "去除标注语法" : "").addEventListener(
 			"mousedown",
 			(ev) => {

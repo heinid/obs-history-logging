@@ -96,10 +96,33 @@ export async function addEventForTag(
 	onWrapped?: () => void,
 	onSaved?: (evId: string, summary: string) => void
 ): Promise<void> {
+	const prepared = await prepareEventForTag(
+		plugin,
+		filePath,
+		offset,
+		tag,
+		onWrapped
+	);
+	if (!prepared) return;
+	plugin.openSummary(
+		prepared.id,
+		tag,
+		(s) => onSaved?.(prepared.id, s),
+		prepared.ensure
+	);
+}
+
+export async function prepareEventForTag(
+	plugin: HistoryLoggingPlugin,
+	filePath: string,
+	offset: number,
+	tag: string,
+	onWrapped?: () => void
+): Promise<{ id: string; ensure: () => Promise<boolean> } | null> {
 	const file = plugin.app.vault.getAbstractFileByPath(filePath);
 	if (!(file instanceof TFile)) {
 		new Notice("Could not find the source note");
-		return;
+		return null;
 	}
 
 	const content = (await plugin.app.vault.read(file)).replace(/\r\n/g, "\n");
@@ -116,6 +139,5 @@ export async function addEventForTag(
 		onWrapped?.();
 		return true;
 	};
-
-	plugin.openSummary(id, tag, (s) => onSaved?.(id, s), ensure);
+	return { id, ensure };
 }

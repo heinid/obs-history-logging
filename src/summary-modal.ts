@@ -102,6 +102,7 @@ export class SummaryModal extends Modal {
 				this.close();
 				void this.plugin.openEntityView(id);
 			},
+			onCreateQuiz: (selection) => void this.openQuiz(selection),
 			annotate: {
 				entities: () => this.entities,
 				typeColor: (name) => this.typeColor(name),
@@ -113,6 +114,13 @@ export class SummaryModal extends Modal {
 
 		const foot = contentEl.createDiv({ cls: "hl-modal-foot" });
 		this.statusEl = foot.createSpan({ cls: "hl-modal-status" });
+		const quiz = foot.createEl("button", {
+			cls: "hl-modal-foot-btn",
+			text: "Quiz…",
+		});
+		quiz.addEventListener("click", () => {
+			void this.openQuiz();
+		});
 		const jump = foot.createEl("button", {
 			cls: "hl-modal-foot-btn",
 			text: "↗ Jump to source",
@@ -151,6 +159,20 @@ export class SummaryModal extends Modal {
 		});
 		this.setStatus("saved");
 		this.onSaved?.(this.editor.getValue());
+	}
+
+	private async openQuiz(selection = ""): Promise<void> {
+		await this.save();
+		const ensure = this.ensured
+			? undefined
+			: async (): Promise<boolean> => {
+					if (!this.ensure) return true;
+					const ok = await this.ensure();
+					if (ok) this.ensured = true;
+					return ok;
+			  };
+		this.close();
+		this.plugin.openQuizManager(this.id, this.tag, selection, ensure);
 	}
 
 	private setStatus(state: "typing" | "saved"): void {

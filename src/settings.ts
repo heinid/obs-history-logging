@@ -29,6 +29,12 @@ export interface HistoryLoggingSettings {
 	// Curated timeline views for the ⌛ menu's "Show on timeline with…"
 	// submenu: a saved single-track profile or a saved multi-track layout.
 	evMenuViews: EvMenuView[];
+	// Successful scheduled recalls required before a quiz is archived.
+	quizMasterySteps: number;
+	// Delay after each non-final successful recall, in minutes.
+	quizIntervalsMinutes: number[];
+	// Delay after a fuzzy / forgotten scheduled recall, in minutes.
+	quizRetryMinutes: number;
 }
 
 export interface EvMenuView {
@@ -46,6 +52,9 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	wikiLang: "ja",
 	evActions: [],
 	evMenuViews: [],
+	quizMasterySteps: 3,
+	quizIntervalsMinutes: [10, 24 * 60],
+	quizRetryMinutes: 5,
 };
 
 export const EVENTS_FILE = "events.md";
@@ -115,6 +124,67 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 					.setButtonText("打开管理后台")
 					.onClick(() => void this.plugin.browseEntities())
 			);
+
+		new Setting(containerEl)
+			.setName("Quiz memory cycle")
+			.setDesc(
+				"Shared recall steps and delays. Delays are earliest practice times, never deadlines."
+			)
+			.setHeading();
+
+		new Setting(containerEl)
+			.setName("Successful recalls")
+			.setDesc("Archive a quiz after this many scheduled remembered answers.")
+			.addText((text) => {
+				text.inputEl.type = "number";
+				text.inputEl.min = "1";
+				text.inputEl.max = "20";
+				text
+					.setValue(String(this.plugin.settings.quizMasterySteps))
+					.onChange(async (value) => {
+						const parsed = Number(value);
+						if (!Number.isInteger(parsed) || parsed < 1 || parsed > 20)
+							return;
+						this.plugin.settings.quizMasterySteps = parsed;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Success intervals")
+			.setDesc(
+				"Comma-separated delays in minutes after each success. Default: 10 minutes, then 1 day (1440)."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("10, 1440")
+					.setValue(this.plugin.settings.quizIntervalsMinutes.join(", "))
+					.onChange(async (value) => {
+						const intervals = value
+							.split(",")
+							.map((part) => Number(part.trim()))
+							.filter((n) => Number.isFinite(n) && n >= 0);
+						if (!intervals.length) return;
+						this.plugin.settings.quizIntervalsMinutes = intervals;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Retry delay")
+			.setDesc("Minutes before a fuzzy or forgotten quiz becomes ready again.")
+			.addText((text) => {
+				text.inputEl.type = "number";
+				text.inputEl.min = "0";
+				text
+					.setValue(String(this.plugin.settings.quizRetryMinutes))
+					.onChange(async (value) => {
+						const parsed = Number(value);
+						if (!Number.isFinite(parsed) || parsed < 0) return;
+						this.plugin.settings.quizRetryMinutes = parsed;
+						await this.plugin.saveSettings();
+					});
+			});
 
 		new Setting(containerEl)
 			.setName("Entity languages")

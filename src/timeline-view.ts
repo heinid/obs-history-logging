@@ -21,6 +21,7 @@ import {
 	bucketLabelFor,
 	nextBucketKey,
 	renderTrackGrid,
+	trackEntries,
 	trackLabel,
 } from "./track-grid";
 import { jumpToLocation } from "./jump";
@@ -30,6 +31,10 @@ import { dbMarkersToHtml, stripDbMarkers } from "./db-marker";
 import { addEventForEntry } from "./commands";
 import { openEvMenu } from "./ev-menu";
 import { tracksIn } from "./tracks";
+import { QuizEntry } from "./quiz";
+import { renderTimelineQuizCard } from "./quiz-card";
+import { TimelineShow } from "./layouts";
+import { QuizSessionModal } from "./quiz-session-modal";
 
 export const TIMELINE_VIEW_TYPE = "history-logging-timeline";
 
@@ -45,6 +50,7 @@ interface ScrollAnchor {
 
 export class TimelineView extends ItemView {
 	private entries: TimelineEntry[] = [];
+	private quizzes = new Map<string, QuizEntry>();
 	private profiles: Profile[] = [];
 	private eraSystems: EraSystem[] = [];
 	// The bar IS the pane's definition: filter + lens + saved-view menu.
@@ -68,6 +74,7 @@ export class TimelineView extends ItemView {
 	private cardEls = new Map<TimelineEntry, HTMLElement>();
 	// Cards in render order with their year sort keys, for year jumps.
 	private cardIndex: { key: number; el: HTMLElement }[] = [];
+	private quizPositions = new Map<string, number>();
 
 	constructor(leaf: WorkspaceLeaf, private plugin: HistoryLoggingPlugin) {
 		super(leaf);
@@ -146,15 +153,26 @@ export class TimelineView extends ItemView {
 	// A plain view: one track, no filter — the default navigation landing.
 	isPlainView(): boolean {
 		const tracks = this.getTracks();
-		return tracks.length === 1 && !tracks[0].filter.trim();
+		return (
+			this.bar.show === "events" &&
+			tracks.length === 1 &&
+			!tracks[0].filter.trim()
+		);
+	}
+
+	getShow(): TimelineShow {
+		return this.bar.show;
 	}
 
 	// Re-scan the vault and rebuild everything, keeping the reader's place:
 	// the viewport is re-anchored to the same card after the rebuild.
 	async refresh(): Promise<void> {
 		const anchor = this.captureAnchor();
-		this.profiles = await this.plugin.store.readProfiles();
-		this.eraSystems = await this.plugin.store.readEraSystems();
+		[this.profiles, this.eraSystems, this.quizzes] = await Promise.all([
+			this.plugin.store.readProfiles(),
+			this.plugin.store.readEraSystems(),
+			this.plugin.store.readQuizzes(),
+		]);
 		await this.loadDbColors();
 		if (!this.initialised) {
 			this.initialised = true;
@@ -216,6 +234,15 @@ export class TimelineView extends ItemView {
 		const bar = root.createDiv({ cls: "hl-timeline-bar" });
 		this.barHost = bar;
 		this.bar.render(bar, (row) => {
+			if (
+				this.bar.show === "active-quizzes" ||
+				this.bar.show === "all-quizzes"
+			) {
+				const practice = new ButtonComponent(row);
+				practice.setButtonText("Practice this layout");
+				practice.buttonEl.addClass("hl-practice-layout");
+				practice.onClick(() => this.practiceLayout());
+			}
 			// Add a comparison column: the new track starts empty and becomes
 			// the one the bar edits.
 			const addBtn = new ButtonComponent(row);
@@ -237,6 +264,37 @@ export class TimelineView extends ItemView {
 		this.listEl = root.createDiv({ cls: "hl-timeline-list" });
 		this.registerDomEvent(root, "scroll", () => this.onScroll());
 		this.renderList();
+	}
+
+	private practiceLayout(): void {
+		const candidates = this.entries.filter((entry) =>
+			this.entryMatchesShow(entry)
+		);
+		const visible =
+			this.tracks.length > 1
+				? this.tracks.flatMap((track) => trackEntries(candidates, track))
+				: candidates.filter((entry) => {
+						const hay = `${entry.tag} ${entry.snippet} ${
+							entry.summary ?? ""
+						}`.toLowerCase();
+						return matchesQuery(hay, parseQuery(this.bar.query()));
+				  });
+		const eventIds = new Set(
+			visible
+				.map((entry) => entry.evId)
+				.filter((id): id is string => !!id)
+		);
+		const quizIds = [...this.quizzes.values()]
+			.filter(
+				(quiz) =>
+					quiz.status === "active" && eventIds.has(quiz.sourceEvId)
+			)
+			.map((quiz) => quiz.id);
+		if (!quizIds.length) {
+			new Notice("No active quizzes match this layout.");
+			return;
+		}
+		new QuizSessionModal(this.app, this.plugin, quizIds).open();
 	}
 
 	setTracks(tracks: TrackDef[], active = 0): void {
@@ -307,6 +365,9 @@ export class TimelineView extends ItemView {
 		list.empty();
 		this.cardEls.clear();
 		this.cardIndex = [];
+		const displayedEntries = this.entries.filter((entry) =>
+			this.entryMatchesShow(entry)
+		);
 
 		this.gridSizer?.disconnect();
 		this.gridSizer = undefined;
@@ -314,7 +375,7 @@ export class TimelineView extends ItemView {
 		if (this.tracks.length > 1) {
 			const { counts, eraAnchors, relayout } = renderTrackGrid({
 				list,
-				entries: this.entries,
+				entries: displayedEntries,
 				tracks: this.tracks,
 				active: this.active,
 				groupBy: this.bar.groupBy,
@@ -330,21 +391,27 @@ export class TimelineView extends ItemView {
 			}
 			this.trackCounts = counts;
 			this.eraAnchors = eraAnchors;
-			this.bar.setCount(counts[this.active], this.entries.length);
+			this.bar.setCount(counts[this.active], displayedEntries.length);
 			this.cardIndex.sort((a, b) => a.key - b.key);
 			this.renderEraNav();
 			return;
 		}
 
 		const pq = parseQuery(this.bar.query());
-		const visible = this.entries.filter((e) => {
+		const visible = displayedEntries.filter((e) => {
 			const hay = `${e.tag} ${e.snippet} ${e.summary ?? ""}`.toLowerCase();
 			return matchesQuery(hay, pq);
 		});
-		this.bar.setCount(visible.length, this.entries.length);
+		this.bar.setCount(visible.length, displayedEntries.length);
 
 		if (visible.length === 0) {
-			list.createDiv({ cls: "hl-empty", text: "No dated notes match." });
+			list.createDiv({
+				cls: "hl-empty",
+				text:
+					this.bar.show === "events"
+						? "No dated notes match."
+						: "No quizzes match this view.",
+			});
 			return;
 		}
 
@@ -550,6 +617,22 @@ export class TimelineView extends ItemView {
 	}
 
 	private renderCard(parent: HTMLElement, entry: TimelineEntry): void {
+		if (this.bar.show !== "events") {
+			const quizzes = this.quizzesForEntry(entry);
+			const key = entry.evId ?? `${entry.filePath}:${entry.offset}`;
+			const card = renderTimelineQuizCard(parent, entry, quizzes, {
+				plugin: this.plugin,
+				position: this.quizPositions.get(key) ?? 0,
+				setPosition: (position) => this.quizPositions.set(key, position),
+				update: async (quiz) => {
+					await this.plugin.store.upsertQuiz(quiz);
+					await this.refresh();
+				},
+			});
+			this.cardEls.set(entry, card);
+			this.cardIndex.push({ key: entry.decoded.sortKey, el: card });
+			return;
+		}
 		const hasSummary = !!entry.summary?.trim();
 
 		const card = parent.createDiv({ cls: "hl-card" });
@@ -630,6 +713,30 @@ export class TimelineView extends ItemView {
 		} else {
 			this.renderContent(content, entry, preview, hasSummary, false);
 		}
+	}
+
+	private entryMatchesShow(entry: TimelineEntry): boolean {
+		if (this.bar.show === "events") return true;
+		return this.quizzesForEntry(entry).length > 0;
+	}
+
+	private quizzesForEntry(entry: TimelineEntry): QuizEntry[] {
+		if (!entry.evId) return [];
+		return [...this.quizzes.values()].filter((quiz) => {
+			if (quiz.sourceEvId !== entry.evId || quiz.status === "retired")
+				return false;
+			if (this.bar.show === "active-quizzes")
+				return quiz.status === "active";
+			if (this.bar.show === "mastered-quizzes")
+				return quiz.status === "mastered";
+			if (this.bar.show === "all-quizzes")
+				return (
+					quiz.status === "active" ||
+					quiz.status === "paused" ||
+					quiz.status === "mastered"
+				);
+			return false;
+		});
 	}
 
 	// Toggle a card between its collapsed preview and the full block in place,

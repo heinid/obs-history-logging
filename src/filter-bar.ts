@@ -5,6 +5,7 @@ import { EraSystem } from "./eras";
 import { tokenise } from "./query";
 import { NameModal } from "./name-modal";
 import { TagSuggest } from "./tag-suggest";
+import { isTimelineShow, TimelineShow } from "./layouts";
 
 // The top bar reads as the pane's self-description, left to right:
 //   filter (query-builder chips + free text) → lens (era system) → view.
@@ -19,6 +20,7 @@ export class FilterBar {
 	lens = "";
 	groupBy: GroupBy = "century";
 	profileName = "";
+	show: TimelineShow = "events";
 
 	private barEl!: HTMLElement;
 	private trailing?: (row: HTMLElement) => void;
@@ -42,12 +44,19 @@ export class FilterBar {
 		return [...this.chips, this.draft.trim()].filter(Boolean).join(" ");
 	}
 
-	getState(): { filter: string; lens: string; groupBy: GroupBy; profile: string } {
+	getState(): {
+		filter: string;
+		lens: string;
+		groupBy: GroupBy;
+		profile: string;
+		show: TimelineShow;
+	} {
 		return {
 			filter: this.query(),
 			lens: this.lens,
 			groupBy: this.groupBy,
 			profile: this.profileName,
+			show: this.show,
 		};
 	}
 
@@ -69,6 +78,10 @@ export class FilterBar {
 		}
 		if (typeof s.profile === "string") {
 			this.profileName = s.profile;
+			touched = true;
+		}
+		if (typeof s.show === "string" && isTimelineShow(s.show)) {
+			this.show = s.show;
 			touched = true;
 		}
 		return touched;
@@ -184,6 +197,23 @@ export class FilterBar {
 		groupSel.addEventListener("change", () => {
 			this.groupBy = groupSel.value as GroupBy;
 			this.emit();
+		});
+
+		const showWrap = lensRow.createDiv({ cls: "hl-lens hl-show" });
+		showWrap.createSpan({ cls: "hl-lens-label", text: "Show" });
+		const showSel = showWrap.createEl("select", { cls: "hl-lens-select" });
+		for (const [value, label] of [
+			["events", "Events"],
+			["active-quizzes", "Active quizzes"],
+			["mastered-quizzes", "Mastered quizzes"],
+			["all-quizzes", "All quizzes"],
+		] as [TimelineShow, string][])
+			showSel.createEl("option", { value, text: label });
+		showSel.value = this.show;
+		showSel.addEventListener("change", () => {
+			this.show = showSel.value as TimelineShow;
+			this.emit();
+			this.render(this.barEl);
 		});
 
 		const spacer = lensRow.createDiv({ cls: "hl-bar-spacer" });
