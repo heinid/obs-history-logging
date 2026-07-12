@@ -109,7 +109,6 @@ export function renderQuizBackstage(
 				});
 				setIcon(open, "hourglass");
 				open.setAttr("aria-label", "编辑事件总结");
-				open.setAttr("title", "编辑事件总结");
 				open.addEventListener("click", () =>
 					plugin.openSummary(evId, event.tag ?? "", () => void onChanged())
 				);
@@ -179,7 +178,6 @@ function renderQuizRow(
 	const practice = actions.createEl("button", { cls: "hl-icon-btn" });
 	setIcon(practice, "brain");
 	practice.setAttr("aria-label", "练习");
-	practice.setAttr("title", "练习");
 	practice.disabled = quiz.status !== "active";
 	practice.addEventListener("click", () =>
 		new QuizPracticeModal(plugin.app, plugin, quiz.id).open()

@@ -124,7 +124,6 @@ export class QuizManagerModal extends Modal {
 			const practice = row.createEl("button", { cls: "hl-icon-btn" });
 			setIcon(practice, "brain");
 			practice.setAttr("aria-label", "练习");
-			practice.setAttr("title", "练习");
 			practice.disabled = quiz.status !== "active";
 			practice.addEventListener("click", () => {
 				new QuizPracticeModal(this.app, this.plugin, quiz.id, () =>
