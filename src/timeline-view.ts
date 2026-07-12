@@ -33,6 +33,7 @@ import { openEvMenu } from "./ev-menu";
 import { tracksIn } from "./tracks";
 import { QuizEntry, isQuizReady, isQuizWaiting } from "./quiz";
 import { quizSchedule } from "./quiz-display";
+import { openDbEntityEditor } from "./quiz-render";
 import { renderTimelineQuizCard } from "./quiz-card";
 import { TimelineShow } from "./layouts";
 import { QuizSessionModal } from "./quiz-session-modal";
@@ -855,17 +856,20 @@ export class TimelineView extends ItemView {
 		this.cardIndex.sort((a, b) => a.key - b.key);
 	}
 
-	// Folded `{db …}` markers render as underlined spans; click opens the entity.
+	// Folded `{db …}` markers render as underlined spans; click opens the
+	// entity editor modal.
 	private wireDbRefs(content: HTMLElement): void {
 		for (const el of Array.from(
 			content.querySelectorAll<HTMLElement>("span.hl-db-ref")
 		)) {
 			const id = el.getAttr("data-db-id");
 			if (!id) continue;
-			el.setAttr("aria-label", "Open entity");
+			el.setAttr("aria-label", "Edit entity");
 			el.addEventListener("click", (e) => {
 				e.stopPropagation();
-				void this.plugin.openEntity(id);
+				openDbEntityEditor(this.plugin, id, () =>
+					void this.plugin.refreshTimelines()
+				);
 			});
 		}
 	}

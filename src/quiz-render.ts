@@ -40,10 +40,10 @@ export function renderQuizText(
 		)) {
 			const id = el.getAttr("data-db-id");
 			if (!id) continue;
-			el.setAttr("aria-label", "Open entity");
+			el.setAttr("aria-label", "Edit entity");
 			el.addEventListener("click", (e) => {
 				e.stopPropagation();
-				plugin.modalStash.jump(() => plugin.openEntityView(id));
+				openDbEntityEditor(plugin, id);
 			});
 			el.addEventListener("contextmenu", (e) => {
 				e.preventDefault();
@@ -52,6 +52,26 @@ export function renderQuizText(
 			});
 		}
 	});
+}
+
+// Left-click / "编辑词条": open the entity editor modal in place; every
+// open quiz modal refreshes after a save.
+export function openDbEntityEditor(
+	plugin: HistoryLoggingPlugin,
+	id: string,
+	onSaved?: () => void
+): void {
+	void (async () => {
+		const entity = (await plugin.store.readEntities()).get(id);
+		if (!entity) {
+			new Notice("找不到这个词条。");
+			return;
+		}
+		new EntityModal(plugin.app, plugin, entity, false, () => {
+			plugin.modalStash.refreshOpen();
+			onSaved?.();
+		}).open();
+	})();
 }
 
 // Right-click menu on an entity reference inside rendered quiz text:
@@ -96,16 +116,7 @@ function openDbRefMenu(
 	mk("✎", "编辑词条").addEventListener("mousedown", (ev) => {
 		ev.preventDefault();
 		close();
-		void (async () => {
-			const entity = (await plugin.store.readEntities()).get(id);
-			if (!entity) {
-				new Notice("找不到这个词条。");
-				return;
-			}
-			new EntityModal(plugin.app, plugin, entity, false, () =>
-				plugin.modalStash.refreshOpen()
-			).open();
-		})();
+		openDbEntityEditor(plugin, id);
 	});
 	mk("↗", "打开词条页").addEventListener("mousedown", (ev) => {
 		ev.preventDefault();

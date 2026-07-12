@@ -56,7 +56,6 @@ export class EntityView extends ItemView {
 		await renderEntityPage(this.contentEl, this.entityId, {
 			plugin: this.plugin,
 			component: this,
-			openEntity: (id) => void this.plugin.openEntityView(id),
 			refresh: () => void this.refresh(),
 		});
 	}

@@ -9,6 +9,7 @@ import type HistoryLoggingPlugin from "./main";
 import { DbType, EntityEntry, displayName } from "./db-format";
 import { dbMarkersToHtml, parseDbMarks, stripDbMarkers } from "./db-marker";
 import { EntityModal } from "./entity-modal";
+import { openDbEntityEditor } from "./quiz-render";
 import { describeYear, parseYearTag } from "./year-tag";
 
 // Shared renderer for one entity's full page: hero (headword + type pill +
@@ -18,9 +19,6 @@ import { describeYear, parseYearTag } from "./year-tag";
 export interface EntityPageCtx {
 	plugin: HistoryLoggingPlugin;
 	component: Component;
-	// Following a {db} reference inside the notes. The backstage pushes onto
-	// its stack; the standalone tab opens another tab.
-	openEntity: (id: string) => void;
 	// Re-render after an edit changed the entity.
 	refresh: () => void;
 }
@@ -135,7 +133,10 @@ export async function renderEntityPage(
 		);
 		notes.querySelectorAll<HTMLElement>(".hl-db-ref").forEach((el) => {
 			const id = el.getAttr("data-db-id");
-			if (id) el.addEventListener("click", () => ctx.openEntity(id));
+			if (id)
+				el.addEventListener("click", () =>
+					openDbEntityEditor(plugin, id, ctx.refresh)
+				);
 		});
 	}
 

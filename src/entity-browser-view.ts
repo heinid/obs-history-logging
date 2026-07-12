@@ -672,7 +672,6 @@ export class EntityBrowserView extends ItemView {
 		await renderEntityPage(page, frame.id, {
 			plugin: this.plugin,
 			component: this,
-			openEntity: (id) => this.openEntityInPlace(id),
 			refresh: () => void this.reload(),
 		});
 		host.scrollTop = frame.scroll;
