@@ -1,6 +1,7 @@
-import { MarkdownRenderer } from "obsidian";
+import { MarkdownRenderer, Notice } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { dbMarkersToHtml } from "./db-marker";
+import { EntityModal } from "./entity-modal";
 
 // Entity id → entity-type color, for the `{db …}` underlines in quiz text.
 export type DbColors = Map<string, string>;
@@ -42,8 +43,79 @@ export function renderQuizText(
 			el.setAttr("aria-label", "Open entity");
 			el.addEventListener("click", (e) => {
 				e.stopPropagation();
-				void plugin.openEntity(id);
+				plugin.modalStash.jump(() => plugin.openEntityView(id));
+			});
+			el.addEventListener("contextmenu", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				openDbRefMenu(plugin, id, e);
 			});
 		}
+	});
+}
+
+// Right-click menu on an entity reference inside rendered quiz text:
+// 编辑词条 / 打开词条页 / 复制词条 ID (no 取消标注 — the quiz keeps its
+// own copy of the marker, so unannotating here would be ambiguous).
+function openDbRefMenu(
+	plugin: HistoryLoggingPlugin,
+	id: string,
+	e: MouseEvent
+): void {
+	const pop = (
+		((e.target as HTMLElement).closest(
+			".modal-container"
+		) as HTMLElement | null) ?? document.body
+	).createDiv({ cls: "hl-le-pop" });
+	pop.style.left = `${Math.max(8, Math.min(e.clientX, window.innerWidth - 320))}px`;
+	pop.style.top = `${Math.max(8, Math.min(e.clientY + 4, window.innerHeight - 40))}px`;
+	const close = (): void => {
+		pop.remove();
+		document.removeEventListener("mousedown", onDown, true);
+		document.removeEventListener("keydown", onKey, true);
+	};
+	const onDown = (ev: MouseEvent): void => {
+		if (!pop.contains(ev.target as Node)) close();
+	};
+	const onKey = (ev: KeyboardEvent): void => {
+		if (ev.key === "Escape") {
+			ev.preventDefault();
+			ev.stopPropagation();
+			close();
+		}
+	};
+	document.addEventListener("mousedown", onDown, true);
+	document.addEventListener("keydown", onKey, true);
+
+	const mk = (icon: string, label: string): HTMLDivElement => {
+		const row = pop.createDiv({ cls: "hl-le-pop-item" });
+		row.createSpan({ cls: "hl-le-pop-icon", text: icon });
+		row.createSpan({ cls: "hl-le-pop-label", text: label });
+		return row;
+	};
+	mk("✎", "编辑词条").addEventListener("mousedown", (ev) => {
+		ev.preventDefault();
+		close();
+		void (async () => {
+			const entity = (await plugin.store.readEntities()).get(id);
+			if (!entity) {
+				new Notice("找不到这个词条。");
+				return;
+			}
+			new EntityModal(plugin.app, plugin, entity, false, () =>
+				plugin.modalStash.refreshOpen()
+			).open();
+		})();
+	});
+	mk("↗", "打开词条页").addEventListener("mousedown", (ev) => {
+		ev.preventDefault();
+		close();
+		plugin.modalStash.jump(() => plugin.openEntityView(id));
+	});
+	mk("⧉", "复制词条 ID").addEventListener("mousedown", (ev) => {
+		ev.preventDefault();
+		close();
+		void navigator.clipboard?.writeText(id);
+		new Notice(`已复制词条 ID：${id}`);
 	});
 }

@@ -34,15 +34,18 @@ import {
 import { QuizManagerModal, QuizPracticeModal } from "./quiz-modal";
 import { QuizEntry } from "./quiz";
 import { quizSchedule } from "./quiz-display";
+import { ModalStash } from "./modal-stash";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
 	store!: DataStore;
+	modalStash!: ModalStash;
 	private quizReminders = new Map<string, number>();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.store = new DataStore(this.app, () => this.settings.dataFolder);
+		this.modalStash = new ModalStash(this);
 
 		this.registerEditorExtension(createLivePreviewExtension(this));
 		this.registerEditorExtension(createTagClickExtension(this));

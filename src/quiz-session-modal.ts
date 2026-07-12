@@ -33,6 +33,7 @@ export class QuizSessionModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		this.plugin.modalStash.track(this);
 		const [allQuizzes, events, colors] = await Promise.all([
 			this.plugin.store.readQuizzes(),
 			this.plugin.store.readEvents(),
@@ -45,6 +46,17 @@ export class QuizSessionModal extends Modal {
 				.map((id) => allQuizzes.get(id))
 				.filter((quiz): quiz is QuizEntry => !!quiz)
 		);
+		this.render();
+	}
+
+	// Reload events/colors but keep the session position and reveal state.
+	async onStashRestore(): Promise<void> {
+		const [events, colors] = await Promise.all([
+			this.plugin.store.readEvents(),
+			loadDbColors(this.plugin),
+		]);
+		this.events = events;
+		this.dbColors = colors;
 		this.render();
 	}
 
@@ -184,6 +196,7 @@ export class QuizSessionModal extends Modal {
 	}
 
 	onClose(): void {
+		this.plugin.modalStash.untrack(this);
 		void this.plugin.refreshTimelines();
 		this.contentEl.empty();
 	}

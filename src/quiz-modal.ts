@@ -52,6 +52,7 @@ export class QuizManagerModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		this.plugin.modalStash.track(this);
 		await this.reload();
 		const editQuiz = this.editQuizId
 			? this.eventQuizzes.find((quiz) => quiz.id === this.editQuizId)
@@ -181,6 +182,13 @@ export class QuizManagerModal extends Modal {
 		}).open();
 	}
 
+	// Refresh data in place after coming back from a stashed entity-page
+	// jump (the modal stays where it was, hidden or shown).
+	async onStashRestore(): Promise<void> {
+		await this.reload();
+		if (this.modalEl.isShown()) this.renderManager();
+	}
+
 	private async refreshManager(): Promise<void> {
 		await this.reload();
 		if (!this.eventQuizzes.length) {
@@ -225,6 +233,7 @@ export class QuizManagerModal extends Modal {
 	}
 
 	onClose(): void {
+		this.plugin.modalStash.untrack(this);
 		this.contentEl.empty();
 	}
 }
@@ -254,11 +263,21 @@ export class QuizEditorModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		this.plugin.modalStash.track(this);
 		this.entities = [
 			...(await this.plugin.store.readEntities()).values(),
 		];
 		this.types = await this.plugin.store.readDbTypes();
 		this.render();
+	}
+
+	// Only refresh the entity/type lists — re-rendering would discard any
+	// text the user has typed into the editor.
+	async onStashRestore(): Promise<void> {
+		this.entities = [
+			...(await this.plugin.store.readEntities()).values(),
+		];
+		this.types = await this.plugin.store.readDbTypes();
 	}
 
 	private typeColor(name: string): string | null {
@@ -502,6 +521,7 @@ export class QuizEditorModal extends Modal {
 	}
 
 	onClose(): void {
+		this.plugin.modalStash.untrack(this);
 		this.contentEl.empty();
 		this.opts.onClosed();
 	}
@@ -538,6 +558,17 @@ export class QuizPracticeModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		this.plugin.modalStash.track(this);
+		this.quiz = (await this.plugin.store.readQuizzes()).get(this.quizId);
+		this.event = this.quiz
+			? await this.plugin.store.getEvent(this.quiz.sourceEvId)
+			: undefined;
+		this.dbColors = await loadDbColors(this.plugin);
+		this.render();
+	}
+
+	// Reload quiz/event/colors but keep the reveal and hint state.
+	async onStashRestore(): Promise<void> {
 		this.quiz = (await this.plugin.store.readQuizzes()).get(this.quizId);
 		this.event = this.quiz
 			? await this.plugin.store.getEvent(this.quiz.sourceEvId)
@@ -713,6 +744,7 @@ export class QuizPracticeModal extends Modal {
 	}
 
 	onClose(): void {
+		this.plugin.modalStash.untrack(this);
 		this.contentEl.empty();
 		this.onClosed?.();
 	}
