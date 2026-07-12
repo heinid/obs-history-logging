@@ -89,6 +89,7 @@ export class EntityModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		this.plugin.modalStash.track(this);
 		// Escape closes the notes editor's completion dropdown / popover
 		// first; only a second Escape (nothing open) closes the modal. Must
 		// run before the modal's own Escape handler in the scope.
@@ -220,8 +221,7 @@ export class EntityModal extends Modal {
 		});
 		open.addEventListener("click", async () => {
 			if ((this.dirty || this.isNew) && !(await this.save())) return;
-			this.close();
-			await this.plugin.openEntityView(e.id);
+			this.plugin.modalStash.jump(() => this.plugin.openEntityView(e.id));
 		});
 		const save = foot.createEl("button", {
 			cls: "hl-modal-foot-btn hl-primary",
@@ -431,7 +431,14 @@ export class EntityModal extends Modal {
 		void new Audio(this.app.vault.getResourcePath(file)).play();
 	}
 
+	// The form keeps the user's in-progress edits across a stash; only the
+	// type list is refreshed.
+	async onStashRestore(): Promise<void> {
+		this.types = await this.plugin.store.readDbTypes();
+	}
+
 	onClose(): void {
+		this.plugin.modalStash.untrack(this);
 		// Nothing is written unless the user pressed 保存 — closing an
 		// unsaved new entity simply discards it.
 		this.notes?.destroy();

@@ -37,6 +37,7 @@ export class SummaryModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		this.plugin.modalStash.track(this);
 		// Escape closes the completion dropdown / popover first; only a second
 		// Escape (nothing open) closes the modal. Must run before the modal's
 		// own Escape handler in the scope.
@@ -98,10 +99,10 @@ export class SummaryModal extends Modal {
 			onChange: () => this.scheduleSave(),
 			colorFor: (id) => this.colorFor(id),
 			onOpenEntity: (id) => this.editEntity(id),
-			onOpenEntityPage: (id) => {
-				this.close();
-				void this.plugin.openEntityView(id);
-			},
+			onOpenEntityPage: (id) =>
+				this.plugin.modalStash.jump(() =>
+					this.plugin.openEntityView(id)
+				),
 			onCreateQuiz: (selection) => void this.openQuiz(selection),
 			annotate: {
 				entities: () => this.entities,
@@ -125,10 +126,13 @@ export class SummaryModal extends Modal {
 			cls: "hl-modal-foot-btn",
 			text: "↗ Jump to source",
 		});
-		jump.addEventListener("click", async () => {
-			const ok = await jumpToEv(this.app, this.id);
-			if (!ok) new Notice("Could not locate this event in the vault");
-			else this.close();
+		jump.addEventListener("click", () => {
+			void this.save();
+			this.plugin.modalStash.jump(async () => {
+				const ok = await jumpToEv(this.app, this.id, true);
+				if (!ok)
+					new Notice("Could not locate this event in the vault");
+			});
 		});
 
 		// Obsidian focuses the modal container right after onOpen; grab the
@@ -220,7 +224,21 @@ export class SummaryModal extends Modal {
 		}).open();
 	}
 
+	// Refresh entities and (if the user has no pending edits) the summary
+	// text itself after coming back from a jumped-to tab.
+	async onStashRestore(): Promise<void> {
+		await this.reloadEntities();
+		this.types = await this.plugin.store.readDbTypes();
+		if (!this.dirty && this.editor) {
+			const existing = await this.plugin.store.getEvent(this.id);
+			const summary = existing?.summary ?? "";
+			if (summary !== this.editor.getValue())
+				this.editor.setValue(summary);
+		}
+	}
+
 	onClose(): void {
+		this.plugin.modalStash.untrack(this);
 		if (this.entitiesWatch) this.app.vault.offref(this.entitiesWatch);
 		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
 		void this.save();
