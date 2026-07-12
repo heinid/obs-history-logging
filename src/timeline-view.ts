@@ -33,7 +33,7 @@ import { openEvMenu } from "./ev-menu";
 import { tracksIn } from "./tracks";
 import { QuizEntry, isQuizReady, isQuizWaiting } from "./quiz";
 import { quizSchedule } from "./quiz-display";
-import { openDbEntityEditor } from "./quiz-render";
+import { wireDbRef } from "./quiz-render";
 import { renderTimelineQuizCard } from "./quiz-card";
 import { TimelineShow } from "./layouts";
 import { QuizSessionModal } from "./quiz-session-modal";
@@ -857,19 +857,16 @@ export class TimelineView extends ItemView {
 	}
 
 	// Folded `{db …}` markers render as underlined spans; click opens the
-	// entity editor modal.
+	// entity editor modal (or flips the mask in immersive recall mode).
 	private wireDbRefs(content: HTMLElement): void {
 		for (const el of Array.from(
 			content.querySelectorAll<HTMLElement>("span.hl-db-ref")
 		)) {
 			const id = el.getAttr("data-db-id");
 			if (!id) continue;
-			el.setAttr("aria-label", "Edit entity");
-			el.addEventListener("click", (e) => {
-				e.stopPropagation();
-				openDbEntityEditor(this.plugin, id, () =>
-					void this.plugin.refreshTimelines()
-				);
+			wireDbRef(this.plugin, el, id, {
+				mask: this.plugin.settings.dbMaskMode,
+				onSaved: () => void this.plugin.refreshTimelines(),
 			});
 		}
 	}

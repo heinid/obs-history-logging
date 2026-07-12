@@ -39,6 +39,9 @@ export interface HistoryLoggingSettings {
 	// Mask head years on quiz cards not already locked by an unmastered
 	// year quiz; hover (or tap) to peek.
 	quizHoverHideYears: boolean;
+	// Immersive recall: every rendered `{db …}` reference on the timeline
+	// starts hidden; left-click flips it, right-click picks a language.
+	dbMaskMode: boolean;
 }
 
 export interface EvMenuView {
@@ -61,6 +64,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	quizRemindRecheck: false,
 	quizRecheckMinutes: 10,
 	quizHoverHideYears: false,
+	dbMaskMode: false,
 };
 
 export const EVENTS_FILE = "events.md";
@@ -225,6 +229,21 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.quizHoverHideYears)
 					.onChange(async (value) => {
 						this.plugin.settings.quizHoverHideYears = value;
+						await this.plugin.saveSettings();
+						await this.plugin.refreshTimelines();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("词条遮挡模式（沉浸记忆）")
+			.setDesc(
+				"开启后，Timeline 页面上所有词条引用默认遮住；左键揭开/遮住，遮住时右键选择以哪种语言揭开。也可用命令「切换词条遮挡模式」绑快捷键切换。"
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.dbMaskMode)
+					.onChange(async (value) => {
+						this.plugin.settings.dbMaskMode = value;
 						await this.plugin.saveSettings();
 						await this.plugin.refreshTimelines();
 					})

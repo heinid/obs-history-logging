@@ -124,7 +124,8 @@ export function renderTimelineQuizCard(
 			quizQuestion(quiz, event, revealed),
 			question,
 			opts.dbColors,
-			entry.filePath
+			entry.filePath,
+			opts.plugin.settings.dbMaskMode
 		);
 
 		const status = body.createDiv({ cls: "hl-quiz-card-status" });
@@ -145,7 +146,8 @@ export function renderTimelineQuizCard(
 				quiz.hint,
 				hint,
 				opts.dbColors,
-				entry.filePath
+				entry.filePath,
+				opts.plugin.settings.dbMaskMode
 			);
 		}
 
@@ -177,7 +179,8 @@ export function renderTimelineQuizCard(
 				quizAnswer(quiz, event),
 				answer,
 				opts.dbColors,
-				entry.filePath
+				entry.filePath,
+				opts.plugin.settings.dbMaskMode
 			);
 		}
 		const controls = body.createDiv({ cls: "hl-quiz-card-controls" });

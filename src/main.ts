@@ -142,6 +142,20 @@ export default class HistoryLoggingPlugin extends Plugin {
 			name: "Check data health",
 			callback: () => void checkDataHealth(this),
 		});
+		this.addCommand({
+			id: "toggle-db-mask-mode",
+			name: "切换词条遮挡模式",
+			callback: () => {
+				this.settings.dbMaskMode = !this.settings.dbMaskMode;
+				void this.saveSettings();
+				new Notice(
+					this.settings.dbMaskMode
+						? "词条遮挡模式：开"
+						: "词条遮挡模式：关"
+				);
+				void this.refreshTimelines();
+			},
+		});
 	}
 
 	onunload(): void {

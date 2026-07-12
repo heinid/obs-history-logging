@@ -1858,6 +1858,13 @@ input.hl-tag-chip-input:focus-visible {
 .hl-quiz-waiting-card .hl-quiz-card-body {
 	opacity: 0.65;
 }
+/* Immersive recall: masked entity references on the timeline. The type-
+   colored underline stays visible as a hint; the text itself is hidden. */
+.hl-db-ref.hl-db-mask {
+	filter: blur(6px);
+	cursor: pointer;
+	user-select: none;
+}
 .hl-year-peek .hl-year,
 .hl-year-peek .hl-tag {
 	filter: blur(5px);
