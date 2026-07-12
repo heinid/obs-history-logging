@@ -640,6 +640,7 @@ export class TimelineView extends ItemView {
 			const key = entry.evId ?? `${entry.filePath}:${entry.offset}`;
 			const card = renderTimelineQuizCard(parent, entry, quizzes, {
 				plugin: this.plugin,
+				dbColors: this.dbColors,
 				position: this.quizPositions.get(key) ?? 0,
 				setPosition: (position) => this.quizPositions.set(key, position),
 				update: async (quiz) => {

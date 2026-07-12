@@ -1,4 +1,4 @@
-import { MarkdownRenderer, setIcon } from "obsidian";
+import { setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { TimelineEntry } from "./scan";
 import {
@@ -22,6 +22,7 @@ import { describeYear } from "./year-tag";
 import { EV_SYMBOL } from "./constants";
 import { openEvMenu } from "./ev-menu";
 import { tracksIn } from "./tracks";
+import { DbColors, renderQuizText } from "./quiz-render";
 
 export function renderTimelineQuizCard(
 	parent: HTMLElement,
@@ -29,6 +30,7 @@ export function renderTimelineQuizCard(
 	quizzes: QuizEntry[],
 	opts: {
 		plugin: HistoryLoggingPlugin;
+		dbColors: DbColors;
 		position: number;
 		setPosition(position: number): void;
 		update(quiz: QuizEntry): Promise<void>;
@@ -117,12 +119,12 @@ export function renderTimelineQuizCard(
 
 		const body = card.createDiv({ cls: "hl-card-body hl-quiz-card-body" });
 		const question = body.createDiv({ cls: "hl-quiz-question" });
-		void MarkdownRenderer.render(
-			opts.plugin.app,
+		renderQuizText(
+			opts.plugin,
 			quizQuestion(quiz, event, revealed),
 			question,
-			entry.filePath,
-			opts.plugin
+			opts.dbColors,
+			entry.filePath
 		);
 
 		const status = body.createDiv({ cls: "hl-quiz-card-status" });
@@ -138,12 +140,12 @@ export function renderTimelineQuizCard(
 
 		if (hintShown && quiz.hint) {
 			const hint = body.createDiv({ cls: "hl-quiz-hint" });
-			void MarkdownRenderer.render(
-				opts.plugin.app,
+			renderQuizText(
+				opts.plugin,
 				quiz.hint,
 				hint,
-				entry.filePath,
-				opts.plugin
+				opts.dbColors,
+				entry.filePath
 			);
 		}
 
@@ -170,12 +172,12 @@ export function renderTimelineQuizCard(
 
 		if (!clozeRevealsInline(quiz)) {
 			const answer = body.createDiv({ cls: "hl-quiz-answer" });
-			void MarkdownRenderer.render(
-				opts.plugin.app,
+			renderQuizText(
+				opts.plugin,
 				quizAnswer(quiz, event),
 				answer,
-				entry.filePath,
-				opts.plugin
+				opts.dbColors,
+				entry.filePath
 			);
 		}
 		const controls = body.createDiv({ cls: "hl-quiz-card-controls" });

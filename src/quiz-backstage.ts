@@ -1,9 +1,4 @@
-import {
-	FuzzySuggestModal,
-	MarkdownRenderer,
-	Notice,
-	setIcon,
-} from "obsidian";
+import { FuzzySuggestModal, Notice, setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { EventEntry } from "./types";
 import {
@@ -19,7 +14,7 @@ import {
 import { QuizPracticeModal } from "./quiz-modal";
 import { describeYear, parseYearTag } from "./year-tag";
 import { ConfirmModal } from "./name-modal";
-import { stripDbMarkers } from "./db-marker";
+import { DbColors, renderQuizText } from "./quiz-render";
 
 export type QuizBackstageStatus = "all" | QuizStatus;
 
@@ -33,6 +28,7 @@ export function renderQuizBackstage(
 	plugin: HistoryLoggingPlugin,
 	quizzes: QuizEntry[],
 	events: Map<string, EventEntry>,
+	dbColors: DbColors,
 	state: QuizBackstageState,
 	onChanged: () => Promise<void>
 ): void {
@@ -105,13 +101,7 @@ export function renderQuizBackstage(
 			});
 			const summary = head.createDiv({ cls: "hl-quiz-event-summary" });
 			if (event)
-				void MarkdownRenderer.render(
-					plugin.app,
-					stripDbMarkers(event.summary),
-					summary,
-					"",
-					plugin
-				);
+				renderQuizText(plugin, event.summary, summary, dbColors);
 			else summary.setText(evId);
 			if (event) {
 				const open = head.createEl("button", {
@@ -141,7 +131,15 @@ export function renderQuizBackstage(
 				);
 			}
 			for (const quiz of group)
-				renderQuizRow(section, plugin, quiz, event, events, onChanged);
+				renderQuizRow(
+					section,
+					plugin,
+					quiz,
+					event,
+					events,
+					dbColors,
+					onChanged
+				);
 		}
 	};
 
@@ -156,18 +154,13 @@ function renderQuizRow(
 	quiz: QuizEntry,
 	event: EventEntry | undefined,
 	events: Map<string, EventEntry>,
+	dbColors: DbColors,
 	onChanged: () => Promise<void>
 ): void {
 	const row = host.createDiv({ cls: "hl-quiz-backstage-row" });
 	const content = row.createDiv({ cls: "hl-quiz-backstage-content" });
 	const question = content.createDiv({ cls: "hl-quiz-backstage-question" });
-	void MarkdownRenderer.render(
-		plugin.app,
-		stripDbMarkers(quizQuestion(quiz, event)),
-		question,
-		"",
-		plugin
-	);
+	renderQuizText(plugin, quizQuestion(quiz, event), question, dbColors);
 	const reviewLabel = nextReviewLabel(
 		quiz,
 		new Date(),

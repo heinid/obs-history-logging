@@ -7,6 +7,7 @@ import {
 } from "./quiz";
 import { HistoryLoggingSettings } from "./settings";
 import { describeYear, parseYearTag } from "./year-tag";
+import { mapDbText } from "./db-marker";
 
 export function quizQuestion(
 	quiz: QuizEntry,
@@ -55,15 +56,25 @@ export function maskSourceYear(
 ): string {
 	if (!event?.tag) return text;
 	const decoded = parseYearTag(event.tag);
-	let masked = text.split(event.tag).join("____");
-	if (!decoded || decoded.precision !== "year") return masked;
-	const magnitude = String(decoded.magnitude);
-	const exactYear = new RegExp(
-		`(^|[^0-9])(?:前\\s*)?${magnitude}(?:\\s*BC)?(?![0-9])`,
-		"gi"
-	);
-	masked = masked.replace(exactYear, "$1____");
-	return masked;
+	const tag = event.tag;
+	const magnitude =
+		decoded && decoded.precision === "year"
+			? String(decoded.magnitude)
+			: null;
+	const exactYear = magnitude
+		? new RegExp(
+				`(^|[^0-9])(?:前\\s*)?${magnitude}(?:\\s*BC)?(?![0-9])`,
+				"gi"
+		  )
+		: null;
+	const mask = (chunk: string): string => {
+		let masked = chunk.split(tag).join("____");
+		if (exactYear) masked = masked.replace(exactYear, "$1____");
+		return masked;
+	};
+	// Mask around and inside `{db …}` markers without touching their ids,
+	// so entity references survive the year mask intact.
+	return mapDbText(text, mask);
 }
 
 export function nextReviewLabel(

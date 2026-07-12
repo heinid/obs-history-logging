@@ -40,6 +40,113 @@ export function stripDbMarkers(text: string): string {
 	return text.replace(dbRegex(), "$2");
 }
 
+// Alternating raw/marker spans with their positions in both the raw text
+// and its folded display form (stripDbMarkers output).
+interface FoldSegment {
+	rawStart: number;
+	rawEnd: number;
+	dispStart: number;
+	dispEnd: number;
+	marker: boolean;
+}
+
+function foldSegments(raw: string): FoldSegment[] {
+	const out: FoldSegment[] = [];
+	let rawPos = 0;
+	let dispPos = 0;
+	for (const m of parseDbMarks(raw)) {
+		if (m.index > rawPos) {
+			const len = m.index - rawPos;
+			out.push({
+				rawStart: rawPos,
+				rawEnd: m.index,
+				dispStart: dispPos,
+				dispEnd: dispPos + len,
+				marker: false,
+			});
+			dispPos += len;
+		}
+		out.push({
+			rawStart: m.index,
+			rawEnd: m.index + m.fullMatch.length,
+			dispStart: dispPos,
+			dispEnd: dispPos + m.text.length,
+			marker: true,
+		});
+		rawPos = m.index + m.fullMatch.length;
+		dispPos += m.text.length;
+	}
+	if (rawPos < raw.length)
+		out.push({
+			rawStart: rawPos,
+			rawEnd: raw.length,
+			dispStart: dispPos,
+			dispEnd: dispPos + raw.length - rawPos,
+			marker: false,
+		});
+	return out;
+}
+
+// Build a cloze from a selection range on the folded display text, keeping
+// every `{db …}` marker outside the blank intact in the question. A selection
+// that cuts into a marker's display text expands to the whole marker (its
+// full raw form leaves the question; its display text joins the answer).
+export function makeClozeMarked(
+	raw: string,
+	selFrom: number,
+	selTo: number
+): { question: string; answer: string } {
+	const display = stripDbMarkers(raw);
+	const picked = display.slice(selFrom, selTo);
+	let dispFrom = selFrom + (picked.length - picked.trimStart().length);
+	let dispTo = selTo - (picked.length - picked.trimEnd().length);
+	if (dispFrom >= dispTo) return { question: raw, answer: picked.trim() };
+	const segments = foldSegments(raw);
+	for (const s of segments) {
+		if (!s.marker || s.dispEnd <= dispFrom || s.dispStart >= dispTo)
+			continue;
+		dispFrom = Math.min(dispFrom, s.dispStart);
+		dispTo = Math.max(dispTo, s.dispEnd);
+	}
+	let rawFrom = raw.length;
+	let rawTo = 0;
+	for (const s of segments) {
+		if (s.dispEnd <= dispFrom || s.dispStart >= dispTo) continue;
+		if (s.marker) {
+			rawFrom = Math.min(rawFrom, s.rawStart);
+			rawTo = Math.max(rawTo, s.rawEnd);
+		} else {
+			rawFrom = Math.min(
+				rawFrom,
+				s.rawStart + Math.max(dispFrom, s.dispStart) - s.dispStart
+			);
+			rawTo = Math.max(
+				rawTo,
+				s.rawStart + Math.min(dispTo, s.dispEnd) - s.dispStart
+			);
+		}
+	}
+	if (rawFrom > rawTo) return { question: raw, answer: picked.trim() };
+	return {
+		question: `${raw.slice(0, rawFrom)}____${raw.slice(rawTo)}`,
+		answer: display.slice(dispFrom, dispTo).trim(),
+	};
+}
+
+// Apply a text transform to everything except the marker syntax itself:
+// plain stretches and each marker's display text are transformed, the
+// `{db <id> ` framing is left untouched.
+export function mapDbText(raw: string, fn: (chunk: string) => string): string {
+	let out = "";
+	let pos = 0;
+	for (const m of parseDbMarks(raw)) {
+		out += fn(raw.slice(pos, m.index));
+		out += makeDbMarker(m.id, fn(m.text));
+		pos = m.index + m.fullMatch.length;
+	}
+	return out + fn(raw.slice(pos));
+}
+
 function escapeHtml(s: string): string {
 	return s
 		.replace(/&/g, "&amp;")

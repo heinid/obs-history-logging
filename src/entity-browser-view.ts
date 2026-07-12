@@ -143,6 +143,10 @@ export class EntityBrowserView extends ItemView {
 		this.types = types;
 		this.events = events;
 		this.quizzes = [...quizzes.values()];
+		const colorOf = new Map(types.map((t) => [t.name, t.color]));
+		this.dbColors = new Map(
+			[...entities.values()].map((e) => [e.id, colorOf.get(e.type) ?? ""])
+		);
 		const occ = new Map<string, OccHit[]>();
 		for (const [evId, ev] of events) {
 			const ids = new Set(parseDbMarks(ev.summary).map((m) => m.id));
@@ -165,6 +169,8 @@ export class EntityBrowserView extends ItemView {
 		this.snapshot();
 		this.render();
 	}
+
+	private dbColors = new Map<string, string>();
 
 	private typeColor(name: string): string | null {
 		return this.types.find((t) => t.name === name)?.color ?? null;
@@ -318,6 +324,7 @@ export class EntityBrowserView extends ItemView {
 				this.plugin,
 				this.quizzes,
 				this.events,
+				this.dbColors,
 				cur,
 				() => this.reload()
 			);

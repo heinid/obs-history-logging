@@ -5,6 +5,8 @@ import {
 	Notice,
 	setIcon,
 } from "obsidian";
+import { DbType, EntityEntry } from "./db-format";
+import { EntityModal } from "./entity-modal";
 import type HistoryLoggingPlugin from "./main";
 import { EventEntry } from "./types";
 import {
@@ -25,12 +27,15 @@ import {
 import { generateId } from "./id";
 import { ConfirmModal } from "./name-modal";
 import { describeYear, parseYearTag } from "./year-tag";
-import { stripDbMarkers } from "./db-marker";
+import { makeClozeMarked, stripDbMarkers } from "./db-marker";
+import { DbColors, loadDbColors, renderQuizText } from "./quiz-render";
+import { attachAnnotateMenu } from "./textarea-annotate";
 
 export class QuizManagerModal extends Modal {
 	private event?: EventEntry;
 	private quizzes = new Map<string, QuizEntry>();
 	private eventQuizzes: QuizEntry[] = [];
+	private dbColors: DbColors = new Map();
 	private ensured: boolean;
 
 	constructor(
@@ -65,10 +70,12 @@ export class QuizManagerModal extends Modal {
 	}
 
 	private async reload(): Promise<void> {
-		const [event, quizzes] = await Promise.all([
+		const [event, quizzes, colors] = await Promise.all([
 			this.plugin.store.getEvent(this.evId),
 			this.plugin.store.readQuizzes(),
+			loadDbColors(this.plugin),
 		]);
+		this.dbColors = colors;
 		this.event = {
 			id: this.evId,
 			tag: this.tag,
@@ -98,12 +105,11 @@ export class QuizManagerModal extends Modal {
 				text: quizKindLabel(quiz.kind),
 			});
 			const question = main.createDiv({ cls: "hl-quiz-manage-question" });
-			void MarkdownRenderer.render(
-				this.app,
-				stripDbMarkers(quizQuestion(quiz, this.event)),
+			renderQuizText(
+				this.plugin,
+				quizQuestion(quiz, this.event),
 				question,
-				"",
-				this.plugin
+				this.dbColors
 			);
 			main.createDiv({
 				cls: "hl-quiz-manage-meta",
@@ -236,6 +242,9 @@ interface QuizEditorOptions {
 }
 
 export class QuizEditorModal extends Modal {
+	private entities: EntityEntry[] = [];
+	private types: DbType[] = [];
+
 	constructor(
 		app: App,
 		private plugin: HistoryLoggingPlugin,
@@ -244,7 +253,50 @@ export class QuizEditorModal extends Modal {
 		super(app);
 	}
 
-	onOpen(): void {
+	async onOpen(): Promise<void> {
+		this.entities = [
+			...(await this.plugin.store.readEntities()).values(),
+		];
+		this.types = await this.plugin.store.readDbTypes();
+		this.render();
+	}
+
+	private typeColor(name: string): string | null {
+		return this.types.find((t) => t.name === name)?.color ?? null;
+	}
+
+	// Right-click on selected text in the quiz fields: create or link an
+	// entity, replacing the selection with a `{db id text}` marker.
+	private wireAnnotate(area: HTMLTextAreaElement): void {
+		attachAnnotateMenu(area, {
+			entities: () => this.entities,
+			typeColor: (name) => this.typeColor(name),
+			onCreate: (word, apply) => {
+				const entity: EntityEntry = {
+					id: generateId((id) =>
+						this.entities.some((e) => e.id === id)
+					),
+					type: "",
+					labels: [
+						{
+							lang: this.plugin.settings.entityLangs[0] ?? "zh",
+							text: word,
+						},
+					],
+					readings: [],
+					audios: [],
+					tags: [],
+					body: "",
+				};
+				new EntityModal(this.app, this.plugin, entity, true, (saved) => {
+					this.entities.push(saved);
+					apply(saved);
+				}).open();
+			},
+		});
+	}
+
+	private render(): void {
 		const host = this.contentEl;
 		const existing = this.opts.existing;
 		host.empty();
@@ -279,12 +331,23 @@ export class QuizEditorModal extends Modal {
 		let question = existing?.question ?? "";
 		let answer = existing?.answer ?? "";
 		let hint = existing?.hint ?? "";
-		let sourceSelection = this.opts.clozeAnswer;
-		const summary = stripDbMarkers(this.opts.event.summary ?? "");
+		// The question keeps the raw summary (with `{db …}` markers) so entity
+		// references survive into the card; the cloze source shows the folded
+		// display text, and makeClozeMarked maps the selection range back.
+		const rawSummary = this.opts.event.summary ?? "";
+		const summary = stripDbMarkers(rawSummary);
 		if (!existing && kind === "year")
-			question = summary || "这件事发生在哪一年？";
-		if (!existing && kind === "cloze" && sourceSelection)
-			({ question, answer } = makeCloze(summary, sourceSelection));
+			question = rawSummary || "这件事发生在哪一年？";
+		if (!existing && kind === "cloze" && this.opts.clozeAnswer) {
+			const at = summary.indexOf(this.opts.clozeAnswer);
+			if (at >= 0)
+				({ question, answer } = makeClozeMarked(
+					rawSummary,
+					at,
+					at + this.opts.clozeAnswer.length
+				));
+			else answer = this.opts.clozeAnswer;
+		}
 
 		const textArea = (
 			parent: HTMLElement,
@@ -300,6 +363,7 @@ export class QuizEditorModal extends Modal {
 			});
 			area.value = value;
 			area.addEventListener("input", () => onInput(area.value));
+			this.wireAnnotate(area);
 			return area;
 		};
 
@@ -313,25 +377,22 @@ export class QuizEditorModal extends Modal {
 					cls: "hl-quiz-help",
 					text: "在事件总结中选中答案，再生成填空。",
 				});
-				const source = textArea(
-					form,
-					"事件总结",
-					summary,
-					"请先填写事件总结",
-					() => undefined
-				);
+				form.createDiv({ cls: "hl-quiz-field-label", text: "事件总结" });
+				const source = form.createEl("textarea", {
+					cls: "hl-quiz-textarea",
+					placeholder: "请先填写事件总结",
+				});
+				source.value = summary;
 				source.readOnly = true;
 				const make = form.createEl("button", { text: "生成挖空" });
 				make.addEventListener("click", () => {
-					sourceSelection = source.value.slice(
-						source.selectionStart,
-						source.selectionEnd
-					);
-					if (!sourceSelection.trim()) {
+					const from = source.selectionStart;
+					const to = source.selectionEnd;
+					if (!source.value.slice(from, to).trim()) {
 						new Notice("请先选中要挖空的答案。");
 						return;
 					}
-					({ question, answer } = makeCloze(source.value, sourceSelection));
+					({ question, answer } = makeClozeMarked(rawSummary, from, to));
 					paintForm();
 				});
 			}
@@ -463,6 +524,7 @@ function renderQuizModalHead(
 export class QuizPracticeModal extends Modal {
 	private quiz?: QuizEntry;
 	private event?: EventEntry;
+	private dbColors: DbColors = new Map();
 	private revealed = false;
 	private hintShown = false;
 
@@ -480,6 +542,7 @@ export class QuizPracticeModal extends Modal {
 		this.event = this.quiz
 			? await this.plugin.store.getEvent(this.quiz.sourceEvId)
 			: undefined;
+		this.dbColors = await loadDbColors(this.plugin);
 		this.render();
 	}
 
@@ -531,25 +594,18 @@ export class QuizPracticeModal extends Modal {
 		const question = questionPanel.createDiv({
 			cls: "hl-quiz-practice-question",
 		});
-		void MarkdownRenderer.render(
-			this.app,
+		renderQuizText(
+			this.plugin,
 			quizQuestion(quiz, this.event, this.revealed),
 			question,
-			"",
-			this.plugin
+			this.dbColors
 		);
 
 		if (this.hintShown && quiz.hint) {
 			const hint = questionPanel.createDiv({ cls: "hl-quiz-practice-hint" });
 			hint.createSpan({ text: "提示" });
 			const hintBody = hint.createDiv();
-			void MarkdownRenderer.render(
-				this.app,
-				quiz.hint,
-				hintBody,
-				"",
-				this.plugin
-			);
+			renderQuizText(this.plugin, quiz.hint, hintBody, this.dbColors);
 		}
 
 		const answerPanel = surface.createDiv({
@@ -577,12 +633,11 @@ export class QuizPracticeModal extends Modal {
 			const answer = answerPanel.createDiv({
 				cls: "hl-quiz-practice-answer",
 			});
-			void MarkdownRenderer.render(
-				this.app,
+			renderQuizText(
+				this.plugin,
 				quizAnswer(quiz, this.event),
 				answer,
-				"",
-				this.plugin
+				this.dbColors
 			);
 		}
 
@@ -687,17 +742,4 @@ function quizKindLabel(kind: QuizKind): string {
 	return "Q&A";
 }
 
-function makeCloze(
-	summary: string,
-	selection: string
-): { question: string; answer: string } {
-	const answer = selection.trim();
-	const index = summary.indexOf(selection);
-	if (index < 0) return { question: summary, answer };
-	return {
-		question: `${summary.slice(0, index)}____${summary.slice(
-			index + selection.length
-		)}`,
-		answer,
-	};
-}
+

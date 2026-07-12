@@ -50,7 +50,12 @@ import {
 	reviewQuiz,
 	reviveQuiz,
 } from "../src/quiz";
-import { nextReviewLabel, quizQuestion } from "../src/quiz-display";
+import {
+	maskSourceYear,
+	nextReviewLabel,
+	quizQuestion,
+} from "../src/quiz-display";
+import { makeClozeMarked, mapDbText } from "../src/db-marker";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -280,6 +285,46 @@ eq(
 		true
 	),
 	"カエサルは==暗殺==された"
+);
+
+// cloze over {db} markers: selection ranges are on the folded display text
+const clozeSrc = "元寇では{db q3x8k2p1 フビライ}が日本に遠征した";
+eq(
+	"cloze outside marker keeps it",
+	makeClozeMarked(clozeSrc, 12, 14),
+	{
+		question: "元寇では{db q3x8k2p1 フビライ}が日本に____した",
+		answer: "遠征",
+	}
+);
+eq(
+	"cloze cutting into marker expands to whole marker",
+	makeClozeMarked(clozeSrc, 5, 7),
+	{ question: "元寇では____が日本に遠征した", answer: "フビライ" }
+);
+eq(
+	"cloze spanning marker and text",
+	makeClozeMarked(clozeSrc, 7, 9),
+	{ question: "元寇では____日本に遠征した", answer: "フビライが" }
+);
+eq(
+	"cloze whitespace-only selection unchanged",
+	makeClozeMarked("a b", 1, 2),
+	{ question: "a b", answer: "" }
+);
+eq(
+	"mapDbText leaves marker framing intact",
+	mapDbText("x1467y {db abc 1467}", (c) => c.replace("1467", "____")),
+	"x____y {db abc ____}"
+);
+eq(
+	"year mask spares marker ids",
+	maskSourceYear("{db a1467b 名誉革命}は1688年", {
+		id: "e",
+		tag: "#ad/16/8/8",
+		summary: "",
+	}),
+	"{db a1467b 名誉革命}は____年"
 );
 
 const t0 = new Date("2026-07-10T10:00:00.000Z");

@@ -1,4 +1,4 @@
-import { App, MarkdownRenderer, Modal } from "obsidian";
+import { App, Modal } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { EventEntry } from "./types";
 import { QuizEntry, QuizResult, isQuizReady, reviewQuiz } from "./quiz";
@@ -9,6 +9,7 @@ import {
 	quizQuestion,
 	quizSchedule,
 } from "./quiz-display";
+import { DbColors, loadDbColors, renderQuizText } from "./quiz-render";
 
 export class QuizSessionModal extends Modal {
 	private quizzes: QuizEntry[] = [];
@@ -21,6 +22,7 @@ export class QuizSessionModal extends Modal {
 		forgot: 0,
 	};
 	private weakIds = new Set<string>();
+	private dbColors: DbColors = new Map();
 
 	constructor(
 		app: App,
@@ -31,10 +33,12 @@ export class QuizSessionModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
-		const [allQuizzes, events] = await Promise.all([
+		const [allQuizzes, events, colors] = await Promise.all([
 			this.plugin.store.readQuizzes(),
 			this.plugin.store.readEvents(),
+			loadDbColors(this.plugin),
 		]);
+		this.dbColors = colors;
 		this.events = events;
 		this.quizzes = shuffle(
 			this.quizIds
@@ -63,12 +67,11 @@ export class QuizSessionModal extends Modal {
 		});
 
 		const question = host.createDiv({ cls: "hl-quiz-practice-question" });
-		void MarkdownRenderer.render(
-			this.app,
+		renderQuizText(
+			this.plugin,
 			quizQuestion(quiz, event, this.revealed),
 			question,
-			"",
-			this.plugin
+			this.dbColors
 		);
 		host.createDiv({
 			cls: "hl-quiz-session-mastery",
@@ -81,13 +84,7 @@ export class QuizSessionModal extends Modal {
 				const details = host.createEl("details", { cls: "hl-quiz-hint" });
 				details.createEl("summary", { text: "提示" });
 				const hint = details.createDiv();
-				void MarkdownRenderer.render(
-					this.app,
-					quiz.hint,
-					hint,
-					"",
-					this.plugin
-				);
+				renderQuizText(this.plugin, quiz.hint, hint, this.dbColors);
 			}
 			const show = host.createEl("button", {
 				cls: "mod-cta hl-quiz-show-answer",
@@ -102,12 +99,11 @@ export class QuizSessionModal extends Modal {
 
 		if (!clozeRevealsInline(quiz)) {
 			const answer = host.createDiv({ cls: "hl-quiz-practice-answer" });
-			void MarkdownRenderer.render(
-				this.app,
+			renderQuizText(
+				this.plugin,
 				quizAnswer(quiz, event),
 				answer,
-				"",
-				this.plugin
+				this.dbColors
 			);
 		}
 		const actions = host.createDiv({ cls: "hl-quiz-review-actions" });
