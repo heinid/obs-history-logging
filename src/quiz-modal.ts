@@ -339,6 +339,11 @@ export class QuizEditorModal extends Modal {
 				const tab = tabs.createSpan({ cls: "hl-quiz-kind-tab", text: label });
 				tabEls.set(value, tab);
 				tab.addEventListener("click", () => {
+					// The year prefill (event summary) must not leak into
+					// the other kinds when the user has not edited it.
+					if (kind === "year" && value !== "year" && question === rawSummary)
+						question = "";
+					if (value === "year" && !question) question = rawSummary;
 					kind = value;
 					paintForm();
 				});
@@ -354,8 +359,7 @@ export class QuizEditorModal extends Modal {
 		// display text, and makeClozeMarked maps the selection range back.
 		const rawSummary = this.opts.event.summary ?? "";
 		const summary = stripDbMarkers(rawSummary);
-		if (!existing && kind === "year")
-			question = rawSummary || "这件事发生在哪一年？";
+		if (!existing && kind === "year") question = rawSummary;
 		if (!existing && kind === "cloze" && this.opts.clozeAnswer) {
 			const at = summary.indexOf(this.opts.clozeAnswer);
 			if (at >= 0)
