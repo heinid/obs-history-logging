@@ -417,14 +417,47 @@ const recheckFailed = reviewQuiz(
 eq("failed recheck keeps progress at 0", recheckFailed.progress, 0);
 eq("failed recheck retries in ten minutes", recheckFailed.nextReview, "2026-07-10T10:20:00.000Z");
 
-// parked quizzes (short retry/recheck loop) get their own timeline card
-eq("fresh quiz not parked", isQuizParked(quiz), false);
-eq("remembered quiz not parked", isQuizParked(afterOne), false);
-eq("recheck-pending parked", isQuizParked(recheckPending), true);
-eq("forgot parked", isQuizParked(forgot), true);
-eq("failed recheck parked", isQuizParked(recheckFailed), true);
-eq("passed recheck unparked", isQuizParked(recheckPassed), false);
-eq("mastered not parked", isQuizParked(mastered), false);
+// parked quizzes (current short retry/recheck cycle) get their own timeline
+// card, through the wait and for parkMinutes past the due time; older
+// forgot attempts never park
+eq("fresh quiz not parked", isQuizParked(quiz, t0), false);
+eq("remembered quiz not parked", isQuizParked(afterOne, t0), false);
+eq(
+	"recheck-pending parked",
+	isQuizParked(recheckPending, t0, recheckSchedule),
+	true
+);
+eq("forgot parked while waiting", isQuizParked(forgot, t0), true);
+eq(
+	"forgot parked shortly after due",
+	isQuizParked(forgot, new Date("2026-07-10T12:00:00.000Z")),
+	true
+);
+eq(
+	"stale forgot unparked past park window",
+	isQuizParked(forgot, new Date("2026-07-12T10:15:00.000Z")),
+	false
+);
+eq(
+	"park window is configurable",
+	isQuizParked(
+		forgot,
+		new Date("2026-07-10T11:30:00.000Z"),
+		{ ...DEFAULT_QUIZ_SCHEDULE, parkMinutes: 60 }
+	),
+	false
+);
+eq(
+	"failed recheck parked",
+	isQuizParked(recheckFailed, t0, recheckSchedule),
+	true
+);
+eq(
+	"passed recheck unparked",
+	isQuizParked(recheckPassed, t0, recheckSchedule),
+	false
+);
+eq("mastered not parked", isQuizParked(mastered, t0), false);
 
 // short-wait countdown + rating feedback copy
 eq(

@@ -32,6 +32,9 @@ export interface HistoryLoggingSettings {
 	quizIntervalsMinutes: number[];
 	// Wait after "forgot", in minutes; the card stays parked until then.
 	quizRetryMinutes: number;
+	// How long an overdue retry/recheck card keeps its own timeline slot
+	// past the due time, in hours, before rejoining the shared slot.
+	quizParkHours: number;
 	// Optional first-learn recheck: a global notice fires this many minutes
 	// after a new quiz is first remembered, and passing it completes step 1.
 	quizRemindRecheck: boolean;
@@ -61,6 +64,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	quizMasterySteps: 3,
 	quizIntervalsMinutes: [24 * 60, 3 * 24 * 60],
 	quizRetryMinutes: 10,
+	quizParkHours: 24,
 	quizRemindRecheck: false,
 	quizRecheckMinutes: 10,
 	quizHoverHideYears: false,
@@ -185,6 +189,24 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 						const parsed = Number(value);
 						if (!Number.isFinite(parsed) || parsed < 0) return;
 						this.plugin.settings.quizRetryMinutes = parsed;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("分离卡位保持（小时）")
+			.setDesc(
+				"待重试/待复核的题在 Timeline 上分离成独立卡；到期后超过这些小时仍未作答，卡回归共享卡位。"
+			)
+			.addText((text) => {
+				text.inputEl.type = "number";
+				text.inputEl.min = "0";
+				text
+					.setValue(String(this.plugin.settings.quizParkHours))
+					.onChange(async (value) => {
+						const parsed = Number(value);
+						if (!Number.isFinite(parsed) || parsed < 0) return;
+						this.plugin.settings.quizParkHours = parsed;
 						await this.plugin.saveSettings();
 					});
 			});

@@ -47,6 +47,7 @@ export function quizSchedule(settings: HistoryLoggingSettings): QuizSchedule {
 		retryMinutes: Math.max(0, settings.quizRetryMinutes),
 		recheckMinutes: Math.max(0, settings.quizRecheckMinutes),
 		remindRecheck: settings.quizRemindRecheck,
+		parkMinutes: Math.max(0, settings.quizParkHours) * 60,
 	};
 }
 

@@ -1887,9 +1887,30 @@ input.hl-tag-chip-input:focus-visible {
 		box-shadow: 0 0 0 0 transparent;
 	}
 }
-/* A parked quiz split out of its event's shared slot. */
+/* A parked quiz split out of its event's shared slot: a faint tint stays
+   even after the wait ends, until the quiz passes and rejoins. */
 .hl-quiz-alone-card {
 	margin-top: 4px;
+}
+.hl-quiz-alone-retry {
+	background: color-mix(in srgb, var(--color-red) 5%, var(--background-primary));
+	border-color: color-mix(
+		in srgb,
+		var(--color-red) 22%,
+		var(--background-modifier-border)
+	);
+}
+.hl-quiz-alone-recheck {
+	background: color-mix(
+		in srgb,
+		var(--color-orange) 5%,
+		var(--background-primary)
+	);
+	border-color: color-mix(
+		in srgb,
+		var(--color-orange) 26%,
+		var(--background-modifier-border)
+	);
 }
 .hl-quiz-alone-badge {
 	font-size: var(--font-ui-smaller);

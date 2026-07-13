@@ -643,10 +643,17 @@ export class TimelineView extends ItemView {
 				await this.plugin.store.upsertQuiz(quiz);
 				await this.refresh();
 			};
-			// Quizzes in the short retry/recheck loop leave the shared slot and
-			// get their own card right below it until the next pass.
-			const parked = quizzes.filter(isQuizParked);
-			const shared = quizzes.filter((quiz) => !isQuizParked(quiz));
+			// Quizzes in the current short retry/recheck cycle leave the shared
+			// slot and get their own card right below it until they pass (or
+			// stay overdue past the configured park window).
+			const now = new Date();
+			const schedule = quizSchedule(this.plugin.settings);
+			const parked = quizzes.filter((quiz) =>
+				isQuizParked(quiz, now, schedule)
+			);
+			const shared = quizzes.filter(
+				(quiz) => !isQuizParked(quiz, now, schedule)
+			);
 			let main: HTMLElement | null = null;
 			if (shared.length || !parked.length) {
 				main = renderTimelineQuizCard(parent, entry, shared, {

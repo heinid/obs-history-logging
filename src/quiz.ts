@@ -38,6 +38,9 @@ export interface QuizSchedule {
 	retryMinutes: number;
 	recheckMinutes: number;
 	remindRecheck: boolean;
+	// How long a card stays on its own parked slot after the short wait
+	// expires, in minutes; overdue-longer cards rejoin the shared slot.
+	parkMinutes: number;
 }
 
 export const DEFAULT_QUIZ_SCHEDULE: QuizSchedule = {
@@ -46,6 +49,7 @@ export const DEFAULT_QUIZ_SCHEDULE: QuizSchedule = {
 	retryMinutes: 10,
 	recheckMinutes: 10,
 	remindRecheck: false,
+	parkMinutes: 24 * 60,
 };
 
 export function isQuizReady(
@@ -84,13 +88,26 @@ export function isQuizWaiting(
 	return due - now.getTime() <= horizon;
 }
 
-// A quiz in the short retry/recheck loop: a first-learn recheck still
-// pending, or the last answer was "forgot". These are surfaced on their own
-// timeline card until the next pass clears them.
-export function isQuizParked(quiz: QuizEntry): boolean {
+// A quiz in the current short retry/recheck cycle: a first-learn recheck
+// still pending, or the last answer was "forgot". It gets its own timeline
+// card through the wait and for `parkMinutes` past the due time as a
+// missed-alarm todo, then rejoins the shared slot; stale cases from long
+// ago never park.
+export function isQuizParked(
+	quiz: QuizEntry,
+	now = new Date(),
+	schedule = DEFAULT_QUIZ_SCHEDULE
+): boolean {
 	if (quiz.status !== "active") return false;
-	if (quiz.pendingRecheck) return true;
-	return quiz.attempts[quiz.attempts.length - 1]?.result === "forgot";
+	if (
+		!quiz.pendingRecheck &&
+		quiz.attempts[quiz.attempts.length - 1]?.result !== "forgot"
+	)
+		return false;
+	if (!quiz.nextReview) return false;
+	const due = Date.parse(quiz.nextReview);
+	if (Number.isNaN(due)) return false;
+	return now.getTime() <= due + Math.max(0, schedule.parkMinutes) * 60_000;
 }
 
 export function reviewQuiz(

@@ -61,6 +61,15 @@ export function renderTimelineQuizCard(
 		const waiting = isQuizWaiting(quiz, new Date(), schedule);
 		card.toggleClass("hl-quiz-waiting-card", waiting && !quiz.pendingRecheck);
 		card.toggleClass("hl-quiz-recheck-card", waiting && !!quiz.pendingRecheck);
+		// Parked cards keep a faint tint even once the wait is over.
+		card.toggleClass(
+			"hl-quiz-alone-retry",
+			!!opts.standalone && !quiz.pendingRecheck
+		);
+		card.toggleClass(
+			"hl-quiz-alone-recheck",
+			!!opts.standalone && !!quiz.pendingRecheck
+		);
 		card.toggleClass(
 			"hl-quiz-cooling-card",
 			quiz.status === "active" && !ready && !waiting
