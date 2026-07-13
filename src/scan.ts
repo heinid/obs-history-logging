@@ -4,6 +4,11 @@ import { parseYearTag, yearTagRegex } from "./year-tag";
 import { parseEvMarks, stripEvMarkers } from "./parser";
 import { DataStore } from "./data-store";
 
+// Last-known evId -> file path, filled in as the vault is scanned. Jump-to-
+// source consults it to open the right file directly instead of re-scanning
+// every note; a miss falls back to a full scan.
+export const evLocationIndex = new Map<string, string>();
+
 // One occurrence of a year tag in the vault, decoded and enriched with its
 // optional event id / summary. The timeline is built purely from these — a
 // bare tag needs no id to appear.
@@ -103,6 +108,7 @@ export async function scanVault(
 		const evTagIndex = new Map<number, EvMark>();
 		for (const mark of parseEvMarks(content)) {
 			evTagIndex.set(mark.index + mark.fullMatch.indexOf(mark.tag), mark);
+			evLocationIndex.set(mark.id, file.path);
 		}
 
 		const re = yearTagRegex();

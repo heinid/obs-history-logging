@@ -996,6 +996,15 @@
 	flex: 0 0 1.1em;
 	text-align: center;
 }
+.hl-le-pop-item-disabled {
+	opacity: 0.4;
+	cursor: default;
+	pointer-events: none;
+}
+.hl-le-pop-audio {
+	margin-left: auto;
+	font-size: var(--font-ui-smaller);
+}
 .hl-le-pop-label {
 	font-weight: 600;
 	color: var(--text-normal);

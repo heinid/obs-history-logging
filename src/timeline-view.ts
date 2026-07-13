@@ -733,7 +733,8 @@ export class TimelineView extends ItemView {
 				this.app,
 				entry.filePath,
 				entry.offset,
-				entry.tag.length
+				entry.tag.length,
+				entry.evId
 			);
 		});
 

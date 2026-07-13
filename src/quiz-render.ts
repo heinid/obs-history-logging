@@ -1,4 +1,4 @@
-import { MarkdownRenderer, Notice } from "obsidian";
+import { MarkdownRenderer, Notice, TFile } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { dbMarkersToHtml } from "./db-marker";
 import { langRank } from "./db-format";
@@ -171,8 +171,10 @@ function openDbRefMenu(
 	});
 }
 
-// Mask-mode right-click: a standalone menu listing only the entity's
-// language variants; picking one reveals the reference with that spelling.
+// Mask-mode right-click: a standalone menu listing the configured display
+// languages. A language with an alias is clickable — picking it reveals the
+// reference with that spelling (and plays its audio if one exists). A language
+// the entity has no alias for is shown greyed out and disabled.
 function openDbLangMenu(
 	plugin: HistoryLoggingPlugin,
 	el: HTMLElement,
@@ -181,26 +183,49 @@ function openDbLangMenu(
 ): void {
 	void (async () => {
 		const entity = (await plugin.store.readEntities()).get(id);
-		if (!entity || !entity.labels.length) {
-			new Notice("这个词条没有可选的语言版本。");
+		if (!entity) {
+			new Notice("找不到这个词条。");
 			return;
 		}
+		// Configured languages first (in order), then any extra languages the
+		// entity actually has, so no existing alias is ever hidden.
+		const langs: string[] = [];
+		for (const lang of plugin.settings.entityLangs)
+			if (!langs.includes(lang)) langs.push(lang);
+		for (const label of entity.labels)
+			if (!langs.includes(label.lang)) langs.push(label.lang);
+		langs.sort((a, b) => langRank(a) - langRank(b));
+
 		const { mk, close } = makeDbPop(e);
-		const labels = entity.labels
-			.map((label, i) => ({ label, i }))
-			.sort(
-				(a, b) =>
-					langRank(a.label.lang) - langRank(b.label.lang) || a.i - b.i
-			)
-			.map((x) => x.label);
-		for (const label of labels) {
-			mk(label.lang, label.text).addEventListener("mousedown", (ev) => {
+		for (const lang of langs) {
+			const label = entity.labels.find((x) => x.lang === lang && x.text);
+			const audio = entity.audios.find((x) => x.lang === lang);
+			const row = mk(lang, label ? label.text : "—");
+			if (!label) {
+				row.addClass("hl-le-pop-item-disabled");
+				continue;
+			}
+			if (audio) row.createSpan({ cls: "hl-le-pop-audio", text: "🔊" });
+			row.addEventListener("mousedown", (ev) => {
 				ev.preventDefault();
 				close();
 				el.setText(label.text);
 				el.removeClass("hl-db-mask");
 				el.setAttr("aria-label", "点击遮住");
+				if (audio) playEntityAudio(plugin, audio.link);
 			});
 		}
 	})();
+}
+
+// Play a vault audio attachment referenced as `[[file.mp3]]` (optional
+// `|alias` display text is ignored).
+function playEntityAudio(plugin: HistoryLoggingPlugin, link: string): void {
+	const path = link.replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0];
+	const file = plugin.app.metadataCache.getFirstLinkpathDest(path, "");
+	if (!(file instanceof TFile)) {
+		new Notice(`找不到音频附件：${link}`);
+		return;
+	}
+	void new Audio(plugin.app.vault.getResourcePath(file)).play();
 }
