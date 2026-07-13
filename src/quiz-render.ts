@@ -200,7 +200,9 @@ function openDbLangMenu(
 		for (const lang of langs) {
 			const label = entity.labels.find((x) => x.lang === lang && x.text);
 			const audio = entity.audios.find((x) => x.lang === lang);
-			const row = mk(lang, label ? label.text : "—");
+			// Show only the language, never the alias text — printing the word
+			// here would spoil the very answer the mask is hiding.
+			const row = mk(lang, langDisplayName(lang));
 			if (!label) {
 				row.addClass("hl-le-pop-item-disabled");
 				continue;
@@ -216,6 +218,24 @@ function openDbLangMenu(
 			});
 		}
 	})();
+}
+
+// Human-readable name for a language code, so the mask menu names languages
+// without revealing the hidden alias. Unknown codes show as-is.
+function langDisplayName(lang: string): string {
+	const names: Record<string, string> = {
+		zh: "中文",
+		ja: "日本語",
+		en: "English",
+		ko: "한국어",
+		fr: "Français",
+		de: "Deutsch",
+		es: "Español",
+		it: "Italiano",
+		ru: "Русский",
+		la: "Latina",
+	};
+	return names[lang] ?? lang;
 }
 
 // Play a vault audio attachment referenced as `[[file.mp3]]` (optional
