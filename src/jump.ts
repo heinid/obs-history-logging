@@ -92,7 +92,12 @@ async function openAt(
 	newTab = false
 ): Promise<void> {
 	const leaf = app.workspace.getLeaf(newTab ? "tab" : false);
-	await leaf.openFile(file);
+	// Pass the target line as the ephemeral state of the open itself, so
+	// Obsidian scrolls there instead of restoring the file's remembered
+	// scroll position (which would otherwise yank the view away afterwards).
+	const content = (await app.vault.cachedRead(file)).replace(/\r\n/g, "\n");
+	const line = content.slice(0, offset).split("\n").length - 1;
+	await leaf.openFile(file, { eState: { line } });
 	const view = await whenEditorReady(leaf.view);
 	if (!view) return;
 	const editor = view.editor;
