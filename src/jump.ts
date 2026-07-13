@@ -111,21 +111,35 @@ async function openAt(
 	editor.scrollIntoView({ from, to }, true);
 	const cm = (view.editor as unknown as { cm?: EditorView }).cm;
 	if (cm) flashJumpTarget(cm, offset, offset + length);
-	// Something (scroll-position restore, layout shifts from decorations
-	// unfolding, deferred rendering of long documents) can still yank the
-	// view away from the target moments after we scrolled to it. Instead of
-	// racing it with fixed delays, watch the target for a short while and
-	// re-scroll whenever it leaves the viewport.
+	// Deferred layout work (progressive line-height measurement of long
+	// documents, decorations folding/unfolding) can still drift the view off
+	// the target shortly after opening. Correcting immediately fights that
+	// drift and looks like ping-ponging, so instead wait until the scroll
+	// position has settled and then re-center once if the target is off
+	// screen.
 	if (cm) {
-		const deadline = Date.now() + 2500;
+		const deadline = Date.now() + 3000;
+		let lastTop = cm.scrollDOM.scrollTop;
+		let lastMove = Date.now();
 		const tick = (): void => {
-			const rect = cm.scrollDOM.getBoundingClientRect();
-			const coords = cm.coordsAtPos(Math.min(offset, cm.state.doc.length));
-			if (!coords || coords.top < rect.top || coords.bottom > rect.bottom)
-				editor.scrollIntoView({ from, to }, true);
-			if (Date.now() < deadline) window.setTimeout(tick, 100);
+			const top = cm.scrollDOM.scrollTop;
+			if (top !== lastTop) {
+				lastTop = top;
+				lastMove = Date.now();
+			} else if (Date.now() - lastMove > 250) {
+				const rect = cm.scrollDOM.getBoundingClientRect();
+				const coords = cm.coordsAtPos(
+					Math.min(offset, cm.state.doc.length)
+				);
+				if (!coords || coords.top < rect.top || coords.bottom > rect.bottom) {
+					editor.scrollIntoView({ from, to }, true);
+					lastTop = cm.scrollDOM.scrollTop;
+					lastMove = Date.now();
+				}
+			}
+			if (Date.now() < deadline) window.setTimeout(tick, 60);
 		};
-		window.setTimeout(tick, 100);
+		window.setTimeout(tick, 60);
 	}
 }
 
