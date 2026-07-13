@@ -36,12 +36,14 @@ import { QuizEntry } from "./quiz";
 import { quizSchedule } from "./quiz-display";
 import { ModalStash } from "./modal-stash";
 import { setDisplayLangOrder } from "./db-format";
+import { QuizReminderModal } from "./quiz-reminder";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
 	store!: DataStore;
 	modalStash!: ModalStash;
 	private quizReminders = new Map<string, number>();
+	private reminderModal: QuizReminderModal | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -409,8 +411,9 @@ export default class HistoryLoggingPlugin extends Plugin {
 	}
 
 	// After a short wait (forgot retry or first-learn recheck), surface the
-	// quiz again with a global notice that opens the practice modal directly.
-	// Day-scale intervals are picked up on the next visit instead.
+	// quiz again with an alarm-style reminder modal (or a persistent notice
+	// while another modal is in the way). Day-scale intervals are picked up
+	// on the next visit instead.
 	remindQuizWhenReady(quiz: QuizEntry): void {
 		const pending = this.quizReminders.get(quiz.id);
 		if (pending !== undefined) {
@@ -427,11 +430,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 		if (delay <= 0 || delay > horizon) return;
 		const timer = window.setTimeout(() => {
 			this.quizReminders.delete(quiz.id);
-			const notice = new Notice("有 1 道 Quiz 可以练习了，点击开始。", 30_000);
-			notice.noticeEl.addEventListener("click", () => {
-				notice.hide();
-				new QuizPracticeModal(this.app, this, quiz.id).open();
-			});
+			this.surfaceQuizReminder(quiz.id);
 			void this.refreshTimelines();
 		}, delay);
 		this.quizReminders.set(quiz.id, timer);
@@ -442,6 +441,36 @@ export default class HistoryLoggingPlugin extends Plugin {
 				this.quizReminders.delete(quiz.id);
 			}
 		});
+	}
+
+	// One reminder window at a time: quizzes due while it is open join its
+	// queue; if another modal is in the way, fall back to a persistent notice
+	// that opens the reminder on click.
+	private surfaceQuizReminder(quizId: string): void {
+		if (this.reminderModal) {
+			this.reminderModal.enqueue(quizId);
+			return;
+		}
+		const openReminder = (): void => {
+			if (this.reminderModal) {
+				this.reminderModal.enqueue(quizId);
+				return;
+			}
+			const modal = new QuizReminderModal(this.app, this, quizId, () => {
+				if (this.reminderModal === modal) this.reminderModal = null;
+			});
+			this.reminderModal = modal;
+			modal.open();
+		};
+		if (this.modalStash.hasOpen()) {
+			const notice = new Notice("⏰ 有 Quiz 到了复核时间，点击开始。", 0);
+			notice.noticeEl.addEventListener("click", () => {
+				notice.hide();
+				openReminder();
+			});
+			return;
+		}
+		openReminder();
 	}
 
 	// Settings live in `<dataFolder>/settings.json` inside the vault so they

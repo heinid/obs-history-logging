@@ -23,6 +23,7 @@ import {
 	quizAnswer,
 	quizQuestion,
 	quizSchedule,
+	rateNotice,
 } from "./quiz-display";
 import { generateId } from "./id";
 import { ConfirmModal } from "./name-modal";
@@ -545,29 +546,33 @@ function renderQuizModalHead(
 }
 
 export class QuizPracticeModal extends Modal {
-	private quiz?: QuizEntry;
+	protected quiz?: QuizEntry;
 	private event?: EventEntry;
 	private dbColors: DbColors = new Map();
-	private revealed = false;
-	private hintShown = false;
+	protected revealed = false;
+	protected hintShown = false;
 
 	constructor(
 		app: App,
-		private plugin: HistoryLoggingPlugin,
-		private quizId: string,
-		private onClosed?: () => void
+		protected plugin: HistoryLoggingPlugin,
+		protected quizId: string,
+		protected onClosed?: () => void
 	) {
 		super(app);
 	}
 
 	async onOpen(): Promise<void> {
 		this.plugin.modalStash.track(this);
+		await this.loadQuiz();
+		this.render();
+	}
+
+	protected async loadQuiz(): Promise<void> {
 		this.quiz = (await this.plugin.store.readQuizzes()).get(this.quizId);
 		this.event = this.quiz
 			? await this.plugin.store.getEvent(this.quiz.sourceEvId)
 			: undefined;
 		this.dbColors = await loadDbColors(this.plugin);
-		this.render();
 	}
 
 	// Reload quiz/event/colors but keep the reveal and hint state.
@@ -580,10 +585,11 @@ export class QuizPracticeModal extends Modal {
 		this.render();
 	}
 
-	private render(): void {
+	protected render(): void {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-quiz-practice");
+		this.renderBanner(host);
 		const quiz = this.quiz;
 		if (!quiz) {
 			host.createDiv({ cls: "hl-empty", text: "找不到这个 Quiz。" });
@@ -729,20 +735,22 @@ export class QuizPracticeModal extends Modal {
 
 	private async rate(result: QuizResult): Promise<void> {
 		if (!this.quiz) return;
-		const updated = reviewQuiz(
-			this.quiz,
-			result,
-			new Date(),
-			quizSchedule(this.plugin.settings)
-		);
+		const schedule = quizSchedule(this.plugin.settings);
+		const updated = reviewQuiz(this.quiz, result, new Date(), schedule);
 		await this.plugin.store.upsertQuiz(updated);
 		this.plugin.remindQuizWhenReady(updated);
 		await this.plugin.refreshTimelines();
 		new Notice(
-			updated.status === "mastered"
-				? "这个 Quiz 已学过。"
-				: `掌握进度：${updated.progress}/${this.plugin.settings.quizMasterySteps}`
+			rateNotice(updated, this.plugin.settings.quizMasterySteps, schedule)
 		);
+		this.afterRate(updated);
+	}
+
+	// Hooks for the reminder subclass: an extra banner above the head, and
+	// what happens after rating (default: close).
+	protected renderBanner(_host: HTMLElement): void {}
+
+	protected afterRate(_updated: QuizEntry): void {
 		this.close();
 	}
 

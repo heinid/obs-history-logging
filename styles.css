@@ -1858,6 +1858,84 @@ input.hl-tag-chip-input:focus-visible {
 .hl-quiz-waiting-card .hl-quiz-card-body {
 	opacity: 0.65;
 }
+/* First-learn recheck wait: orange "alarm set", distinct from the forgot-red. */
+.hl-quiz-recheck-card {
+	background: color-mix(
+		in srgb,
+		var(--color-orange) 8%,
+		var(--background-primary)
+	);
+	border-color: color-mix(
+		in srgb,
+		var(--color-orange) 32%,
+		var(--background-modifier-border)
+	);
+}
+.hl-quiz-recheck-card .hl-quiz-card-body {
+	opacity: 0.75;
+}
+/* One-time flash on the card the user just rated. */
+.hl-quiz-flash-card {
+	animation: hl-quiz-flash 1.2s ease-out 1;
+}
+@keyframes hl-quiz-flash {
+	0% {
+		box-shadow: 0 0 0 3px
+			color-mix(in srgb, var(--interactive-accent) 65%, transparent);
+	}
+	100% {
+		box-shadow: 0 0 0 0 transparent;
+	}
+}
+/* A parked quiz split out of its event's shared slot. */
+.hl-quiz-alone-card {
+	margin-top: 4px;
+}
+.hl-quiz-alone-badge {
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	color: var(--color-orange);
+	white-space: nowrap;
+}
+.hl-quiz-waiting-card .hl-quiz-alone-badge {
+	color: var(--color-red);
+}
+.hl-quiz-countdown {
+	margin-left: 8px;
+	font-weight: 600;
+	color: var(--color-orange);
+}
+.hl-quiz-waiting-card .hl-quiz-countdown {
+	color: var(--color-red);
+}
+/* Alarm banner on the reminder practice modal. */
+.hl-quiz-reminder-banner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 8px;
+	padding: 6px 10px;
+	border-radius: var(--radius-s);
+	background: color-mix(
+		in srgb,
+		var(--color-orange) 12%,
+		var(--background-primary)
+	);
+	border: 1px solid
+		color-mix(in srgb, var(--color-orange) 40%, var(--background-modifier-border));
+}
+.hl-quiz-reminder-label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 600;
+	color: var(--color-orange);
+}
+.hl-quiz-reminder-actions {
+	display: flex;
+	gap: 6px;
+}
 /* Immersive recall: masked entity references on the timeline. The type-
    colored underline stays visible as a hint; the text itself is hidden. */
 .hl-db-ref.hl-db-mask {

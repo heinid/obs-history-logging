@@ -91,3 +91,33 @@ export function nextReviewLabel(
 	const days = Math.ceil(hours / 24);
 	return days <= 1 ? "明天可练" : `${days} 天后可练`;
 }
+
+// Countdown line for a card sitting in the short retry/recheck loop; empty
+// once the wait is over.
+export function shortWaitLabel(
+	quiz: QuizEntry,
+	now = new Date(),
+	schedule = DEFAULT_QUIZ_SCHEDULE
+): string {
+	const label = nextReviewLabel(quiz, now, schedule);
+	if (!label) return "";
+	return quiz.pendingRecheck
+		? `⏰ 复核确认 · ${label}`
+		: `⏰ 重试 · ${label}`;
+}
+
+// Feedback right after rating: make the "remembered → recheck pending"
+// outcome unmistakable instead of a bare progress line.
+export function rateNotice(
+	quiz: QuizEntry,
+	masterySteps: number,
+	schedule = DEFAULT_QUIZ_SCHEDULE
+): string {
+	if (quiz.status === "mastered") return "这个 Quiz 已学过。";
+	if (quiz.pendingRecheck)
+		return `✓ 已记住 · ⏰ ${Math.max(
+			0,
+			schedule.recheckMinutes
+		)} 分钟后复核确认，通过才算完成这一步`;
+	return `掌握进度：${quiz.progress}/${masterySteps}`;
+}

@@ -1,4 +1,4 @@
-import { setIcon } from "obsidian";
+import { Notice, setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { TimelineEntry } from "./scan";
 import {
@@ -16,6 +16,8 @@ import {
 	quizAnswer,
 	quizQuestion,
 	quizSchedule,
+	rateNotice,
+	shortWaitLabel,
 } from "./quiz-display";
 import { EventEntry } from "./types";
 import { describeYear } from "./year-tag";
@@ -34,9 +36,12 @@ export function renderTimelineQuizCard(
 		position: number;
 		setPosition(position: number): void;
 		update(quiz: QuizEntry): Promise<void>;
+		// A parked quiz split out of the shared slot into its own card.
+		standalone?: boolean;
 	}
 ): HTMLElement {
 	const card = parent.createDiv({ cls: "hl-card hl-quiz-card" });
+	if (opts.standalone) card.addClass("hl-quiz-alone-card");
 	const schedule = quizSchedule(opts.plugin.settings);
 	const ordered = [...quizzes].sort((a, b) => compareQuizzes(a, b, schedule));
 	let position = Math.min(opts.position, Math.max(0, ordered.length - 1));
@@ -54,11 +59,16 @@ export function renderTimelineQuizCard(
 		if (!quiz) return;
 		const ready = isQuizReady(quiz, new Date(), schedule);
 		const waiting = isQuizWaiting(quiz, new Date(), schedule);
-		card.toggleClass("hl-quiz-waiting-card", waiting);
+		card.toggleClass("hl-quiz-waiting-card", waiting && !quiz.pendingRecheck);
+		card.toggleClass("hl-quiz-recheck-card", waiting && !!quiz.pendingRecheck);
 		card.toggleClass(
 			"hl-quiz-cooling-card",
 			quiz.status === "active" && !ready && !waiting
 		);
+		if (quiz.id === lastRatedQuizId) {
+			lastRatedQuizId = null;
+			card.addClass("hl-quiz-flash-card");
+		}
 
 		const head = card.createDiv({ cls: "hl-card-head hl-quiz-card-head" });
 		// While this event still has an unmastered year quiz, the head year
@@ -87,12 +97,24 @@ export function renderTimelineQuizCard(
 				openEvMenu(opts.plugin, e, evId, entry.tag, tracksIn(entry.block));
 			});
 		}
+		if (opts.standalone) {
+			const badge = head.createSpan({
+				cls: "hl-quiz-alone-badge",
+				text: quiz.pendingRecheck ? "⏰ 待复核" : "⏰ 待重试",
+			});
+			badge.setAttr(
+				"aria-label",
+				"短等待中的题，通过后回到原卡位"
+			);
+		}
 		const navigation = head.createDiv({ cls: "hl-quiz-navigation" });
-		navigation.createSpan({
-			cls: "hl-quiz-counter",
-			text: `第 ${position + 1} 题，共 ${ordered.length} 题`,
-		});
+		if (!opts.standalone)
+			navigation.createSpan({
+				cls: "hl-quiz-counter",
+				text: `第 ${position + 1} 题，共 ${ordered.length} 题`,
+			});
 		const previous = navigation.createEl("button", { cls: "hl-icon-btn" });
+		if (opts.standalone) previous.hide();
 		setIcon(previous, "chevron-left");
 		previous.disabled = ordered.length < 2;
 		previous.setAttr("aria-label", "上一个 Quiz");
@@ -105,6 +127,7 @@ export function renderTimelineQuizCard(
 			paint();
 		});
 		const next = navigation.createEl("button", { cls: "hl-icon-btn" });
+		if (opts.standalone) next.hide();
 		setIcon(next, "chevron-right");
 		next.disabled = ordered.length < 2;
 		next.setAttr("aria-label", "下一个 Quiz");
@@ -132,12 +155,16 @@ export function renderTimelineQuizCard(
 		const reviewState =
 			quiz.status === "mastered"
 				? "学过"
+				: waiting
+				? ""
 				: nextReviewLabel(quiz, new Date(), schedule);
 		status.createSpan({
 			text: `掌握 ${quiz.progress}/${opts.plugin.settings.quizMasterySteps}${
 				reviewState ? ` · ${reviewState}` : ""
 			}`,
 		});
+		if (waiting)
+			mountCountdown(status, quiz, schedule, paint);
 
 		if (hintShown && quiz.hint) {
 			const hint = body.createDiv({ cls: "hl-quiz-hint" });
@@ -210,11 +237,20 @@ export function renderTimelineQuizCard(
 						new Date(),
 						schedule
 					);
+					lastRatedQuizId = updated.id;
+					if (updated.pendingRecheck)
+						new Notice(
+							rateNotice(
+								updated,
+								opts.plugin.settings.quizMasterySteps,
+								schedule
+							)
+						);
 					opts.plugin.remindQuizWhenReady(updated);
 					void opts.update(updated);
 				});
 			}
-		} else if (quiz.status === "active") {
+		} else if (quiz.status === "active" && !waiting) {
 			controls.createSpan({
 				cls: "hl-quiz-wait-note",
 				text: nextReviewLabel(quiz, new Date(), schedule),
@@ -233,6 +269,37 @@ export function renderTimelineQuizCard(
 
 	paint();
 	return card;
+}
+
+// The card the user just rated flashes once on the rebuilt timeline so the
+// state change (especially "remembered → recheck pending") is unmissable.
+let lastRatedQuizId: string | null = null;
+
+// Live short-wait countdown; repaints the card when the wait ends and stops
+// once the element leaves the DOM (timeline rebuilds discard cards).
+function mountCountdown(
+	host: HTMLElement,
+	quiz: QuizEntry,
+	schedule: QuizSchedule,
+	repaint: () => void
+): void {
+	const span = host.createSpan({
+		cls: "hl-quiz-countdown",
+		text: shortWaitLabel(quiz, new Date(), schedule),
+	});
+	const timer = window.setInterval(() => {
+		if (!span.isConnected) {
+			window.clearInterval(timer);
+			return;
+		}
+		const label = shortWaitLabel(quiz, new Date(), schedule);
+		if (!label) {
+			window.clearInterval(timer);
+			repaint();
+			return;
+		}
+		span.setText(label);
+	}, 15_000);
 }
 
 function addHintToggle(

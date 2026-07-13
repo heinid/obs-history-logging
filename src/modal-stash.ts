@@ -31,6 +31,10 @@ export class ModalStash {
 		if (!this.open.includes(modal)) this.open.push(modal);
 	}
 
+	hasOpen(): boolean {
+		return this.open.length > 0;
+	}
+
 	untrack(modal: StashableModal): void {
 		this.open = this.open.filter((m) => m !== modal);
 		if (this.stashed) {

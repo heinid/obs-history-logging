@@ -84,6 +84,15 @@ export function isQuizWaiting(
 	return due - now.getTime() <= horizon;
 }
 
+// A quiz in the short retry/recheck loop: a first-learn recheck still
+// pending, or the last answer was "forgot". These are surfaced on their own
+// timeline card until the next pass clears them.
+export function isQuizParked(quiz: QuizEntry): boolean {
+	if (quiz.status !== "active") return false;
+	if (quiz.pendingRecheck) return true;
+	return quiz.attempts[quiz.attempts.length - 1]?.result === "forgot";
+}
+
 export function reviewQuiz(
 	quiz: QuizEntry,
 	result: QuizResult,
@@ -176,6 +185,6 @@ function intervalForProgress(
 	return Math.max(0, schedule.intervalMinutes[index] ?? 0);
 }
 
-function addMinutes(now: Date, minutes: number): string {
+export function addMinutes(now: Date, minutes: number): string {
 	return new Date(now.getTime() + minutes * 60_000).toISOString();
 }

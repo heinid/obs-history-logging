@@ -31,7 +31,7 @@ import { dbMarkersToHtml, stripDbMarkers } from "./db-marker";
 import { addEventForEntry } from "./commands";
 import { openEvMenu } from "./ev-menu";
 import { tracksIn } from "./tracks";
-import { QuizEntry, isQuizReady, isQuizWaiting } from "./quiz";
+import { QuizEntry, isQuizParked, isQuizReady, isQuizWaiting } from "./quiz";
 import { quizSchedule } from "./quiz-display";
 import { wireDbRef } from "./quiz-render";
 import { renderTimelineQuizCard } from "./quiz-card";
@@ -639,18 +639,40 @@ export class TimelineView extends ItemView {
 		if (this.bar.show !== "events") {
 			const quizzes = this.quizzesForEntry(entry);
 			const key = entry.evId ?? `${entry.filePath}:${entry.offset}`;
-			const card = renderTimelineQuizCard(parent, entry, quizzes, {
-				plugin: this.plugin,
-				dbColors: this.dbColors,
-				position: this.quizPositions.get(key) ?? 0,
-				setPosition: (position) => this.quizPositions.set(key, position),
-				update: async (quiz) => {
-					await this.plugin.store.upsertQuiz(quiz);
-					await this.refresh();
-				},
-			});
-			this.cardEls.set(entry, card);
-			this.cardIndex.push({ key: entry.decoded.sortKey, el: card });
+			const update = async (quiz: QuizEntry): Promise<void> => {
+				await this.plugin.store.upsertQuiz(quiz);
+				await this.refresh();
+			};
+			// Quizzes in the short retry/recheck loop leave the shared slot and
+			// get their own card right below it until the next pass.
+			const parked = quizzes.filter(isQuizParked);
+			const shared = quizzes.filter((quiz) => !isQuizParked(quiz));
+			let main: HTMLElement | null = null;
+			if (shared.length || !parked.length) {
+				main = renderTimelineQuizCard(parent, entry, shared, {
+					plugin: this.plugin,
+					dbColors: this.dbColors,
+					position: this.quizPositions.get(key) ?? 0,
+					setPosition: (position) =>
+						this.quizPositions.set(key, position),
+					update,
+				});
+			}
+			for (const quiz of parked) {
+				const card = renderTimelineQuizCard(parent, entry, [quiz], {
+					plugin: this.plugin,
+					dbColors: this.dbColors,
+					position: 0,
+					setPosition: () => {},
+					update,
+					standalone: true,
+				});
+				if (!main) main = card;
+			}
+			if (main) {
+				this.cardEls.set(entry, main);
+				this.cardIndex.push({ key: entry.decoded.sortKey, el: main });
+			}
 			return;
 		}
 		const hasSummary = !!entry.summary?.trim();

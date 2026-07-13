@@ -48,6 +48,7 @@ import { parseQuizzesFile, serializeQuizzesFile } from "../src/quizzes-format";
 import {
 	DEFAULT_QUIZ_SCHEDULE,
 	QuizEntry,
+	isQuizParked,
 	isQuizReady,
 	isQuizWaiting,
 	reviewQuiz,
@@ -57,6 +58,8 @@ import {
 	maskSourceYear,
 	nextReviewLabel,
 	quizQuestion,
+	rateNotice,
+	shortWaitLabel,
 } from "../src/quiz-display";
 import { makeClozeMarked, mapDbText } from "../src/db-marker";
 
@@ -413,6 +416,39 @@ const recheckFailed = reviewQuiz(
 );
 eq("failed recheck keeps progress at 0", recheckFailed.progress, 0);
 eq("failed recheck retries in ten minutes", recheckFailed.nextReview, "2026-07-10T10:20:00.000Z");
+
+// parked quizzes (short retry/recheck loop) get their own timeline card
+eq("fresh quiz not parked", isQuizParked(quiz), false);
+eq("remembered quiz not parked", isQuizParked(afterOne), false);
+eq("recheck-pending parked", isQuizParked(recheckPending), true);
+eq("forgot parked", isQuizParked(forgot), true);
+eq("failed recheck parked", isQuizParked(recheckFailed), true);
+eq("passed recheck unparked", isQuizParked(recheckPassed), false);
+eq("mastered not parked", isQuizParked(mastered), false);
+
+// short-wait countdown + rating feedback copy
+eq(
+	"recheck wait label",
+	shortWaitLabel(recheckPending, t0, recheckSchedule),
+	"⏰ 复核确认 · 10 分钟后可练"
+);
+eq(
+	"retry wait label",
+	shortWaitLabel(forgot, new Date("2026-07-10T10:05:00.000Z")),
+	"⏰ 重试 · 10 分钟后可练"
+);
+eq(
+	"wait label empty when ready",
+	shortWaitLabel(recheckPending, new Date("2026-07-10T10:10:00.000Z"), recheckSchedule),
+	""
+);
+eq(
+	"recheck rate notice",
+	rateNotice(recheckPending, 3, recheckSchedule),
+	"✓ 已记住 · ⏰ 10 分钟后复核确认，通过才算完成这一步"
+);
+eq("progress rate notice", rateNotice(afterOne, 3), "掌握进度：1/3");
+eq("mastered rate notice", rateNotice(mastered, 3), "这个 Quiz 已学过。");
 const revived = reviveQuiz(mastered, new Date("2026-08-01T00:00:00.000Z"));
 eq("quiz revive resets progress", revived.progress, 0);
 eq("quiz revive adds cycle", revived.cycles.length, 2);
