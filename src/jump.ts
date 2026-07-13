@@ -109,16 +109,24 @@ async function openAt(
 		editor.setCursor(from);
 	}
 	editor.scrollIntoView({ from, to }, true);
-	// Obsidian restores the file's remembered scroll position shortly after
-	// openFile, which can yank the view away from the target right after we
-	// scrolled to it. Re-assert the scroll a few times to win that race.
-	for (const delay of [100, 300, 700]) {
-		window.setTimeout(() => {
-			editor.scrollIntoView({ from, to }, true);
-		}, delay);
-	}
 	const cm = (view.editor as unknown as { cm?: EditorView }).cm;
 	if (cm) flashJumpTarget(cm, offset, offset + length);
+	// Something (scroll-position restore, layout shifts from decorations
+	// unfolding, deferred rendering of long documents) can still yank the
+	// view away from the target moments after we scrolled to it. Instead of
+	// racing it with fixed delays, watch the target for a short while and
+	// re-scroll whenever it leaves the viewport.
+	if (cm) {
+		const deadline = Date.now() + 2500;
+		const tick = (): void => {
+			const rect = cm.scrollDOM.getBoundingClientRect();
+			const coords = cm.coordsAtPos(Math.min(offset, cm.state.doc.length));
+			if (!coords || coords.top < rect.top || coords.bottom > rect.bottom)
+				editor.scrollIntoView({ from, to }, true);
+			if (Date.now() < deadline) window.setTimeout(tick, 100);
+		};
+		window.setTimeout(tick, 100);
+	}
 }
 
 // A freshly opened tab mounts its CodeMirror editor asynchronously; setting
