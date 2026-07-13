@@ -637,36 +637,17 @@
 	}
 }
 
-/* Breathing highlight over the jumped-to target. Applied as a CodeMirror mark
-   decoration, so it wraps the tag text itself and keeps pulsing gently for a
-   few seconds until the decoration is removed. */
+/* Yellow highlight over the jumped-to target. Applied as a CodeMirror mark
+   decoration, so it wraps the tag text itself until the decoration is
+   removed a few seconds later. */
 .hl-jump-breathe {
-	animation: hl-jump-breathe 1.5s ease-in-out infinite;
+	background-color: rgba(255, 208, 0, 0.45);
+	box-shadow: 0 0 0 2px rgba(255, 208, 0, 0.45);
 	border-radius: 4px;
-	padding: 1px 2px;
-	margin: -1px -2px;
 }
-@keyframes hl-jump-breathe {
-	0%,
-	100% {
-		background-color: color-mix(
-			in srgb,
-			var(--interactive-accent) 55%,
-			transparent
-		);
-		box-shadow: 0 0 0 2px var(--interactive-accent),
-			0 0 14px 3px var(--interactive-accent);
-	}
-	50% {
-		background-color: color-mix(
-			in srgb,
-			var(--interactive-accent) 15%,
-			transparent
-		);
-		box-shadow: 0 0 0 2px
-				color-mix(in srgb, var(--interactive-accent) 35%, transparent),
-			0 0 4px 0 transparent;
-	}
+.theme-dark .hl-jump-breathe {
+	background-color: rgba(255, 200, 0, 0.35);
+	box-shadow: 0 0 0 2px rgba(255, 200, 0, 0.35);
 }
 
 /* Era-system manager view */

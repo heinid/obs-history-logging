@@ -104,6 +104,14 @@ async function openAt(
 		editor.setCursor(from);
 	}
 	editor.scrollIntoView({ from, to }, true);
+	// Obsidian restores the file's remembered scroll position shortly after
+	// openFile, which can yank the view away from the target right after we
+	// scrolled to it. Re-assert the scroll a few times to win that race.
+	for (const delay of [100, 300, 700]) {
+		window.setTimeout(() => {
+			editor.scrollIntoView({ from, to }, true);
+		}, delay);
+	}
 	const cm = (view.editor as unknown as { cm?: EditorView }).cm;
 	if (cm) flashJumpTarget(cm, offset, offset + length);
 }
