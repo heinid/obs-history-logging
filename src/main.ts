@@ -35,6 +35,7 @@ import { QuizManagerModal, QuizPracticeModal } from "./quiz-modal";
 import { QuizEntry } from "./quiz";
 import { quizSchedule } from "./quiz-display";
 import { ModalStash } from "./modal-stash";
+import { setDisplayLangOrder } from "./db-format";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
@@ -474,6 +475,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 			break;
 		}
 		this.migrateQuizSchedule();
+		setDisplayLangOrder(this.settings.entityLangs);
 	}
 
 	// The old minute-scale defaults ([10, 1440] with a 5-minute retry) treated
@@ -495,6 +497,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
+		setDisplayLangOrder(this.settings.entityLangs);
 		await this.saveData(this.settings);
 		const adapter = this.app.vault.adapter;
 		const folder = normalizePath(this.settings.dataFolder);

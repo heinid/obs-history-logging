@@ -1,6 +1,6 @@
 import { App, FuzzySuggestModal, Modal, Notice, TFile } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
-import { DbType, EntityEntry, displayName } from "./db-format";
+import { DbType, EntityEntry, displayName, orderLangs } from "./db-format";
 import { entitySearchText } from "./db-marker";
 import { LiveEditor, registerEscapeFirst } from "./live-editor";
 import { ConfirmModal } from "./name-modal";
@@ -28,7 +28,7 @@ function toCards(e: EntityEntry, presetFirst: string[]): LangCard[] {
 		}
 	}
 	if (!order.length && presetFirst.length) order.push(presetFirst[0]);
-	return order.map((lang) => ({
+	return orderLangs(order).map((lang) => ({
 		lang,
 		labels: e.labels
 			.filter((x) => x.lang === lang)

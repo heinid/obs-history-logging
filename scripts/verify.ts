@@ -25,6 +25,9 @@ import {
 	serializeDbTypesFile,
 	DEFAULT_DB_TYPES,
 	EntityEntry as Ent,
+	displayName,
+	orderLangs,
+	setDisplayLangOrder,
 } from "../src/db-format";
 import {
 	parseDbMarks,
@@ -525,6 +528,33 @@ eq("query start beats substring", queryCandidates("alex", dict)[0]?.alias, "Alex
 eq("query cjk", queryCandidates("希", dict)[0]?.alias, "希腊");
 eq("query none", queryCandidates("罗马", dict), []);
 eq("query empty", queryCandidates("  ", dict), []);
+
+// preferred display-language order: display names, lang sorting and
+// completion tie-breaks all follow it
+const multiLang: Ent = {
+	id: "c3d4e5f6", type: "event",
+	labels: [
+		{ lang: "ja", text: "明治維新" },
+		{ lang: "zh", text: "明治维新" },
+		{ lang: "en", text: "Meiji Restoration" },
+	],
+	readings: [], audios: [], tags: [], body: "",
+};
+eq("display default first label", displayName(multiLang), "明治維新");
+setDisplayLangOrder(["zh", "ja", "en"]);
+eq("display preferred lang", displayName(multiLang), "明治维新");
+eq("display missing lang falls back", displayName({
+	...multiLang,
+	labels: [{ lang: "ja", text: "元寇" }],
+}), "元寇");
+eq("order langs", orderLangs(["en", "ja", "fr", "zh"]), ["zh", "ja", "en", "fr"]);
+// Both spellings share the 明治 prefix; the zh alias must win the tie.
+eq("cand lang tie-break", aliasCandidates("明治", [multiLang])[0]?.alias, "明治维新");
+eq("query lang tie-break", queryCandidates("明治", [multiLang])[0]?.alias, "明治维新");
+setDisplayLangOrder(["ja", "zh", "en"]);
+eq("cand lang tie-break ja", aliasCandidates("明治", [multiLang])[0]?.alias, "明治維新");
+setDisplayLangOrder([]);
+eq("display order reset", displayName(multiLang), "明治維新");
 
 // ⌛ menu: wikipedia year pages + action URL templates
 const y1274 = parseYearTag("#ad/12/7/4")!;

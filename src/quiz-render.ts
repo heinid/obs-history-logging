@@ -1,6 +1,7 @@
 import { MarkdownRenderer, Notice } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { dbMarkersToHtml } from "./db-marker";
+import { langRank } from "./db-format";
 import { EntityModal } from "./entity-modal";
 
 // Entity id → entity-type color, for the `{db …}` underlines in quiz text.
@@ -185,7 +186,14 @@ function openDbLangMenu(
 			return;
 		}
 		const { mk, close } = makeDbPop(e);
-		for (const label of entity.labels) {
+		const labels = entity.labels
+			.map((label, i) => ({ label, i }))
+			.sort(
+				(a, b) =>
+					langRank(a.label.lang) - langRank(b.label.lang) || a.i - b.i
+			)
+			.map((x) => x.label);
+		for (const label of labels) {
 			mk(label.lang, label.text).addEventListener("mousedown", (ev) => {
 				ev.preventDefault();
 				close();

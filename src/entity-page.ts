@@ -6,7 +6,7 @@ import {
 	setIcon,
 } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
-import { DbType, EntityEntry, displayName } from "./db-format";
+import { DbType, EntityEntry, displayName, orderLangs } from "./db-format";
 import { dbMarkersToHtml, parseDbMarks, stripDbMarkers } from "./db-marker";
 import { EntityModal } from "./entity-modal";
 import { openDbEntityEditor } from "./quiz-render";
@@ -81,10 +81,11 @@ export async function renderEntityPage(
 		...entity.audios.map((x) => x.lang),
 	])
 		if (!langs.includes(l)) langs.push(l);
-	if (langs.length) {
+	const ordered = orderLangs(langs);
+	if (ordered.length) {
 		root.createDiv({ cls: "hl-overline", text: "Languages" });
 		const grid = root.createDiv({ cls: "hl-page-lang-grid" });
-		for (const lang of langs) {
+		for (const lang of ordered) {
 			const card = grid.createDiv({ cls: "hl-lang-card" });
 			const head = card.createDiv({ cls: "hl-lang-card-head" });
 			head.createSpan({

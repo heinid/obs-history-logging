@@ -7,7 +7,7 @@
 // entry in entities.md. Rendering folds the marker away, leaving the text
 // with a coloured underline. The grammar is disjoint from `{ev …}`.
 
-import { EntityEntry, displayName } from "./db-format";
+import { EntityEntry, displayName, langRank } from "./db-format";
 
 const DB_SRC = String.raw`\{db\s+([0-9a-z][0-9a-z_-]{1,63})\s+([^{}]*?)\s*\}`;
 
@@ -215,6 +215,8 @@ export function aliasAtCursor(
 export interface AliasCandidate {
 	entity: EntityEntry;
 	alias: string;
+	// Language of the matched alias, for preferred-language tie-breaks.
+	lang: string;
 	// The fragment before the cursor that matches the alias (a prefix of it,
 	// possibly the whole alias). Replaced by the marker on confirm.
 	matched: string;
@@ -248,13 +250,14 @@ export function aliasCandidates(
 	const out: AliasCandidate[] = [];
 	for (const entity of entities) {
 		let best: AliasCandidate | null = null;
-		const variants: string[] = [];
+		const variants: { alias: string; lang: string }[] = [];
 		for (const l of entity.labels) {
-			if (l.text) variants.push(l.text);
+			if (l.text) variants.push({ alias: l.text, lang: l.lang });
 			const tok = lastToken ? lastNameToken(l.text) : null;
-			if (tok && !variants.includes(tok)) variants.push(tok);
+			if (tok && !variants.some((v) => v.alias === tok))
+				variants.push({ alias: tok, lang: l.lang });
 		}
-		for (const alias of variants) {
+		for (const { alias, lang } of variants) {
 			if (alias.length < 2) continue;
 			// Longest suffix of `before` that is a prefix of `alias`.
 			let n = Math.min(alias.length, before.length);
@@ -284,15 +287,20 @@ export function aliasCandidates(
 			const cand: AliasCandidate = {
 				entity,
 				alias,
+				lang,
 				matched,
 				exact: n === alias.length,
 			};
+			// Ties between aliases of the same entity go to the preferred
+			// display language, so typing a zh fragment completes the zh
+			// spelling even when a ja alias shares the same prefix.
 			if (
 				!best ||
 				cand.matched.length > best.matched.length ||
 				(cand.matched.length === best.matched.length &&
-					cand.exact &&
-					!best.exact)
+					(Number(cand.exact) > Number(best.exact) ||
+						(cand.exact === best.exact &&
+							langRank(cand.lang) < langRank(best.lang))))
 			)
 				best = cand;
 		}
@@ -354,13 +362,17 @@ export function queryCandidates(
 			const c: AliasCandidate = {
 				entity,
 				alias,
+				lang: l.lang,
 				matched: query,
 				exact: low === q,
 			};
 			if (
 				!best ||
 				score > best.score ||
-				(score === best.score && alias.length < best.c.alias.length)
+				(score === best.score &&
+					(langRank(l.lang) < langRank(best.c.lang) ||
+						(langRank(l.lang) === langRank(best.c.lang) &&
+							alias.length < best.c.alias.length)))
 			)
 				best = { c, score };
 		}

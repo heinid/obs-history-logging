@@ -72,7 +72,33 @@ export const DEFAULT_DB_TYPES: DbType[] = [
 	{ name: "era", color: "#b0568a" },
 ];
 
+// Preferred display-language order (the "Entity languages" setting). The
+// plugin sets it on load and whenever the setting changes; languages not in
+// the list rank after all listed ones, keeping their stored order.
+let displayLangOrder: string[] = [];
+
+export function setDisplayLangOrder(langs: string[]): void {
+	displayLangOrder = langs;
+}
+
+export function langRank(lang: string): number {
+	const i = displayLangOrder.indexOf(lang);
+	return i < 0 ? displayLangOrder.length : i;
+}
+
+// Stable sort of language codes by the preferred order.
+export function orderLangs(langs: string[]): string[] {
+	return langs
+		.map((lang, i) => ({ lang, i }))
+		.sort((a, b) => langRank(a.lang) - langRank(b.lang) || a.i - b.i)
+		.map((x) => x.lang);
+}
+
 export function displayName(e: EntityEntry): string {
+	for (const lang of displayLangOrder) {
+		const l = e.labels.find((x) => x.lang === lang && x.text);
+		if (l) return l.text;
+	}
 	return e.labels[0]?.text ?? e.id;
 }
 

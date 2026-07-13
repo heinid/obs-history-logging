@@ -252,7 +252,7 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Entity languages")
 			.setDesc(
-				"Ordered, comma-separated language codes for entity language cards (e.g. ja, zh, en). New codes can also be added on an entity directly."
+				"Ordered, comma-separated language codes (e.g. zh, ja, en). The first available language is the entity's display name; language cards and completion follow the same order. New codes can also be added on an entity directly."
 			)
 			.addText((text) =>
 				text
