@@ -13,6 +13,7 @@ import {
 } from "./settings";
 import { DataStore } from "./data-store";
 import { createLivePreviewExtension } from "./live-preview";
+import { jumpFlashField } from "./jump-flash";
 import { createReadingProcessor } from "./reading-view";
 import { addEventAtCursor } from "./commands";
 import {
@@ -51,6 +52,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.modalStash = new ModalStash(this);
 
 		this.registerEditorExtension(createLivePreviewExtension(this));
+		this.registerEditorExtension(jumpFlashField);
 		this.registerEditorExtension(createTagClickExtension(this));
 		this.registerMarkdownPostProcessor(createReadingProcessor(this));
 		registerTagContextMenu(this);

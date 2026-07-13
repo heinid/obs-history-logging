@@ -637,33 +637,35 @@
 	}
 }
 
-/* Pulse a bright, colorful highlight over the jumped-to line(s) so the target
-   is easy to spot, then fade away. Applied to the whole `.cm-line` because the
-   tag pill paints over the CM selection and would hide a selection flash. */
-.cm-line.hl-flash-line {
-	animation: hl-flash-line 1.6s ease-out;
+/* Breathing highlight over the jumped-to target. Applied as a CodeMirror mark
+   decoration, so it wraps the tag text itself and keeps pulsing gently for a
+   few seconds until the decoration is removed. */
+.hl-jump-breathe {
+	animation: hl-jump-breathe 1.5s ease-in-out infinite;
 	border-radius: 4px;
+	padding: 1px 2px;
+	margin: -1px -2px;
 }
-@keyframes hl-flash-line {
-	0% {
-		background-color: var(--interactive-accent);
-		box-shadow: inset 0 0 0 2px var(--interactive-accent);
-	}
-	25% {
-		background-color: var(--text-highlight-bg);
-		box-shadow: inset 0 0 0 2px transparent;
+@keyframes hl-jump-breathe {
+	0%,
+	100% {
+		background-color: color-mix(
+			in srgb,
+			var(--interactive-accent) 55%,
+			transparent
+		);
+		box-shadow: 0 0 0 2px var(--interactive-accent),
+			0 0 14px 3px var(--interactive-accent);
 	}
 	50% {
-		background-color: var(--interactive-accent);
-		box-shadow: inset 0 0 0 2px var(--interactive-accent);
-	}
-	75% {
-		background-color: var(--text-highlight-bg);
-		box-shadow: inset 0 0 0 2px transparent;
-	}
-	100% {
-		background-color: transparent;
-		box-shadow: inset 0 0 0 2px transparent;
+		background-color: color-mix(
+			in srgb,
+			var(--interactive-accent) 15%,
+			transparent
+		);
+		box-shadow: 0 0 0 2px
+				color-mix(in srgb, var(--interactive-accent) 35%, transparent),
+			0 0 4px 0 transparent;
 	}
 }
 

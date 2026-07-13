@@ -1,5 +1,7 @@
 import { App, MarkdownView, TFile } from "obsidian";
+import type { EditorView } from "@codemirror/view";
 import { evLocationIndex } from "./scan";
+import { flashJumpTarget } from "./jump-flash";
 
 // Locate an inline `{ev <id> ...}` marker anywhere in the vault and open the
 // note at that position. The id is globally unique, so a plain scan suffices;
@@ -102,7 +104,8 @@ async function openAt(
 		editor.setCursor(from);
 	}
 	editor.scrollIntoView({ from, to }, true);
-	flashLines(view, offset, offset + length);
+	const cm = (view.editor as unknown as { cm?: EditorView }).cm;
+	if (cm) flashJumpTarget(cm, offset, offset + length);
 }
 
 // A freshly opened tab mounts its CodeMirror editor asynchronously; setting
@@ -119,53 +122,4 @@ async function whenEditorReady(
 	return view instanceof MarkdownView ? view : null;
 }
 
-// Pulse a bright, colorful highlight over the jumped-to line(s). The tag pill
-// paints its own background on top of the CM selection, hiding a selection-
-// based flash, so we flash the whole `.cm-line` element(s) the range spans —
-// reliably visible in both source and live-preview modes. Retries briefly in
-// case the editor hasn't laid the lines out yet (freshly opened tab).
-function flashLines(view: MarkdownView, from: number, to: number): void {
-	const cm = (view.editor as unknown as { cm?: EditorFlashView }).cm;
-	if (!cm?.dom || typeof cm.domAtPos !== "function") return;
-	const lineAt = (pos: number): HTMLElement | null => {
-		try {
-			const node = cm.domAtPos(pos).node;
-			const el = node instanceof HTMLElement ? node : node.parentElement;
-			return el?.closest(".cm-line") ?? null;
-		} catch {
-			return null;
-		}
-	};
-	let tries = 0;
-	const run = (): void => {
-		const start = lineAt(from);
-		const end = lineAt(to);
-		if (!start) {
-			if (tries++ < 15) window.setTimeout(run, 40);
-			return;
-		}
-		const lines = new Set<HTMLElement>([start]);
-		if (end) {
-			for (
-				let el: Element | null = start;
-				el && el !== end.nextElementSibling;
-				el = el.nextElementSibling
-			)
-				if (el instanceof HTMLElement && el.hasClass("cm-line"))
-					lines.add(el);
-			lines.add(end);
-		}
-		for (const line of lines) {
-			line.removeClass("hl-flash-line");
-			void line.offsetWidth; // restart the animation if re-triggered
-			line.addClass("hl-flash-line");
-			window.setTimeout(() => line.removeClass("hl-flash-line"), 1600);
-		}
-	};
-	window.setTimeout(run, 30);
-}
 
-interface EditorFlashView {
-	dom: HTMLElement;
-	domAtPos(pos: number): { node: Node; offset: number };
-}
