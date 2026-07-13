@@ -637,17 +637,32 @@
 	}
 }
 
-/* Flash the jump target in the editor, then fade back to a normal selection. */
+/* Pulse a bright, colorful highlight over the jump target, then fade back to
+   a normal selection. */
 .cm-selectionBackground.hl-flash {
-	animation: hl-flash 1.2s ease-out;
+	animation: hl-flash 1.6s ease-out;
+	border-radius: 3px;
 }
 @keyframes hl-flash {
-	0%,
-	40% {
+	0% {
+		background-color: var(--interactive-accent);
+		box-shadow: 0 0 0 3px var(--interactive-accent);
+	}
+	25% {
 		background-color: var(--text-highlight-bg);
+		box-shadow: 0 0 0 3px transparent;
+	}
+	50% {
+		background-color: var(--interactive-accent);
+		box-shadow: 0 0 0 3px var(--interactive-accent);
+	}
+	75% {
+		background-color: var(--text-highlight-bg);
+		box-shadow: 0 0 0 3px transparent;
 	}
 	100% {
 		background-color: transparent;
+		box-shadow: 0 0 0 3px transparent;
 	}
 }
 

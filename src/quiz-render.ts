@@ -220,22 +220,33 @@ function openDbLangMenu(
 	})();
 }
 
-// Human-readable name for a language code, so the mask menu names languages
-// without revealing the hidden alias. Unknown codes show as-is.
+// Name a language by its own endonym (中文 / 日本語 / 한국어 / Français …) so
+// the mask menu labels languages without revealing the hidden alias. Endonyms
+// written in non-Latin, non-CJK scripts (Greek, Cyrillic, Arabic …) fall back
+// to the Latin-script English name (Greek, Russian …); unknown codes show the
+// raw code. Uses the built-in Intl catalogue, so new languages need no table.
+const LATIN_OR_CJK =
+	/^[\p{Script=Latin}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{White_Space}\p{P}\p{M}]+$/u;
+
+function intlLanguageName(code: string, inLocale: string): string | undefined {
+	try {
+		const name = new Intl.DisplayNames([inLocale], {
+			type: "language",
+		}).of(code);
+		if (!name || name.toLowerCase() === code.toLowerCase()) return undefined;
+		return name;
+	} catch {
+		return undefined;
+	}
+}
+
 function langDisplayName(lang: string): string {
-	const names: Record<string, string> = {
-		zh: "中文",
-		ja: "日本語",
-		en: "English",
-		ko: "한국어",
-		fr: "Français",
-		de: "Deutsch",
-		es: "Español",
-		it: "Italiano",
-		ru: "Русский",
-		la: "Latina",
-	};
-	return names[lang] ?? lang;
+	const endonym = intlLanguageName(lang, lang);
+	if (endonym && LATIN_OR_CJK.test(endonym))
+		return endonym[0].toUpperCase() + endonym.slice(1);
+	const english = intlLanguageName(lang, "en");
+	if (english) return english;
+	return endonym ?? lang;
 }
 
 // Play a vault audio attachment referenced as `[[file.mp3]]` (optional

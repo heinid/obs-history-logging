@@ -15,11 +15,13 @@ export async function jumpToEv(
 	if (known) {
 		const file = app.vault.getAbstractFileByPath(known);
 		if (file instanceof TFile) {
-			const idx = (await app.vault.cachedRead(file))
-				.replace(/\r\n/g, "\n")
-				.indexOf(needle);
+			const content = (await app.vault.cachedRead(file)).replace(
+				/\r\n/g,
+				"\n"
+			);
+			const idx = content.indexOf(needle);
 			if (idx !== -1) {
-				await openAt(app, file, idx, 0, newTab);
+				await openMarker(app, file, content, idx, needle, newTab);
 				return true;
 			}
 		}
@@ -29,10 +31,24 @@ export async function jumpToEv(
 		const idx = content.indexOf(needle);
 		if (idx === -1) continue;
 		evLocationIndex.set(id, file.path);
-		await openAt(app, file, idx, 0, newTab);
+		await openMarker(app, file, content, idx, needle, newTab);
 		return true;
 	}
 	return false;
+}
+
+// Select and flash the whole `{ev … }` marker so the jump target is obvious.
+async function openMarker(
+	app: App,
+	file: TFile,
+	content: string,
+	markerStart: number,
+	needle: string,
+	newTab: boolean
+): Promise<void> {
+	const end = content.indexOf("}", markerStart + needle.length);
+	const length = end === -1 ? 0 : end - markerStart + 1;
+	await openAt(app, file, markerStart, length, newTab);
 }
 
 // Open a specific file at a char offset (used by the timeline view). Cached
@@ -46,7 +62,12 @@ export async function jumpToLocation(
 	evId?: string
 ): Promise<void> {
 	const file = app.vault.getAbstractFileByPath(filePath);
-	if (!(file instanceof TFile)) return;
+	// The cached path can be momentarily stale right after a rename; fall back
+	// to locating the marker by its globally-unique id anywhere in the vault.
+	if (!(file instanceof TFile)) {
+		if (evId) await jumpToEv(app, evId);
+		return;
+	}
 	let at = offset;
 	if (evId) {
 		const idx = (await app.vault.cachedRead(file))
@@ -77,11 +98,11 @@ async function openAt(
 	const to = editor.offsetToPos(offset + length);
 	if (length > 0) {
 		editor.setSelection(from, to);
-		flashRange(view);
 	} else {
 		editor.setCursor(from);
 	}
 	editor.scrollIntoView({ from, to }, true);
+	if (length > 0) flashRange(view);
 }
 
 // A freshly opened tab mounts its CodeMirror editor asynchronously; setting
@@ -98,16 +119,22 @@ async function whenEditorReady(
 	return view instanceof MarkdownView ? view : null;
 }
 
-// Briefly highlight the current selection in the editor so the jump target
-// is obvious, then let it settle back to a normal selection.
+// Pulse a bright, colorful highlight over the jumped-to range so it's easy to
+// spot, then let it fade back to a normal selection. A multi-line range paints
+// several selection pieces, so flash them all.
 function flashRange(view: MarkdownView): void {
 	const cm = (view.editor as unknown as { cm?: EditorFlashView }).cm;
 	if (!cm?.dom) return;
 	const run = () => {
-		const sel = cm.dom.querySelector(".cm-selectionBackground");
-		if (!(sel instanceof HTMLElement)) return;
-		sel.classList.add("hl-flash");
-		window.setTimeout(() => sel.classList.remove("hl-flash"), 1200);
+		const pieces = cm.dom.querySelectorAll(".cm-selectionBackground");
+		if (!pieces.length) return;
+		for (const sel of Array.from(pieces)) {
+			if (!(sel instanceof HTMLElement)) continue;
+			sel.classList.remove("hl-flash");
+			void sel.offsetWidth; // restart the animation if re-triggered
+			sel.classList.add("hl-flash");
+			window.setTimeout(() => sel.classList.remove("hl-flash"), 1600);
+		}
 	};
 	// Let the editor paint the selection first.
 	window.setTimeout(run, 30);
