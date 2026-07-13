@@ -463,7 +463,7 @@ eq("mastered not parked", isQuizParked(mastered, t0), false);
 eq(
 	"recheck wait label",
 	shortWaitLabel(recheckPending, t0, recheckSchedule),
-	"⏰ 复核确认 · 10 分钟后可练"
+	"⏰ 重温确认 · 10 分钟后可练"
 );
 eq(
 	"retry wait label",
@@ -478,7 +478,7 @@ eq(
 eq(
 	"recheck rate notice",
 	rateNotice(recheckPending, 3, recheckSchedule),
-	"✓ 已记住 · ⏰ 10 分钟后复核确认，通过才算完成这一步"
+	"✓ 已记住 · ⏰ 10 分钟后重温确认，通过才算完成这一步"
 );
 eq("progress rate notice", rateNotice(afterOne, 3), "掌握进度：1/3");
 eq("mastered rate notice", rateNotice(mastered, 3), "这个 Quiz 已学过。");

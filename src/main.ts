@@ -463,7 +463,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 			modal.open();
 		};
 		if (this.modalStash.hasOpen()) {
-			const notice = new Notice("⏰ 有 Quiz 到了复核时间，点击开始。", 0);
+			const notice = new Notice("⏰ 有 Quiz 到了重温时间，点击开始。", 0);
 			notice.noticeEl.addEventListener("click", () => {
 				notice.hide();
 				openReminder();

@@ -109,7 +109,7 @@ export function renderTimelineQuizCard(
 		if (opts.standalone) {
 			const badge = head.createSpan({
 				cls: "hl-quiz-alone-badge",
-				text: quiz.pendingRecheck ? "⏰ 待复核" : "⏰ 待重试",
+				text: quiz.pendingRecheck ? "⏰ 待重温" : "⏰ 待重试",
 			});
 			badge.setAttr(
 				"aria-label",

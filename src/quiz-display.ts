@@ -103,7 +103,7 @@ export function shortWaitLabel(
 	const label = nextReviewLabel(quiz, now, schedule);
 	if (!label) return "";
 	return quiz.pendingRecheck
-		? `⏰ 复核确认 · ${label}`
+		? `⏰ 重温确认 · ${label}`
 		: `⏰ 重试 · ${label}`;
 }
 
@@ -119,6 +119,6 @@ export function rateNotice(
 		return `✓ 已记住 · ⏰ ${Math.max(
 			0,
 			schedule.recheckMinutes
-		)} 分钟后复核确认，通过才算完成这一步`;
+		)} 分钟后重温确认，通过才算完成这一步`;
 	return `掌握进度：${quiz.progress}/${masterySteps}`;
 }

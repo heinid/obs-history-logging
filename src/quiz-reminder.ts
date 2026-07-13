@@ -33,7 +33,7 @@ export class QuizReminderModal extends QuizPracticeModal {
 		setIcon(bell, "alarm-clock");
 		const total = this.queue.length + 1;
 		label.createSpan({
-			text: total > 1 ? `复核提醒 · 共 ${total} 道` : "复核提醒",
+			text: total > 1 ? `重温提醒 · 共 ${total} 道` : "重温提醒",
 		});
 		const actions = banner.createDiv({ cls: "hl-quiz-reminder-actions" });
 		const minutes = this.snoozeMinutes();

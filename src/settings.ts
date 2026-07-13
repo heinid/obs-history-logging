@@ -196,7 +196,7 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("分离卡位保持（小时）")
 			.setDesc(
-				"待重试/待复核的题在 Timeline 上分离成独立卡；到期后超过这些小时仍未作答，卡回归共享卡位。"
+				"待重试/待重温的题在 Timeline 上分离成独立卡；到期后超过这些小时仍未作答，卡回归共享卡位。"
 			)
 			.addText((text) => {
 				text.inputEl.type = "number";
@@ -212,9 +212,9 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("新学后提醒复核")
+			.setName("新学后提醒重温")
 			.setDesc(
-				"开启后，新题第一次“记得”不直接推进，而是稍后弹出全局提醒复核一次，复核通过才完成第一步。"
+				"开启后，新题第一次“记得”不直接推进，而是稍后弹出全局提醒重温一次，重温通过才完成第一步。"
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -226,8 +226,8 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("复核等待（分钟）")
-			.setDesc("新学后到复核提醒之间的分钟数。")
+			.setName("重温等待（分钟）")
+			.setDesc("新学后到重温提醒之间的分钟数。")
 			.addText((text) => {
 				text.inputEl.type = "number";
 				text.inputEl.min = "1";
