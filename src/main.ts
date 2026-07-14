@@ -44,6 +44,7 @@ import {
 	VaultDbSuggest,
 	createVaultDbExtension,
 	createVaultDbProcessor,
+	openDbSelectionMenu,
 } from "./vault-db";
 
 export default class HistoryLoggingPlugin extends Plugin {
@@ -115,6 +116,12 @@ export default class HistoryLoggingPlugin extends Plugin {
 			id: "add-event-at-cursor",
 			name: "Add event to year tag under cursor",
 			editorCallback: (editor: Editor) => addEventAtCursor(this, editor),
+		});
+		this.addCommand({
+			id: "db-selection-menu",
+			name: "词条：标注选中文本（选区菜单）",
+			editorCallback: (editor: Editor, ctx) =>
+				openDbSelectionMenu(this, editor, ctx.file?.path),
 		});
 		this.addCommand({
 			id: "open-timeline",

@@ -29,10 +29,12 @@ import {
 	aliasCandidates,
 	dbRegex,
 	makeDbMarker,
+	parseDbMarks,
 	queryCandidates,
+	stripDbMarkers,
 	triggerQuery,
 } from "./db-marker";
-import { EntityEntry } from "./db-format";
+import { EntityEntry, displayName } from "./db-format";
 import { generateId } from "./id";
 import {
 	openDbEntityEditor,
@@ -41,7 +43,7 @@ import {
 	wireDbRef,
 } from "./quiz-render";
 import { entityHint } from "./live-editor";
-import { EntityModal } from "./entity-modal";
+import { EntityModal, EntitySuggestModal } from "./entity-modal";
 
 // Whether the entity features are enabled for a note, by its tags.
 export function dbEnabledFor(
@@ -441,27 +443,180 @@ export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 			return;
 		}
 		const word = this.fragment;
-		const plugin = this.plugin;
-		const entity: EntityEntry = {
-			id: generateId((id) =>
-				plugin.dbVault.entities.some((e) => e.id === id)
-			),
-			type: "",
-			labels: [
-				{
-					lang: plugin.settings.entityLangs[0] ?? "zh",
-					text: word,
-				},
-			],
-			readings: [],
-			audios: [],
-			tags: [],
-			body: "",
-		};
-		new EntityModal(plugin.app, plugin, entity, true, (saved) => {
-			insertVaultMarker(editor, from, end, saved, word);
-		}).open();
+		createEntityForWord(this.plugin, word, (saved) =>
+			insertVaultMarker(editor, from, end, saved, word)
+		);
 	}
+}
+
+// --- selection menu (command + hotkey) -----------------------------------
+
+// A floating popover at (x, y), same look as the LiveEditor menus.
+function popAt(x: number, y: number): {
+	mk: (icon: string, label: string, hint?: string) => HTMLDivElement;
+	close: () => void;
+} {
+	const pop = document.body.createDiv({ cls: "hl-le-pop hl-le-textmenu" });
+	pop.style.left = `${Math.max(8, Math.min(x, window.innerWidth - 320))}px`;
+	pop.style.top = `${Math.max(8, Math.min(y + 4, window.innerHeight - 40))}px`;
+	const close = (): void => {
+		pop.remove();
+		document.removeEventListener("mousedown", onDown, true);
+		document.removeEventListener("keydown", onKey, true);
+	};
+	const onDown = (ev: MouseEvent): void => {
+		if (!pop.contains(ev.target as Node)) close();
+	};
+	const onKey = (ev: KeyboardEvent): void => {
+		if (ev.key === "Escape") {
+			ev.preventDefault();
+			ev.stopPropagation();
+			close();
+		}
+	};
+	document.addEventListener("mousedown", onDown, true);
+	document.addEventListener("keydown", onKey, true);
+	const mk = (icon: string, label: string, hint = ""): HTMLDivElement => {
+		const row = pop.createDiv({ cls: "hl-le-pop-item" });
+		row.createSpan({ cls: "hl-le-pop-icon", text: icon });
+		row.createSpan({ cls: "hl-le-pop-label", text: label });
+		if (hint) row.createSpan({ cls: "hl-le-suggest-meta", text: hint });
+		return row;
+	};
+	return { mk, close };
+}
+
+// Anchor the popover to the editor caret / selection.
+function caretXY(): { x: number; y: number } {
+	const sel = window.getSelection();
+	if (sel && sel.rangeCount) {
+		const rect = sel.getRangeAt(0).getBoundingClientRect();
+		if (rect.width || rect.height || rect.left || rect.top)
+			return { x: rect.left, y: rect.bottom };
+	}
+	return { x: window.innerWidth / 2 - 120, y: window.innerHeight / 3 };
+}
+
+// The command-invoked selection menu: annotate a plain-text selection (or
+// the word under the caret) as an entity, or clean up markers inside a
+// larger selection. Mirrors the LiveEditor right-click menu minus quiz.
+export function openDbSelectionMenu(
+	plugin: HistoryLoggingPlugin,
+	editor: Editor,
+	path: string | undefined
+): void {
+	if (!path || !dbEnabledFor(plugin, path)) {
+		new Notice("当前笔记未启用词条功能（需带启用标签）。");
+		return;
+	}
+	let from = editor.getCursor("from");
+	let to = editor.getCursor("to");
+	if (from.line === to.line && from.ch === to.ch) {
+		const word = editor.wordAt(from);
+		if (!word) {
+			new Notice("请先选中要标注的文字。");
+			return;
+		}
+		from = word.from;
+		to = word.to;
+	}
+	let raw = editor.getRange(from, to);
+	// Trim whitespace off the selection edges (single-line only).
+	if (!raw.includes("\n")) {
+		const lead = raw.length - raw.trimStart().length;
+		const tail = raw.length - raw.trimEnd().length;
+		from = { line: from.line, ch: from.ch + lead };
+		to = { line: to.line, ch: to.ch - tail };
+		raw = raw.trim();
+	}
+	if (!raw) {
+		new Notice("请先选中要标注的文字。");
+		return;
+	}
+	const marks = parseDbMarks(raw);
+	const clean = stripDbMarkers(raw);
+	const { x, y } = caretXY();
+	const { mk, close } = popAt(x, y);
+
+	if (!marks.length && !raw.includes("\n")) {
+		// Annotation: link to a matching entity, create one, or pick by hand.
+		for (const c of queryCandidates(raw, plugin.dbVault.entities, 3)) {
+			const row = mk("⇢", `链接到 ${displayName(c.entity)}`, c.entity.type || "");
+			const color = plugin.dbVault.typeColor(c.entity.type);
+			const meta = row.querySelector<HTMLElement>(".hl-le-suggest-meta");
+			if (color && meta) meta.style.color = color;
+			row.addEventListener("mousedown", (ev) => {
+				ev.preventDefault();
+				close();
+				insertVaultMarker(editor, from, to, c.entity, raw);
+			});
+		}
+		mk("＋", `新建词条 "${raw}"`).addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			close();
+			createEntityForWord(plugin, raw, (saved) =>
+				insertVaultMarker(editor, from, to, saved, raw)
+			);
+		});
+		mk("⧉", "链接到已有词条…").addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			close();
+			new EntitySuggestModal(plugin.app, plugin.dbVault.entities, (e) =>
+				insertVaultMarker(editor, from, to, e, raw)
+			).open();
+		});
+		return;
+	}
+
+	// Cleanup / copy menu for selections with markers (or multi-line).
+	mk("⧉", "复制干净文本", marks.length ? "去除标注语法" : "").addEventListener(
+		"mousedown",
+		(ev) => {
+			ev.preventDefault();
+			close();
+			void navigator.clipboard?.writeText(clean);
+			new Notice("已复制干净文本");
+		}
+	);
+	if (marks.length) {
+		mk("⧉", "复制原文", "含标注语法").addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			close();
+			void navigator.clipboard?.writeText(raw);
+			new Notice("已复制原文");
+		});
+		mk(
+			"⊘",
+			"取消选区内所有标注",
+			`${marks.length} 处`
+		).addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			close();
+			editor.replaceRange(clean, from, to);
+			new Notice(`已取消 ${marks.length} 处标注（Ctrl+Z 可撤销）`);
+		});
+	}
+}
+
+function createEntityForWord(
+	plugin: HistoryLoggingPlugin,
+	word: string,
+	apply: (saved: EntityEntry) => void
+): void {
+	const entity: EntityEntry = {
+		id: generateId((id) =>
+			plugin.dbVault.entities.some((e) => e.id === id)
+		),
+		type: "",
+		labels: [
+			{ lang: plugin.settings.entityLangs[0] ?? "zh", text: word },
+		],
+		readings: [],
+		audios: [],
+		tags: [],
+		body: "",
+	};
+	new EntityModal(plugin.app, plugin, entity, true, apply).open();
 }
 
 function insertVaultMarker(
