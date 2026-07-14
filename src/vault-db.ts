@@ -9,6 +9,7 @@ import {
 	EditorSuggestContext,
 	EditorSuggestTriggerInfo,
 	Editor,
+	MarkdownView,
 	Notice,
 	TFile,
 	editorInfoField,
@@ -486,8 +487,22 @@ function popAt(x: number, y: number): {
 	return { mk, close };
 }
 
-// Anchor the popover to the editor caret / selection.
-function caretXY(): { x: number; y: number } {
+// Anchor the popover to the editor selection: ask the active CodeMirror
+// view for the pixel position of the selection start.
+function caretXY(
+	plugin: HistoryLoggingPlugin,
+	editor: Editor,
+	pos: EditorPosition
+): { x: number; y: number } {
+	const md = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+	const cmDom = md?.containerEl.querySelector<HTMLElement>(".cm-editor");
+	const cm = cmDom ? EditorView.findFromDOM(cmDom) : null;
+	if (cm) {
+		const rect = cm.coordsAtPos(
+			Math.min(editor.posToOffset(pos), cm.state.doc.length)
+		);
+		if (rect) return { x: rect.left, y: rect.bottom };
+	}
 	const sel = window.getSelection();
 	if (sel && sel.rangeCount) {
 		const rect = sel.getRangeAt(0).getBoundingClientRect();
@@ -535,7 +550,7 @@ export function openDbSelectionMenu(
 	}
 	const marks = parseDbMarks(raw);
 	const clean = stripDbMarkers(raw);
-	const { x, y } = caretXY();
+	const { x, y } = caretXY(plugin, editor, from);
 	const { mk, close } = popAt(x, y);
 
 	if (!marks.length && !raw.includes("\n")) {
