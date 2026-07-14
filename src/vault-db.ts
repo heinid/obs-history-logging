@@ -452,14 +452,34 @@ export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 
 // --- selection menu (command + hotkey) -----------------------------------
 
-// A floating popover at (x, y), same look as the LiveEditor menus.
-function popAt(x: number, y: number): {
+// Rectangle of the text the popover is anchored to, in viewport pixels.
+interface AnchorRect {
+	left: number;
+	right: number;
+	top: number;
+	bottom: number;
+}
+
+// A floating popover, same look as the LiveEditor menus. Centered below the
+// anchor; flips above when there is no room underneath.
+function popAt(anchor: AnchorRect): {
 	mk: (icon: string, label: string, hint?: string) => HTMLDivElement;
 	close: () => void;
 } {
 	const pop = document.body.createDiv({ cls: "hl-le-pop hl-le-textmenu" });
-	pop.style.left = `${Math.max(8, Math.min(x, window.innerWidth - 320))}px`;
-	pop.style.top = `${Math.max(8, Math.min(y + 4, window.innerHeight - 40))}px`;
+	pop.style.visibility = "hidden";
+	// Rows are added after this returns; measure and place on the next frame.
+	requestAnimationFrame(() => {
+		const w = pop.offsetWidth;
+		const h = pop.offsetHeight;
+		const cx = (anchor.left + anchor.right) / 2;
+		const left = Math.max(8, Math.min(cx - w / 2, window.innerWidth - w - 8));
+		let top = anchor.bottom + 6;
+		if (top + h > window.innerHeight - 8) top = anchor.top - h - 6;
+		pop.style.left = `${left}px`;
+		pop.style.top = `${Math.max(8, top)}px`;
+		pop.style.visibility = "";
+	});
 	const close = (): void => {
 		pop.remove();
 		document.removeEventListener("mousedown", onDown, true);
@@ -487,29 +507,41 @@ function popAt(x: number, y: number): {
 	return { mk, close };
 }
 
-// Anchor the popover to the editor selection: ask the active CodeMirror
-// view for the pixel position of the selection start.
-function caretXY(
+// The selection's anchor rectangle: from the CodeMirror pixel coords of the
+// selection start and end. Multi-line selections anchor on the first line.
+function selectionRect(
 	plugin: HistoryLoggingPlugin,
 	editor: Editor,
-	pos: EditorPosition
-): { x: number; y: number } {
+	from: EditorPosition,
+	to: EditorPosition
+): AnchorRect {
 	const md = plugin.app.workspace.getActiveViewOfType(MarkdownView);
 	const cmDom = md?.containerEl.querySelector<HTMLElement>(".cm-editor");
 	const cm = cmDom ? EditorView.findFromDOM(cmDom) : null;
 	if (cm) {
-		const rect = cm.coordsAtPos(
-			Math.min(editor.posToOffset(pos), cm.state.doc.length)
-		);
-		if (rect) return { x: rect.left, y: rect.bottom };
+		const clamp = (p: EditorPosition): number =>
+			Math.min(editor.posToOffset(p), cm.state.doc.length);
+		const a = cm.coordsAtPos(clamp(from));
+		const b = cm.coordsAtPos(clamp(to));
+		if (a) {
+			const sameLine = b && Math.abs(b.top - a.top) < 2;
+			return {
+				left: a.left,
+				right: sameLine && b ? b.right : a.right,
+				top: a.top,
+				bottom: a.bottom,
+			};
+		}
 	}
 	const sel = window.getSelection();
 	if (sel && sel.rangeCount) {
-		const rect = sel.getRangeAt(0).getBoundingClientRect();
-		if (rect.width || rect.height || rect.left || rect.top)
-			return { x: rect.left, y: rect.bottom };
+		const r = sel.getRangeAt(0).getBoundingClientRect();
+		if (r.width || r.height || r.left || r.top)
+			return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
 	}
-	return { x: window.innerWidth / 2 - 120, y: window.innerHeight / 3 };
+	const cx = window.innerWidth / 2;
+	const cy = window.innerHeight / 3;
+	return { left: cx, right: cx, top: cy, bottom: cy };
 }
 
 // The command-invoked selection menu: annotate a plain-text selection (or
@@ -550,8 +582,7 @@ export function openDbSelectionMenu(
 	}
 	const marks = parseDbMarks(raw);
 	const clean = stripDbMarkers(raw);
-	const { x, y } = caretXY(plugin, editor, from);
-	const { mk, close } = popAt(x, y);
+	const { mk, close } = popAt(selectionRect(plugin, editor, from, to));
 
 	if (!marks.length && !raw.includes("\n")) {
 		// Annotation: link to a matching entity, create one, or pick by hand.
