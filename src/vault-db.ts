@@ -473,7 +473,7 @@ function popAt(anchor: AnchorRect): {
 		const w = pop.offsetWidth;
 		const h = pop.offsetHeight;
 		const cx = (anchor.left + anchor.right) / 2;
-		const left = Math.max(8, Math.min(cx - w / 2, window.innerWidth - w - 8));
+		const left = Math.max(8, Math.min(cx, window.innerWidth - w - 8));
 		let top = anchor.bottom + 6;
 		if (top + h > window.innerHeight - 8) top = anchor.top - h - 6;
 		pop.style.left = `${left}px`;
