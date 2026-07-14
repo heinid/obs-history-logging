@@ -4,6 +4,7 @@ import {
 	Notice,
 	normalizePath,
 	Plugin,
+	TFile,
 	WorkspaceLeaf,
 } from "obsidian";
 import {
@@ -38,11 +39,18 @@ import { quizSchedule } from "./quiz-display";
 import { ModalStash } from "./modal-stash";
 import { setDisplayLangOrder } from "./db-format";
 import { QuizReminderModal } from "./quiz-reminder";
+import {
+	DbVaultCache,
+	VaultDbSuggest,
+	createVaultDbExtension,
+	createVaultDbProcessor,
+} from "./vault-db";
 
 export default class HistoryLoggingPlugin extends Plugin {
 	settings!: HistoryLoggingSettings;
 	store!: DataStore;
 	modalStash!: ModalStash;
+	dbVault = new DbVaultCache(this);
 	private quizReminders = new Map<string, number>();
 	private reminderModal: QuizReminderModal | null = null;
 
@@ -54,7 +62,23 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.registerEditorExtension(createLivePreviewExtension(this));
 		this.registerEditorExtension(jumpFlashField);
 		this.registerEditorExtension(createTagClickExtension(this));
+		this.registerEditorExtension(createVaultDbExtension(this));
 		this.registerMarkdownPostProcessor(createReadingProcessor(this));
+		this.registerMarkdownPostProcessor(createVaultDbProcessor(this));
+		this.registerEditorSuggest(new VaultDbSuggest(this));
+
+		// Entity references in ordinary notes need synchronous access to the
+		// entity list and type colors; keep a cache fresh off the data files.
+		this.app.workspace.onLayoutReady(() => void this.dbVault.refresh());
+		this.registerEvent(
+			this.app.vault.on("modify", (f) => {
+				if (
+					f instanceof TFile &&
+					f.path.startsWith(this.settings.dataFolder + "/")
+				)
+					void this.dbVault.refresh();
+			})
+		);
 		registerTagContextMenu(this);
 		this.addSettingTab(new HistoryLoggingSettingTab(this.app, this));
 

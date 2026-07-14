@@ -45,6 +45,10 @@ export interface HistoryLoggingSettings {
 	// Immersive recall: every rendered `{db …}` reference on the timeline
 	// starts hidden; left-click flips it, right-click picks a language.
 	dbMaskMode: boolean;
+	// Tags (without `#`) that enable entity features — `{db …}` rendering,
+	// completion, clicking, masking — in ordinary vault notes. Empty list =
+	// the features stay inside the plugin's own views only.
+	dbEnableTags: string[];
 }
 
 export interface EvMenuView {
@@ -69,6 +73,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	quizRecheckMinutes: 10,
 	quizHoverHideYears: false,
 	dbMaskMode: false,
+	dbEnableTags: [],
 };
 
 export const EVENTS_FILE = "events.md";
@@ -268,6 +273,24 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 						this.plugin.settings.dbMaskMode = value;
 						await this.plugin.saveSettings();
 						await this.plugin.refreshTimelines();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("启用词条功能的笔记标签")
+			.setDesc(
+				"带这些标签（frontmatter 或正文，逗号分隔，不带 #）的笔记中，{db} 词条会渲染、可点击，并启用输入补全与遮挡模式。留空则词条功能只在插件自己的页面中生效。嵌套标签也算（启用 history 同时匹配 history/rome）。"
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("history, 词条")
+					.setValue(this.plugin.settings.dbEnableTags.join(", "))
+					.onChange(async (value) => {
+						this.plugin.settings.dbEnableTags = value
+							.split(",")
+							.map((s) => s.trim().replace(/^#+/, ""))
+							.filter((s) => s.length > 0);
+						await this.plugin.saveSettings();
 					})
 			);
 

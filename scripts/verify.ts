@@ -62,6 +62,7 @@ import {
 	shortWaitLabel,
 } from "../src/quiz-display";
 import { makeClozeMarked, mapDbText } from "../src/db-marker";
+import { normalizeTag, hasDbTag } from "../src/db-gate";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -127,6 +128,22 @@ eq("reject extra segment", parseYearTag("#ad/07/1/0/5"), null);
 eq("scan skips flat year", yearTagRegex().test("x #ad/1912 y"), false);
 eq("scan skips two-digit decade", yearTagRegex().test("x #ad/19/12 y"), false);
 eq("scan accepts exact year", yearTagRegex().test("x #ad/19/1/2 y"), true);
+
+// db-gate: tag gate for vault-wide entity features
+eq("gate normalize #", normalizeTag("#History"), "history");
+eq("gate normalize plain", normalizeTag("  词条 "), "词条");
+eq("gate hit frontmatter form", hasDbTag(["history"], ["#history"]), true);
+eq("gate hit body form", hasDbTag(["#history"], ["history"]), true);
+eq("gate nested tag", hasDbTag(["#history/rome"], ["history"]), true);
+eq("gate no cross-nest", hasDbTag(["#historyx"], ["history"]), false);
+eq("gate miss", hasDbTag(["#chem"], ["history"]), false);
+eq("gate empty enable = off", hasDbTag(["#history"], []), false);
+eq("gate blank enable = off", hasDbTag(["#history"], ["", "  "]), false);
+eq(
+	"gate multiple enable tags",
+	hasDbTag(["#词条"], ["history", "词条"]),
+	true
+);
 
 // id
 const id = generateId();

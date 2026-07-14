@@ -56,7 +56,11 @@ export function wireDbRef(
 	plugin: HistoryLoggingPlugin,
 	el: HTMLElement,
 	id: string,
-	opts: { mask?: boolean; onSaved?: () => void } = {}
+	opts: {
+		mask?: boolean;
+		onSaved?: () => void;
+		onUnannotate?: () => void;
+	} = {}
 ): void {
 	if (opts.mask) {
 		el.addClass("hl-db-mask");
@@ -71,7 +75,7 @@ export function wireDbRef(
 			e.preventDefault();
 			e.stopPropagation();
 			if (el.hasClass("hl-db-mask")) openDbLangMenu(plugin, el, id, e);
-			else openDbRefMenu(plugin, id, e);
+			else openDbRefMenu(plugin, id, e, opts.onUnannotate);
 		});
 		return;
 	}
@@ -83,7 +87,7 @@ export function wireDbRef(
 	el.addEventListener("contextmenu", (e) => {
 		e.preventDefault();
 		e.stopPropagation();
-		openDbRefMenu(plugin, id, e);
+		openDbRefMenu(plugin, id, e, opts.onUnannotate);
 	});
 }
 
@@ -147,10 +151,11 @@ function makeDbPop(e: MouseEvent): {
 // Right-click menu on an entity reference inside rendered quiz text:
 // 编辑词条 / 打开词条页 / 复制词条 ID (no 取消标注 — the quiz keeps its
 // own copy of the marker, so unannotating here would be ambiguous).
-function openDbRefMenu(
+export function openDbRefMenu(
 	plugin: HistoryLoggingPlugin,
 	id: string,
-	e: MouseEvent
+	e: MouseEvent,
+	onUnannotate?: () => void
 ): void {
 	const { mk, close } = makeDbPop(e);
 	mk("✎", "编辑词条").addEventListener("mousedown", (ev) => {
@@ -163,6 +168,12 @@ function openDbRefMenu(
 		close();
 		plugin.modalStash.jump(() => plugin.openEntityView(id));
 	});
+	if (onUnannotate)
+		mk("⊘", "取消标注").addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			close();
+			onUnannotate();
+		});
 	mk("⧉", "复制词条 ID").addEventListener("mousedown", (ev) => {
 		ev.preventDefault();
 		close();
@@ -175,7 +186,7 @@ function openDbRefMenu(
 // languages. A language with an alias is clickable — picking it reveals the
 // reference with that spelling (and plays its audio if one exists). A language
 // the entity has no alias for is shown greyed out and disabled.
-function openDbLangMenu(
+export function openDbLangMenu(
 	plugin: HistoryLoggingPlugin,
 	el: HTMLElement,
 	id: string,
