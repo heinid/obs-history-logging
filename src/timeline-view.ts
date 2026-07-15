@@ -5,6 +5,7 @@ import {
 	Notice,
 	ViewStateResult,
 	WorkspaceLeaf,
+	getAllTags,
 	setIcon,
 } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
@@ -12,7 +13,7 @@ import { TimelineEntry, scanVault } from "./scan";
 import { describeYear, parseYearTag } from "./year-tag";
 import { Profile } from "./profiles";
 import { EraSystem, eraAt } from "./eras";
-import { matchesQuery, parseQuery } from "./query";
+import { QueryContext, matchesQuery, parseQuery } from "./query";
 import { FilterBar } from "./filter-bar";
 import {
 	EraAnchor,
@@ -286,17 +287,26 @@ export class TimelineView extends ItemView {
 	}
 
 	private practiceLayout(): void {
+		this.fileTagsCache.clear();
 		const candidates = this.entries.filter((entry) =>
 			this.entryMatchesShow(entry)
 		);
 		const visible =
 			this.tracks.length > 1
-				? this.tracks.flatMap((track) => trackEntries(candidates, track))
+				? this.tracks.flatMap((track) =>
+						trackEntries(candidates, track, (e) =>
+							this.queryContextFor(e)
+						)
+				  )
 				: candidates.filter((entry) => {
 						const hay = `${entry.tag} ${entry.snippet} ${
 							entry.summary ?? ""
 						}`.toLowerCase();
-						return matchesQuery(hay, parseQuery(this.bar.query()));
+						return matchesQuery(
+							hay,
+							parseQuery(this.bar.query()),
+							this.queryContextFor(entry)
+						);
 				  });
 		const eventIds = new Set(
 			visible
@@ -383,6 +393,7 @@ export class TimelineView extends ItemView {
 		if (!list) return;
 		list.empty();
 		this.cardEls.clear();
+		this.fileTagsCache.clear();
 		this.cardIndex = [];
 		const displayedEntries = this.entries.filter((entry) =>
 			this.entryMatchesShow(entry)
@@ -402,6 +413,7 @@ export class TimelineView extends ItemView {
 				renderCard: (parent, entry) => this.renderCard(parent, entry),
 				onActivate: (i) => this.activateTrack(i),
 				onRemove: (i) => this.removeTrack(i),
+				contextFor: (e) => this.queryContextFor(e),
 			});
 			const gridEl = list.querySelector<HTMLElement>(".hl-multi-grid");
 			if (gridEl) {
@@ -419,7 +431,7 @@ export class TimelineView extends ItemView {
 		const pq = parseQuery(this.bar.query());
 		const visible = displayedEntries.filter((e) => {
 			const hay = `${e.tag} ${e.snippet} ${e.summary ?? ""}`.toLowerCase();
-			return matchesQuery(hay, pq);
+			return matchesQuery(hay, pq, this.queryContextFor(e));
 		});
 		this.bar.setCount(visible.length, displayedEntries.length);
 
@@ -763,6 +775,24 @@ export class TimelineView extends ItemView {
 		} else {
 			this.renderContent(content, entry, preview, hasSummary, false);
 		}
+	}
+
+	// Source-file context for `file:#tag` / `path:` query terms. Tags come
+	// from the metadata cache (frontmatter + body), memoised per file for
+	// the duration of one filter pass.
+	private fileTagsCache = new Map<string, readonly string[]>();
+
+	private queryContextFor(entry: TimelineEntry): QueryContext {
+		let tags = this.fileTagsCache.get(entry.filePath);
+		if (!tags) {
+			const file = this.app.vault.getFileByPath(entry.filePath);
+			const cache = file
+				? this.app.metadataCache.getFileCache(file)
+				: null;
+			tags = getAllTags(cache ?? {}) ?? [];
+			this.fileTagsCache.set(entry.filePath, tags);
+		}
+		return { fileTags: tags, filePath: entry.filePath };
 	}
 
 	private entryMatchesShow(entry: TimelineEntry): boolean {

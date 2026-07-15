@@ -3,7 +3,7 @@ import { TimelineEntry } from "./scan";
 import { describeYear } from "./year-tag";
 import { DecodedYear } from "./types";
 import { EraSystem, eraAt } from "./eras";
-import { matchesQuery, parseQuery } from "./query";
+import { QueryContext, matchesQuery, parseQuery } from "./query";
 import { GroupBy } from "./profiles";
 
 // One column of the in-view comparison grid: its own filter + lens.
@@ -20,12 +20,13 @@ export function trackLabel(t: TrackDef, i: number): string {
 
 export function trackEntries(
 	entries: TimelineEntry[],
-	track: TrackDef
+	track: TrackDef,
+	contextFor?: (e: TimelineEntry) => QueryContext
 ): TimelineEntry[] {
 	const pq = parseQuery(track.filter);
 	return entries.filter((e) => {
 		const hay = `${e.tag} ${e.snippet} ${e.summary ?? ""}`.toLowerCase();
-		return matchesQuery(hay, pq);
+		return matchesQuery(hay, pq, contextFor?.(e));
 	});
 }
 
@@ -92,12 +93,15 @@ export function renderTrackGrid(opts: {
 	renderCard: (parent: HTMLElement, entry: TimelineEntry) => void;
 	onActivate: (i: number) => void;
 	onRemove: (i: number) => void;
+	contextFor?: (e: TimelineEntry) => QueryContext;
 }): { counts: number[]; eraAnchors: EraAnchor[][]; relayout: () => void } {
 	const { list, tracks } = opts;
 	const gb = opts.groupBy === "none" ? "century" : opts.groupBy;
 	const span = gb === "century" ? 100 : 10;
 
-	const perTrack = tracks.map((t) => trackEntries(opts.entries, t));
+	const perTrack = tracks.map((t) =>
+		trackEntries(opts.entries, t, opts.contextFor)
+	);
 	const systems = tracks.map((t) =>
 		t.lens ? opts.eraSystems.find((s) => s.name === t.lens) ?? null : null
 	);

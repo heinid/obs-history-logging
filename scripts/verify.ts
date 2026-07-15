@@ -63,6 +63,7 @@ import {
 } from "../src/quiz-display";
 import { makeClozeMarked, mapDbText } from "../src/db-marker";
 import { normalizeTag, hasDbTag } from "../src/db-gate";
+import { matchesQuery, parseQuery } from "../src/query";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -641,6 +642,32 @@ setDisplayLangOrder(["ja", "zh", "en"]);
 eq("cand lang tie-break ja", aliasCandidates("明治", [multiLang])[0]?.alias, "明治維新");
 setDisplayLangOrder([]);
 eq("display order reset", displayName(multiLang), "明治維新");
+
+// query language: file:#tag / path: terms combine with text terms via
+// the existing AND / OR / NOT rules
+const qctx = {
+	fileTags: ["#history/japan", "#精读"],
+	filePath: "词条测试/元寇笔记.md",
+};
+eq("q text still matches", matchesQuery("元寇 襲来", parseQuery("元寇"), qctx), true);
+eq("q file tag hit", matchesQuery("", parseQuery("file:#history"), qctx), true);
+eq("q file tag nested", matchesQuery("", parseQuery("file:#history/japan"), qctx), true);
+eq("q file tag no hash", matchesQuery("", parseQuery("file:history"), qctx), true);
+eq("q file tag miss", matchesQuery("", parseQuery("file:#chem"), qctx), false);
+eq("q file tag no ctx", matchesQuery("", parseQuery("file:#history")), false);
+eq("q file AND text", matchesQuery("蒙古", parseQuery("file:#history 蒙古"), qctx), true);
+eq("q file AND text miss", matchesQuery("罗马", parseQuery("file:#history 蒙古"), qctx), false);
+eq("q file OR", matchesQuery("", parseQuery("file:#chem OR file:#精读"), qctx), true);
+eq("q file NOT", matchesQuery("", parseQuery("-file:#draft"), qctx), true);
+eq("q file NOT hit", matchesQuery("", parseQuery("-file:#history"), qctx), false);
+eq("q path hit", matchesQuery("", parseQuery("path:词条测试/"), qctx), true);
+eq("q path miss", matchesQuery("", parseQuery("path:_chronology/"), qctx), false);
+eq("q path case", matchesQuery("", parseQuery("path:元寇笔记.MD"), qctx), true);
+eq(
+	"q mixed groups",
+	matchesQuery("元寇", parseQuery("file:#chem 元寇 OR file:#history/japan -罗马"), qctx),
+	true
+);
 
 // ⌛ menu: wikipedia year pages + action URL templates
 const y1274 = parseYearTag("#ad/12/7/4")!;
