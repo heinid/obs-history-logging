@@ -740,7 +740,7 @@ function insertVaultMarkerAnnotated(
 	};
 	const meta = annotationsInsert(
 		editor,
-		`${fnid}.date ${new Date().toISOString()}`
+		`[${fnid}.date]: ${new Date().toISOString()}`
 	);
 	// All positions refer to the pre-transaction document; the ranges are
 	// disjoint (marker ≤ line end ≤ file bottom), so one transaction applies
