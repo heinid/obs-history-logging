@@ -445,7 +445,7 @@ export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 		}
 		const word = this.fragment;
 		createEntityForWord(this.plugin, word, (saved) =>
-			insertVaultMarker(editor, from, end, saved, word)
+			insertVaultMarkerAnnotated(this.plugin, editor, from, end, saved, word)
 		);
 	}
 }
@@ -601,7 +601,7 @@ export function openDbSelectionMenu(
 			ev.preventDefault();
 			close();
 			createEntityForWord(plugin, raw, (saved) =>
-				insertVaultMarker(editor, from, to, saved, raw)
+				insertVaultMarkerAnnotated(plugin, editor, from, to, saved, raw)
 			);
 		});
 		mk("⧉", "链接到已有词条…").addEventListener("mousedown", (ev) => {
@@ -674,5 +674,83 @@ function insertVaultMarker(
 ): void {
 	const marker = makeDbMarker(entity.id, word);
 	editor.replaceRange(marker, from, to);
+	editor.setCursor({ line: from.line, ch: from.ch + marker.length });
+}
+
+// --- highlight annotation after inline entity creation --------------------
+// Companion-plugin integration: wrap the fresh marker in `~={color|fn:id}…=~`,
+// append `{;; id #tag }` at the line end and log `id.date <ISO>` under the
+// `<!-- annotations -->` block at the bottom of the file. All three writes go
+// out as one editor transaction (one undo step, incremental redraw).
+
+const ANNOTATIONS_MARKER = "<!-- annotations -->";
+
+function generateFnId(doc: string): string {
+	const chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+	for (;;) {
+		let id = "";
+		for (let i = 0; i < 4; i++)
+			id += chars[Math.floor(Math.random() * chars.length)];
+		if (!doc.includes(`fn:${id}`) && !doc.includes(`{;; ${id}`)) return id;
+	}
+}
+
+// Where to insert the `id.date …` line: right after the last non-empty line
+// following the annotations marker, or a fresh block at the end of the file.
+function annotationsInsert(
+	editor: Editor,
+	line: string
+): { from: EditorPosition; text: string } {
+	const last = editor.lastLine();
+	for (let i = last; i >= 0; i--) {
+		if (editor.getLine(i).trim() !== ANNOTATIONS_MARKER) continue;
+		let j = i;
+		for (let k = i + 1; k <= last; k++)
+			if (editor.getLine(k).trim() !== "") j = k;
+		return {
+			from: { line: j, ch: editor.getLine(j).length },
+			text: `\n${line}`,
+		};
+	}
+	return {
+		from: { line: last, ch: editor.getLine(last).length },
+		text: `\n\n${ANNOTATIONS_MARKER}\n${line}`,
+	};
+}
+
+function insertVaultMarkerAnnotated(
+	plugin: HistoryLoggingPlugin,
+	editor: Editor,
+	from: EditorPosition,
+	to: EditorPosition,
+	entity: EntityEntry,
+	word: string
+): void {
+	if (!plugin.settings.annotOnCreate) {
+		insertVaultMarker(editor, from, to, entity, word);
+		return;
+	}
+	const fnid = generateFnId(editor.getValue());
+	const color = plugin.settings.annotColor || "green";
+	const tag = plugin.settings.annotTag.replace(/^#+/, "");
+	const marker = `~={${color}|fn:${fnid}}${makeDbMarker(entity.id, word)}=~`;
+	const lineEnd = {
+		line: from.line,
+		ch: editor.getLine(from.line).length,
+	};
+	const meta = annotationsInsert(
+		editor,
+		`${fnid}.date ${new Date().toISOString()}`
+	);
+	// All positions refer to the pre-transaction document; the ranges are
+	// disjoint (marker ≤ line end ≤ file bottom), so one transaction applies
+	// them together.
+	editor.transaction({
+		changes: [
+			{ from, to, text: marker },
+			{ from: lineEnd, text: ` {;; ${fnid} #${tag} }` },
+			{ from: meta.from, text: meta.text },
+		],
+	});
 	editor.setCursor({ line: from.line, ch: from.ch + marker.length });
 }

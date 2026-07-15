@@ -49,6 +49,14 @@ export interface HistoryLoggingSettings {
 	// completion, clicking, masking — in ordinary vault notes. Empty list =
 	// the features stay inside the plugin's own views only.
 	dbEnableTags: string[];
+	// After creating a new entity inline (即时新建), wrap the inserted marker
+	// in `~={color|fn:id}…=~`, append `{;; id #tag }` at the line end and log
+	// `id.date <ISO>` under the `<!-- annotations -->` block.
+	annotOnCreate: boolean;
+	// Highlight color inside `~={color|fn:id}`.
+	annotColor: string;
+	// Tag (without `#`) written inside the `{;; id #tag }` comment.
+	annotTag: string;
 }
 
 export interface EvMenuView {
@@ -74,6 +82,9 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	quizHoverHideYears: false,
 	dbMaskMode: false,
 	dbEnableTags: [],
+	annotOnCreate: false,
+	annotColor: "green",
+	annotTag: "专名和Entities积累",
 };
 
 export const EVENTS_FILE = "events.md";
@@ -290,6 +301,46 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 							.split(",")
 							.map((s) => s.trim().replace(/^#+/, ""))
 							.filter((s) => s.length > 0);
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("即时新建词条后自动嵌套高亮批注")
+			.setDesc(
+				"在启用词条功能的笔记里即时新建词条后，自动把标记包进 ~={颜色|fn:id}…=~ 高亮、行尾追加 {;; id #tag }，并在文件底部 <!-- annotations --> 块记录 id.date 时间。"
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.annotOnCreate)
+					.onChange(async (value) => {
+						this.plugin.settings.annotOnCreate = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("批注高亮颜色")
+			.setDesc("写进 ~={颜色|fn:id} 的颜色名。")
+			.addText((text) =>
+				text
+					.setPlaceholder("green")
+					.setValue(this.plugin.settings.annotColor)
+					.onChange(async (value) => {
+						this.plugin.settings.annotColor = value.trim() || "green";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("批注标签")
+			.setDesc("写进行尾 {;; id #tag } 的标签（不带 #）。")
+			.addText((text) =>
+				text
+					.setPlaceholder("专名和Entities积累")
+					.setValue(this.plugin.settings.annotTag)
+					.onChange(async (value) => {
+						this.plugin.settings.annotTag = value.trim().replace(/^#+/, "");
 						await this.plugin.saveSettings();
 					})
 			);
