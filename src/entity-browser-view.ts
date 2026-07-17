@@ -1,4 +1,11 @@
-import { ItemView, Menu, Notice, WorkspaceLeaf, setIcon } from "obsidian";
+import {
+	ItemView,
+	Menu,
+	Notice,
+	TFile,
+	WorkspaceLeaf,
+	setIcon,
+} from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { DbType, EntityEntry, displayName } from "./db-format";
 import { entitySearchText, parseDbMarks, stripDbMarkers } from "./db-marker";
@@ -14,6 +21,8 @@ import {
 	renderQuizBackstage,
 } from "./quiz-backstage";
 import { EventEntry } from "./types";
+import { MapEntry } from "./maps-format";
+import { ImageSuggestModal, MapModal, newMapEntry } from "./map-modal";
 
 export const ENTITY_BROWSER_VIEW_TYPE = "history-logging-entity-browser";
 
@@ -49,6 +58,7 @@ type NavFrame =
 			scroll: number;
 	  }
 	| { kind: "types"; scroll: number }
+	| { kind: "maps"; scroll: number }
 	| {
 			kind: "quizzes";
 			query: string;
@@ -67,6 +77,7 @@ export class EntityBrowserView extends ItemView {
 	private filtered: Row[] = [];
 	private types: DbType[] = [];
 	private quizzes: QuizEntry[] = [];
+	private maps: MapEntry[] = [];
 	private events = new Map<string, EventEntry>();
 	private query = "";
 	private selectedTypes = new Set<string>();
@@ -128,7 +139,8 @@ export class EntityBrowserView extends ItemView {
 					f.path === `${folder}/entities.md` ||
 					f.path === `${folder}/events.md` ||
 					f.path === `${folder}/db-types.md` ||
-					f.path === `${folder}/quizzes.md`
+					f.path === `${folder}/quizzes.md` ||
+					f.path === `${folder}/maps.md`
 				)
 					this.scheduleReload();
 			})
@@ -150,15 +162,17 @@ export class EntityBrowserView extends ItemView {
 	}
 
 	async reload(): Promise<void> {
-		const [entities, events, types, quizzes] = await Promise.all([
+		const [entities, events, types, quizzes, maps] = await Promise.all([
 			this.plugin.store.readEntities(),
 			this.plugin.store.readEvents(),
 			this.plugin.store.readDbTypes(),
 			this.plugin.store.readQuizzes(),
+			this.plugin.store.readMaps(),
 		]);
 		this.types = types;
 		this.events = events;
 		this.quizzes = [...quizzes.values()];
+		this.maps = [...maps.values()];
 		const colorOf = new Map(types.map((t) => [t.name, t.color]));
 		this.dbColors = new Map(
 			[...entities.values()].map((e) => [e.id, colorOf.get(e.type) ?? ""])
@@ -288,7 +302,7 @@ export class EntityBrowserView extends ItemView {
 		const tabs = nav.createDiv({ cls: "hl-eb-tabs" });
 		this.tabEls.clear();
 		const mkTab = (
-			key: "entities" | "types" | "quizzes",
+			key: "entities" | "types" | "quizzes" | "maps",
 			label: string
 		): void => {
 			const el = tabs.createSpan({ cls: "hl-eb-tab", text: label });
@@ -307,6 +321,8 @@ export class EntityBrowserView extends ItemView {
 					});
 				else if (key === "types")
 					this.replace({ kind: "types", scroll: 0 });
+				else if (key === "maps")
+					this.replace({ kind: "maps", scroll: 0 });
 				else
 					this.replace({
 						kind: "quizzes",
@@ -318,6 +334,7 @@ export class EntityBrowserView extends ItemView {
 		};
 		mkTab("entities", "词条");
 		mkTab("types", "范畴");
+		mkTab("maps", "地图");
 		mkTab("quizzes", "Quiz");
 		const cur = this.current();
 		const activeTab =
@@ -325,6 +342,8 @@ export class EntityBrowserView extends ItemView {
 				? "types"
 				: cur.kind === "quizzes"
 				? "quizzes"
+				: cur.kind === "maps"
+				? "maps"
 				: "entities";
 		this.tabEls.get(activeTab)?.addClass("is-active");
 		if (cur.kind === "entity") {
@@ -336,6 +355,7 @@ export class EntityBrowserView extends ItemView {
 		this.bodyEl = root.createDiv({ cls: "hl-eb-body" });
 		if (cur.kind === "entities") this.renderEntities(this.bodyEl, cur);
 		else if (cur.kind === "types") this.renderTypes(this.bodyEl, cur);
+		else if (cur.kind === "maps") this.renderMaps(this.bodyEl, cur);
 		else if (cur.kind === "quizzes") {
 			renderQuizBackstage(
 				this.bodyEl,
@@ -967,6 +987,89 @@ export class EntityBrowserView extends ItemView {
 		host.scrollTop = frame.scroll;
 	}
 
+	// --- maps section -----------------------------------------------------
+
+	private renderMaps(
+		host: HTMLElement,
+		frame: Extract<NavFrame, { kind: "maps" }>
+	): void {
+		const wrap = host.createDiv({ cls: "hl-eb-maps" });
+		const head = wrap.createDiv({ cls: "hl-eb-maps-head" });
+		head.createSpan({
+			cls: "hl-eb-count",
+			text: `${this.maps.length} 张地图`,
+		});
+		const add = head.createEl("button", {
+			cls: "hl-modal-foot-btn hl-eb-add",
+			text: "＋ 新建地图",
+		});
+		add.addEventListener("click", () => {
+			new ImageSuggestModal(this.app, (f) => {
+				const entry = newMapEntry(
+					(id) => this.maps.some((m) => m.id === id),
+					{ title: f.basename, image: f.path }
+				);
+				new MapModal(this.app, this.plugin, entry, true, () =>
+					void this.reload()
+				).open();
+			}).open();
+		});
+
+		if (!this.maps.length) {
+			wrap.createDiv({
+				cls: "hl-eb-maps-empty",
+				text: "还没有地图。在笔记里右键图片所在行、或点 ⌛ 菜单里的「联入地图」，也可以在这里新建。",
+			});
+			return;
+		}
+
+		const grid = wrap.createDiv({ cls: "hl-eb-map-grid" });
+		const entities = new Map(
+			this.rows.map((r) => [r.entity.id, r.entity])
+		);
+		const sorted = [...this.maps].sort((a, b) =>
+			(a.title || a.image).localeCompare(b.title || b.image)
+		);
+		for (const m of sorted) {
+			const card = grid.createDiv({ cls: "hl-eb-map-card" });
+			const thumb = card.createDiv({ cls: "hl-eb-map-thumb" });
+			const file = this.app.metadataCache.getFirstLinkpathDest(
+				m.image,
+				""
+			);
+			if (file instanceof TFile) {
+				const img = thumb.createEl("img");
+				img.src = this.app.vault.getResourcePath(file);
+			} else {
+				thumb.createSpan({
+					cls: "hl-eb-map-thumb-missing",
+					text: "图片缺失",
+				});
+			}
+			const meta = card.createDiv({ cls: "hl-eb-map-meta" });
+			meta.createDiv({
+				cls: "hl-eb-map-title",
+				text: m.title || m.image,
+			});
+			const sub = meta.createDiv({ cls: "hl-eb-map-sub" });
+			if (m.range) sub.createSpan({ text: m.range });
+			if (m.events.length)
+				sub.createSpan({ text: `事件 ${m.events.length}` });
+			const names = m.entities
+				.map((id) => entities.get(id))
+				.filter((e): e is EntityEntry => !!e)
+				.map((e) => displayName(e))
+				.slice(0, 3);
+			if (names.length) sub.createSpan({ text: names.join(" · ") });
+			card.addEventListener("click", () => {
+				new MapModal(this.app, this.plugin, m, false, () =>
+					void this.reload()
+				).open();
+			});
+		}
+		host.scrollTop = frame.scroll;
+	}
+
 	private freshTypeName(): string {
 		let n = 1;
 		while (this.types.some((t) => t.name === `type-${n}`)) n++;
@@ -1158,9 +1261,11 @@ export class EntityBrowserView extends ItemView {
 	}
 
 	// External entry points (commands) land on a specific section.
-	showSection(section: "entities" | "types" | "quizzes"): void {
+	showSection(section: "entities" | "types" | "quizzes" | "maps"): void {
 		if (this.current().kind === section) return;
 		if (section === "types") this.replace({ kind: "types", scroll: 0 });
+		else if (section === "maps")
+			this.replace({ kind: "maps", scroll: 0 });
 		else if (section === "quizzes")
 			this.replace({
 				kind: "quizzes",

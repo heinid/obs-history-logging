@@ -44,7 +44,10 @@ function lineTextAt(content: string, index: number): string {
 // The whole paragraph (contiguous non-blank lines) around `index`, so the card
 // can render list items / multi-line markdown, not just the tag's own line.
 // Returns the block text and the char offset of its first line in `content`.
-function blockAt(content: string, index: number): { text: string; start: number } {
+export function blockAt(
+	content: string,
+	index: number
+): { text: string; start: number } {
 	const lines = content.split("\n");
 	const lineStart: number[] = [];
 	let acc = 0;

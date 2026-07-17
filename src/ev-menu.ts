@@ -12,6 +12,8 @@ import {
 	wikipediaYearTitle,
 	wikipediaYearUrl,
 } from "./ev-actions";
+import { MapCandidate, mapCandidatesForEvent } from "./map-candidates";
+import { MapModal, newMapEntry } from "./map-modal";
 
 // Source location of a bare (not yet `{ev …}`-wrapped) year tag; lets the
 // menu offer summary editing with deferred event creation.
@@ -51,6 +53,7 @@ async function openEvMenuAsync(
 				(quiz) => quiz.sourceEvId === id
 		  ).length
 		: 0;
+	const mapCandidates = id ? await mapCandidatesForEvent(plugin, id) : [];
 
 	if (id)
 		menu.addItem((item) =>
@@ -100,6 +103,36 @@ async function openEvMenuAsync(
 						})()
 				)
 		);
+
+	if (id && mapCandidates.length) {
+		const linked = mapCandidates.filter((c) => c.map).length;
+		menu.addItem((item) => {
+			item
+				.setTitle(
+					linked
+						? `地图（${linked}/${mapCandidates.length}）…`
+						: `联入地图（${mapCandidates.length}）…`
+				)
+				.setIcon("map");
+			const sub = (
+				item as unknown as { setSubmenu(): Menu }
+			).setSubmenu();
+			for (const c of mapCandidates) {
+				sub.addItem((si) =>
+					si
+						.setTitle(
+							c.map
+								? `地图：${c.map.title || c.link}`
+								: `联入：${c.link}`
+						)
+						.setIcon(c.map ? "map-pin" : "image-plus")
+						.onClick(() =>
+							void openMapCandidate(plugin, c, id, tag)
+						)
+				);
+			}
+		});
+	}
 
 	if (decoded) {
 		const lang = plugin.settings.wikiLang;
@@ -192,6 +225,33 @@ async function openEvMenuAsync(
 	}
 
 	menu.showAtMouseEvent(evt);
+}
+
+// Open the map modal for a candidate image: edit the existing map entry
+// (linking the event if it is not linked yet), or create a fresh one with
+// the event and its year tag prefilled.
+export async function openMapCandidate(
+	plugin: HistoryLoggingPlugin,
+	c: MapCandidate,
+	evId: string,
+	tag: string
+): Promise<void> {
+	const maps = await plugin.store.readMaps();
+	if (c.map) {
+		const entry = { ...c.map };
+		if (evId && !entry.events.includes(evId))
+			entry.events = [...entry.events, evId];
+		new MapModal(plugin.app, plugin, entry, false).open();
+		return;
+	}
+	const file = plugin.app.metadataCache.getFirstLinkpathDest(c.link, "");
+	const entry = newMapEntry((id) => maps.has(id), {
+		title: file?.basename ?? "",
+		image: file?.path ?? c.link,
+		range: tag,
+		events: evId ? [evId] : [],
+	});
+	new MapModal(plugin.app, plugin, entry, true).open();
 }
 
 // Obsidian's core global-search plugin has no public typings; reach it

@@ -14,6 +14,7 @@ import { describeYear, parseYearTag } from "./year-tag";
 import { NoteOccurrences, scanNoteOccurrences } from "./db-occurrences";
 import { dbEnabledFor } from "./vault-db";
 import { jumpToLocation } from "./jump";
+import { enableContainerImageResize } from "./image-resize";
 
 // Shared renderer for one entity's full page: hero (headword + type pill +
 // id), per-language cards, free notes and the emergent chronology. Used by
@@ -142,6 +143,14 @@ export async function renderEntityPage(
 					openDbEntityEditor(plugin, id, ctx.refresh)
 				);
 		});
+		enableContainerImageResize(
+			notes,
+			() => entity.body,
+			(text) => {
+				entity.body = text;
+				void plugin.store.upsertEntity(entity);
+			}
+		);
 	}
 
 	await renderOccurrences(root, entity, ctx);

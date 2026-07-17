@@ -6,6 +6,9 @@ import { EntityModal } from "./entity-modal";
 import { LiveEditor, registerEscapeFirst } from "./live-editor";
 import { generateId } from "./id";
 import { describeYear, parseYearTag } from "./year-tag";
+import { Menu } from "obsidian";
+import { mapCandidatesForEvent } from "./map-candidates";
+import { openMapCandidate } from "./ev-menu";
 
 // View / edit the markdown summary for a single event, backed by events.md.
 // A live CodeMirror editor renders `{db …}` markers folded and bold text
@@ -122,6 +125,45 @@ export class SummaryModal extends Modal {
 		quiz.addEventListener("click", () => {
 			void this.openQuiz();
 		});
+		// Map candidates (source-block + summary images): the button only
+		// appears when there is something to link, keeping the footer quiet.
+		const mapBtn = foot.createEl("button", {
+			cls: "hl-modal-foot-btn hl-map-foot-btn",
+		});
+		mapBtn.hide();
+		void this.refreshMapButton(mapBtn);
+		mapBtn.addEventListener("click", (e) => {
+			void (async () => {
+				const candidates = await mapCandidatesForEvent(
+					this.plugin,
+					this.id,
+					this.editor?.getValue()
+				);
+				if (!candidates.length) return;
+				const menu = new Menu();
+				for (const c of candidates) {
+					menu.addItem((item) =>
+						item
+							.setTitle(
+								c.map
+									? `地图：${c.map.title || c.link}`
+									: `联入：${c.link}`
+							)
+							.setIcon(c.map ? "map-pin" : "image-plus")
+							.onClick(() =>
+								void openMapCandidate(
+									this.plugin,
+									c,
+									this.id,
+									this.tag
+								)
+							)
+					);
+				}
+				menu.showAtMouseEvent(e);
+			})();
+		});
+
 		const jump = foot.createEl("button", {
 			cls: "hl-modal-foot-btn",
 			text: "↗ Jump to source",
@@ -138,6 +180,20 @@ export class SummaryModal extends Modal {
 		// Obsidian focuses the modal container right after onOpen; grab the
 		// focus back once that has happened.
 		window.setTimeout(() => this.editor?.focus(), 0);
+	}
+
+	private async refreshMapButton(btn: HTMLButtonElement): Promise<void> {
+		const candidates = await mapCandidatesForEvent(
+			this.plugin,
+			this.id,
+			this.editor?.getValue()
+		);
+		if (!candidates.length) return;
+		const linked = candidates.filter((c) => c.map).length;
+		btn.setText(
+			linked ? `地图 ${linked}/${candidates.length}` : `地图…`
+		);
+		btn.show();
 	}
 
 	private scheduleSave(): void {

@@ -29,6 +29,7 @@ import {
 	parseReciteDecksFile,
 	serializeReciteDecksFile,
 } from "./recite-format";
+import { MapEntry, parseMapsFile, serializeMapsFile } from "./maps-format";
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
@@ -227,6 +228,43 @@ export class DataStore {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (file instanceof TFile) await this.app.vault.modify(file, content);
 		else await this.app.vault.create(path, content);
+	}
+
+	private mapsPath(): string {
+		return normalizePath(`${this.getFolder()}/maps.md`);
+	}
+
+	mapsFilePath(): string {
+		return this.mapsPath();
+	}
+
+	async readMaps(): Promise<Map<string, MapEntry>> {
+		const file = this.app.vault.getAbstractFileByPath(this.mapsPath());
+		if (!(file instanceof TFile)) return new Map();
+		return parseMapsFile(await this.app.vault.read(file));
+	}
+
+	async writeMaps(entries: Map<string, MapEntry>): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeMapsFile(entries);
+		const path = this.mapsPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
+	}
+
+	async upsertMap(entry: MapEntry): Promise<void> {
+		const entries = await this.readMaps();
+		entries.set(entry.id, {
+			...entry,
+			updated: new Date().toISOString().slice(0, 10),
+		});
+		await this.writeMaps(entries);
+	}
+
+	async removeMap(id: string): Promise<void> {
+		const entries = await this.readMaps();
+		if (entries.delete(id)) await this.writeMaps(entries);
 	}
 
 	private reciteDecksPath(): string {

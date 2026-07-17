@@ -75,6 +75,8 @@ import {
 import { quizDeckStats } from "../src/deck-stats";
 import { interject, pruneUpcoming } from "../src/session-queue";
 import { maskLabels } from "../src/db-occurrences";
+import { parseMapsFile, serializeMapsFile } from "../src/maps-format";
+import { imageEmbeds, resizeEmbedIn } from "../src/map-text";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -951,6 +953,55 @@ eq(
 		"mask escapes regex metacharacters",
 		maskLabels("c++ is here", ["c++"]),
 		"____ is here"
+	);
+}
+
+// maps.md round trip
+{
+	const src = [
+		"# History Logging — maps",
+		"",
+		"## m1a2b3c4",
+		"title: 伯罗奔尼撒战争形势图",
+		"image: maps/pelo.png",
+		"range: #bc/04/3/1",
+		"events: k7f3a9x1, p2d8c4n5",
+		"entities: a1b2c3d4",
+		"updated: 2026-07-17",
+		"",
+		"自由注记",
+		"",
+	].join("\n");
+	const maps = parseMapsFile(src);
+	const m = maps.get("m1a2b3c4");
+	eq("maps parse title", m?.title, "伯罗奔尼撒战争形势图");
+	eq("maps parse image", m?.image, "maps/pelo.png");
+	eq("maps parse events", m?.events.join(","), "k7f3a9x1,p2d8c4n5");
+	eq("maps parse body", m?.body, "自由注记");
+	eq("maps round trip", serializeMapsFile(parseMapsFile(serializeMapsFile(maps))), serializeMapsFile(maps));
+}
+
+// image embeds + resize suffix rewrite
+{
+	eq(
+		"image embeds found",
+		imageEmbeds("text ![[a.png]] mid ![[b.jpg|300]] ![[note.md]]").join(","),
+		"a.png,b.jpg"
+	);
+	eq(
+		"resize adds width suffix",
+		resizeEmbedIn("x ![[a.png]] y", "a.png", 320)?.text,
+		"x ![[a.png|320]] y"
+	);
+	eq(
+		"resize replaces width suffix",
+		resizeEmbedIn("x ![[a.png|100]] y", "a.png", 240)?.text,
+		"x ![[a.png|240]] y"
+	);
+	eq(
+		"resize picks nearest occurrence",
+		resizeEmbedIn("![[a.png]] pad ![[a.png]]", "a.png", 200, 20)?.text,
+		"![[a.png]] pad ![[a.png|200]]"
 	);
 }
 

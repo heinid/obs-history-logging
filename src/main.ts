@@ -21,6 +21,8 @@ import {
 	createTagClickExtension,
 	registerTagContextMenu,
 } from "./tag-click";
+import { registerMapEditorMenu } from "./map-editor-menu";
+import { registerNoteImageResize } from "./image-resize";
 import { SummaryModal } from "./summary-modal";
 import { TIMELINE_VIEW_TYPE, TimelineView } from "./timeline-view";
 import { ERA_MANAGER_VIEW_TYPE, EraManagerView } from "./era-manager-view";
@@ -86,6 +88,8 @@ export default class HistoryLoggingPlugin extends Plugin {
 			})
 		);
 		registerTagContextMenu(this);
+		registerMapEditorMenu(this);
+		registerNoteImageResize(this);
 		this.addSettingTab(new HistoryLoggingSettingTab(this.app, this));
 
 		this.registerView(
@@ -496,7 +500,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 
 	// Open (or focus) the backstage tab, optionally landing on a section.
 	async browseEntities(
-		section?: "entities" | "types" | "quizzes"
+		section?: "entities" | "types" | "quizzes" | "maps"
 	): Promise<void> {
 		const { workspace } = this.app;
 		const existing = workspace.getLeavesOfType(ENTITY_BROWSER_VIEW_TYPE)[0];
