@@ -1,11 +1,10 @@
 // maps.md — historical map entries. Each entry ties one vault image to the
-// history data: a title, an optional time range (year tag text), and the
-// events / entities it illustrates. Format mirrors entities.md:
+// history data: a title and the events / entities it illustrates (its place
+// in time is derived from the linked events). Format mirrors entities.md:
 //
 //   ## m3k7f9a2
 //   title: 伯罗奔尼撒战争形势图
 //   image: maps/peloponnesian-war.png
-//   range: #bc/04/3/1
 //   events: k7f3a9x1, p2d8c4n5
 //   entities: a1b2c3d4
 //   updated: 2026-07-17
@@ -19,9 +18,8 @@ export interface MapEntry {
 	title: string;
 	// Vault path / link target of the image (no `![[ ]]` wrapper, no size).
 	image: string;
-	// Free-form time range: a year tag, or "tagA–tagB", or empty.
-	range: string;
-	// Linked event ids (events.md) and entity ids (entities.md).
+	// Linked event ids (events.md) and entity ids (entities.md). The map's
+	// place in time is derived from its linked events' year tags.
 	events: string[];
 	entities: string[];
 	updated?: string;
@@ -64,7 +62,6 @@ function parseMapBlock(id: string, block: string): MapEntry {
 		id,
 		title: "",
 		image: "",
-		range: "",
 		events: [],
 		entities: [],
 		body: "",
@@ -88,7 +85,7 @@ function parseMapBlock(id: string, block: string): MapEntry {
 				entry.image = val;
 				break;
 			case "range":
-				entry.range = val;
+				// Legacy field from the first iteration; dropped on rewrite.
 				break;
 			case "events":
 				entry.events = listOf(val);
@@ -114,7 +111,6 @@ export function serializeMapsFile(entries: Map<string, MapEntry>): string {
 		parts.push(`## ${id}`);
 		if (e.title) parts.push(`title: ${e.title}`);
 		if (e.image) parts.push(`image: ${e.image}`);
-		if (e.range) parts.push(`range: ${e.range}`);
 		if (e.events.length) parts.push(`events: ${e.events.join(", ")}`);
 		if (e.entities.length)
 			parts.push(`entities: ${e.entities.join(", ")}`);

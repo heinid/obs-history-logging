@@ -248,7 +248,6 @@ export async function openMapCandidate(
 	const entry = newMapEntry((id) => maps.has(id), {
 		title: file?.basename ?? "",
 		image: file?.path ?? c.link,
-		range: tag,
 		events: evId ? [evId] : [],
 	});
 	new MapModal(plugin.app, plugin, entry, true).open();

@@ -7,6 +7,9 @@ import type HistoryLoggingPlugin from "./main";
 import { blockAt, evLocationIndex } from "./scan";
 import { MapEntry } from "./maps-format";
 import { imageEmbeds } from "./map-text";
+import { stripEvMarkers } from "./parser";
+import { stripDbMarkers } from "./db-marker";
+import { yearTagRegex } from "./year-tag";
 
 export { imageEmbeds };
 
@@ -41,6 +44,37 @@ export async function evSourceBlock(
 		return evSourceBlock(app, id);
 	}
 	return null;
+}
+
+// One-line context for an event: the first line of its summary, or —
+// lacking one — the text of the note block around its `{ev …}` marker.
+export interface EventPreview {
+	text: string;
+	// True when the text came from the note source rather than the summary.
+	fromSource: boolean;
+}
+
+export async function eventPreview(
+	plugin: HistoryLoggingPlugin,
+	id: string
+): Promise<EventPreview> {
+	const summary = ((await plugin.store.getEvent(id))?.summary ?? "").trim();
+	if (summary) {
+		const line =
+			stripDbMarkers(summary)
+				.split("\n")
+				.map((l) => l.trim())
+				.find((l) => l.length > 0) ?? "";
+		return { text: line, fromSource: false };
+	}
+	const block = await evSourceBlock(plugin.app, id);
+	if (!block) return { text: "", fromSource: false };
+	const text = stripDbMarkers(stripEvMarkers(block))
+		.replace(yearTagRegex(), "")
+		.replace(/!\[\[[^\]]*\]\]/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+	return { text, fromSource: true };
 }
 
 export interface MapCandidate {

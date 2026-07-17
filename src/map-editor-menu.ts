@@ -1,6 +1,6 @@
 // Manual map entry point: right-clicking in the editor on a line with an
-// image embed offers "联入为历史地图". Any `{ev …}` markers and the first
-// year tag in the surrounding block prefill the linked event / time range.
+// image embed offers "联入为历史地图". Any `{ev …}` markers in the
+// surrounding block prefill the linked events.
 
 import { Editor, MarkdownFileInfo, MarkdownView, Menu } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
@@ -8,7 +8,6 @@ import { imageEmbeds } from "./map-candidates";
 import { MapModal, newMapEntry } from "./map-modal";
 import { blockAt } from "./scan";
 import { parseEvMarks } from "./parser";
-import { yearTagRegex } from "./year-tag";
 
 export function registerMapEditorMenu(plugin: HistoryLoggingPlugin): void {
 	plugin.registerEvent(
@@ -27,7 +26,6 @@ export function registerMapEditorMenu(plugin: HistoryLoggingPlugin): void {
 				const offset = editor.posToOffset(editor.getCursor());
 				const block = blockAt(content, offset).text;
 				const marks = parseEvMarks(block);
-				const tagMatch = yearTagRegex().exec(block);
 				for (const link of images) {
 					menu.addItem((item) =>
 						item
@@ -41,8 +39,7 @@ export function registerMapEditorMenu(plugin: HistoryLoggingPlugin): void {
 								void openManualMapLink(
 									plugin,
 									link,
-									marks.map((m) => m.id),
-									marks[0]?.tag ?? tagMatch?.[0] ?? ""
+									marks.map((m) => m.id)
 								)
 							)
 					);
@@ -55,8 +52,7 @@ export function registerMapEditorMenu(plugin: HistoryLoggingPlugin): void {
 async function openManualMapLink(
 	plugin: HistoryLoggingPlugin,
 	link: string,
-	events: string[],
-	range: string
+	events: string[]
 ): Promise<void> {
 	const maps = await plugin.store.readMaps();
 	const resolve = (l: string): string =>
@@ -77,7 +73,6 @@ async function openManualMapLink(
 	const entry = newMapEntry((id) => maps.has(id), {
 		title: file?.basename ?? "",
 		image: file?.path ?? link,
-		range,
 		events,
 	});
 	new MapModal(plugin.app, plugin, entry, true).open();

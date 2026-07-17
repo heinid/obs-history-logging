@@ -22,7 +22,8 @@ import {
 } from "./quiz-backstage";
 import { EventEntry } from "./types";
 import { MapEntry } from "./maps-format";
-import { ImageSuggestModal, MapModal, newMapEntry } from "./map-modal";
+import { MapModal, MapViewerModal, newMapEntry } from "./map-modal";
+import { openEvMenu } from "./ev-menu";
 
 export const ENTITY_BROWSER_VIEW_TYPE = "history-logging-entity-browser";
 
@@ -132,17 +133,26 @@ export class EntityBrowserView extends ItemView {
 	async onOpen(): Promise<void> {
 		// The catalogue lives in a few data files; a debounced reload on any
 		// of them keeps the backstage current without rescanning per edit.
+		const isDataFile = (path: string): boolean => {
+			const folder = this.plugin.settings.dataFolder.replace(/\/+$/, "");
+			return (
+				path === `${folder}/entities.md` ||
+				path === `${folder}/events.md` ||
+				path === `${folder}/db-types.md` ||
+				path === `${folder}/quizzes.md` ||
+				path === `${folder}/maps.md`
+			);
+		};
 		this.registerEvent(
 			this.app.vault.on("modify", (f) => {
-				const folder = this.plugin.settings.dataFolder.replace(/\/+$/, "");
-				if (
-					f.path === `${folder}/entities.md` ||
-					f.path === `${folder}/events.md` ||
-					f.path === `${folder}/db-types.md` ||
-					f.path === `${folder}/quizzes.md` ||
-					f.path === `${folder}/maps.md`
-				)
-					this.scheduleReload();
+				if (isDataFile(f.path)) this.scheduleReload();
+			})
+		);
+		// The first save of a data file creates it rather than modifying it
+		// (e.g. the very first map linked writes a brand-new maps.md).
+		this.registerEvent(
+			this.app.vault.on("create", (f) => {
+				if (isDataFile(f.path)) this.scheduleReload();
 			})
 		);
 		await this.reload();
@@ -989,12 +999,35 @@ export class EntityBrowserView extends ItemView {
 
 	// --- maps section -----------------------------------------------------
 
+	private mapQuery = "";
+
+	// A map's place in time: the earliest year among its linked events.
+	private mapSortKey(m: MapEntry): number {
+		let key = Number.POSITIVE_INFINITY;
+		for (const evId of m.events) {
+			const tag = this.events.get(evId)?.tag;
+			const d = tag ? parseYearTag(tag) : null;
+			if (d && d.sortKey < key) key = d.sortKey;
+		}
+		return key;
+	}
+
 	private renderMaps(
 		host: HTMLElement,
 		frame: Extract<NavFrame, { kind: "maps" }>
 	): void {
 		const wrap = host.createDiv({ cls: "hl-eb-maps" });
 		const head = wrap.createDiv({ cls: "hl-eb-maps-head" });
+		const search = head.createEl("input", {
+			cls: "hl-eb-search hl-eb-maps-search",
+			type: "search",
+			attr: { placeholder: "搜索地图…" },
+		});
+		search.value = this.mapQuery;
+		search.addEventListener("input", () => {
+			this.mapQuery = search.value;
+			paint();
+		});
 		head.createSpan({
 			cls: "hl-eb-count",
 			text: `${this.maps.length} 张地图`,
@@ -1004,15 +1037,12 @@ export class EntityBrowserView extends ItemView {
 			text: "＋ 新建地图",
 		});
 		add.addEventListener("click", () => {
-			new ImageSuggestModal(this.app, (f) => {
-				const entry = newMapEntry(
-					(id) => this.maps.some((m) => m.id === id),
-					{ title: f.basename, image: f.path }
-				);
-				new MapModal(this.app, this.plugin, entry, true, () =>
-					void this.reload()
-				).open();
-			}).open();
+			const entry = newMapEntry((id) =>
+				this.maps.some((m) => m.id === id)
+			);
+			new MapModal(this.app, this.plugin, entry, true, () =>
+				void this.reload()
+			).open();
 		});
 
 		if (!this.maps.length) {
@@ -1023,51 +1053,129 @@ export class EntityBrowserView extends ItemView {
 			return;
 		}
 
-		const grid = wrap.createDiv({ cls: "hl-eb-map-grid" });
 		const entities = new Map(
 			this.rows.map((r) => [r.entity.id, r.entity])
 		);
-		const sorted = [...this.maps].sort((a, b) =>
-			(a.title || a.image).localeCompare(b.title || b.image)
-		);
-		for (const m of sorted) {
-			const card = grid.createDiv({ cls: "hl-eb-map-card" });
-			const thumb = card.createDiv({ cls: "hl-eb-map-thumb" });
-			const file = this.app.metadataCache.getFirstLinkpathDest(
-				m.image,
-				""
-			);
-			if (file instanceof TFile) {
-				const img = thumb.createEl("img");
-				img.src = this.app.vault.getResourcePath(file);
-			} else {
-				thumb.createSpan({
-					cls: "hl-eb-map-thumb-missing",
-					text: "图片缺失",
-				});
-			}
-			const meta = card.createDiv({ cls: "hl-eb-map-meta" });
-			meta.createDiv({
-				cls: "hl-eb-map-title",
-				text: m.title || m.image,
+		const list = wrap.createDiv({ cls: "hl-eb-map-list" });
+		const paint = (): void => {
+			list.empty();
+			const q = this.mapQuery.trim().toLowerCase();
+			const shown = this.maps.filter((m) => {
+				if (!q) return true;
+				const tags = m.events
+					.map((id) => this.events.get(id)?.tag ?? "")
+					.join(" ");
+				const names = m.entities
+					.map((id) => {
+						const e = entities.get(id);
+						return e ? displayName(e) : "";
+					})
+					.join(" ");
+				return `${m.title} ${m.image} ${m.body} ${tags} ${names}`
+					.toLowerCase()
+					.includes(q);
 			});
-			const sub = meta.createDiv({ cls: "hl-eb-map-sub" });
-			if (m.range) sub.createSpan({ text: m.range });
-			if (m.events.length)
-				sub.createSpan({ text: `事件 ${m.events.length}` });
-			const names = m.entities
-				.map((id) => entities.get(id))
-				.filter((e): e is EntityEntry => !!e)
-				.map((e) => displayName(e))
-				.slice(0, 3);
-			if (names.length) sub.createSpan({ text: names.join(" · ") });
-			card.addEventListener("click", () => {
+			shown.sort((a, b) => {
+				const d = this.mapSortKey(a) - this.mapSortKey(b);
+				if (d) return d;
+				return (a.title || a.image).localeCompare(
+					b.title || b.image
+				);
+			});
+			if (!shown.length)
+				list.createDiv({
+					cls: "hl-eb-maps-empty",
+					text: "没有匹配的地图。",
+				});
+			for (const m of shown) this.buildMapRow(list, m, entities);
+		};
+		paint();
+		host.scrollTop = frame.scroll;
+	}
+
+	private buildMapRow(
+		list: HTMLElement,
+		m: MapEntry,
+		entities: Map<string, EntityEntry>
+	): void {
+		const row = list.createDiv({ cls: "hl-eb-map-row" });
+		const thumb = row.createDiv({ cls: "hl-eb-map-thumb" });
+		const file = this.app.metadataCache.getFirstLinkpathDest(
+			m.image,
+			""
+		);
+		if (file instanceof TFile) {
+			const img = thumb.createEl("img");
+			img.src = this.app.vault.getResourcePath(file);
+		} else {
+			thumb.createSpan({
+				cls: "hl-eb-map-thumb-missing",
+				text: "图片缺失",
+			});
+		}
+
+		const info = row.createDiv({ cls: "hl-eb-map-info" });
+		const top = info.createDiv({ cls: "hl-eb-map-top" });
+		top.createSpan({
+			cls: "hl-eb-map-title",
+			text: m.title || m.image,
+		});
+		const edit = top.createEl("button", {
+			cls: "hl-eb-map-edit",
+			text: "编辑",
+		});
+		edit.addEventListener("click", (e) => {
+			e.stopPropagation();
+			new MapModal(this.app, this.plugin, m, false, () =>
+				void this.reload()
+			).open();
+		});
+
+		const chips = info.createDiv({ cls: "hl-eb-map-chips" });
+		for (const evId of m.events) {
+			const tag = this.events.get(evId)?.tag ?? "";
+			const d = tag ? parseYearTag(tag) : null;
+			const chip = chips.createSpan({
+				cls: "hl-eb-map-ev-chip",
+				text: `⌛ ${d ? describeYear(d) : tag || evId}`,
+			});
+			chip.setAttr("aria-label", tag);
+			chip.addEventListener("click", (e) => {
+				e.stopPropagation();
+				openEvMenu(this.plugin, e, evId, tag);
+			});
+		}
+		for (const entId of m.entities) {
+			const ent = entities.get(entId);
+			const chip = chips.createSpan({
+				cls: "hl-eb-map-ent-chip",
+				text: ent ? displayName(ent) : entId,
+			});
+			chip.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.openEntityInPlace(entId);
+			});
+		}
+
+		const firstLine = m.body
+			.split("\n")
+			.map((l) => l.trim())
+			.find((l) => l.length > 0);
+		if (firstLine)
+			info.createDiv({ cls: "hl-eb-map-note", text: firstLine });
+
+		row.addEventListener("click", () => {
+			if (file instanceof TFile)
+				new MapViewerModal(
+					this.app,
+					file,
+					m.title || file.basename
+				).open();
+			else
 				new MapModal(this.app, this.plugin, m, false, () =>
 					void this.reload()
 				).open();
-			});
-		}
-		host.scrollTop = frame.scroll;
+		});
 	}
 
 	private freshTypeName(): string {
