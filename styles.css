@@ -1538,6 +1538,102 @@ input.hl-tag-chip-input:focus-visible {
 	border-bottom: 1px solid var(--background-modifier-border);
 	flex: 0 0 auto;
 }
+
+/* --- Entities: tag sidebar + list split -------------------------------- */
+.hl-eb-split {
+	flex: 1 1 auto;
+	display: flex;
+	min-height: 0;
+}
+.hl-eb-tagbar {
+	flex: 0 0 200px;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	border-right: 1px solid var(--background-modifier-border);
+	padding: 8px 8px 12px;
+	gap: 6px;
+}
+.hl-eb-tag-search {
+	flex: 0 0 auto;
+	width: 100%;
+	font-size: var(--font-ui-small);
+}
+.hl-eb-tag-list {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.hl-eb-tag-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 8px;
+	border-radius: var(--radius-s);
+	border-left: 2px solid transparent;
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	user-select: none;
+}
+.hl-eb-tag-item:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-eb-tag-item.is-active {
+	background: var(--background-modifier-hover);
+	border-left-color: var(--interactive-accent);
+	color: var(--text-normal);
+	font-weight: 600;
+}
+.hl-eb-tag-item.is-dim {
+	opacity: 0.45;
+}
+.hl-eb-tag-item.is-fixed {
+	font-style: italic;
+}
+.hl-eb-tag-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hl-eb-tag-count {
+	flex: 0 0 auto;
+	font-size: var(--font-ui-smaller);
+	font-family: var(--font-monospace);
+	color: var(--text-faint);
+}
+.hl-eb-tag-empty {
+	padding: 8px;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+.hl-eb-main {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+.hl-eb-tag-menu-btn {
+	display: none;
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+.hl-eb-tag-menu-btn.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+.hl-eb-split.is-narrow .hl-eb-tagbar {
+	display: none;
+}
+.hl-eb-split.is-narrow .hl-eb-tag-menu-btn {
+	display: inline-block;
+}
 .hl-eb-search {
 	flex: 1 1 12em;
 	min-width: 8em;
@@ -1576,9 +1672,13 @@ input.hl-tag-chip-input:focus-visible {
 	position: absolute;
 	left: 0;
 	right: 0;
-	display: flex;
+	display: grid;
+	grid-template-columns: minmax(120px, 200px) 88px minmax(0, 1fr) minmax(
+			0,
+			1.2fr
+		) auto;
 	align-items: center;
-	gap: 8px;
+	column-gap: 10px;
 	padding: 0 8px;
 	border-radius: 6px;
 	cursor: pointer;
@@ -1588,18 +1688,36 @@ input.hl-tag-chip-input:focus-visible {
 	background: var(--background-modifier-hover);
 }
 .hl-eb-name {
-	flex: 0 0 auto;
 	font-weight: 600;
-	max-width: 40%;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .hl-eb-row-pill {
+	justify-self: start;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hl-eb-row-tags {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	overflow: hidden;
+}
+.hl-eb-row-tag {
 	flex: 0 0 auto;
+	padding: 0 6px;
+	border-radius: 8px;
+	font-size: var(--font-ui-smaller);
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+	white-space: nowrap;
 }
 .hl-eb-hint {
-	flex: 1 1 auto;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -1610,6 +1728,7 @@ input.hl-tag-chip-input:focus-visible {
 .hl-eb-badge {
 	flex: 0 0 auto;
 	margin-left: auto;
+	justify-self: end;
 	padding: 1px 8px;
 	border-radius: 10px;
 	font-size: var(--font-ui-smaller);

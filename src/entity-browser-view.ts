@@ -33,6 +33,9 @@ interface Row {
 type SortKey = "occ" | "name" | "file";
 type HealthKey = "all" | "unused" | "no-notes";
 
+// Tag filter sentinel: the empty string stands for "entries with no tags".
+const NO_TAG = "";
+
 // Browser-style navigation stack: every place you can be in the backstage is
 // a frame; back/forward restores it including scroll position and filters.
 type NavFrame =
@@ -40,6 +43,7 @@ type NavFrame =
 			kind: "entities";
 			query: string;
 			types: string[];
+			tags: string[];
 			sort: SortKey;
 			health: HealthKey;
 			scroll: number;
@@ -53,7 +57,7 @@ type NavFrame =
 	  }
 	| { kind: "entity"; id: string; scroll: number };
 
-const ROW_H = 40;
+const ROW_H = 32;
 const OVERSCAN = 8;
 
 // The plugin backstage: entity catalogue and type manager as sections of one
@@ -66,10 +70,20 @@ export class EntityBrowserView extends ItemView {
 	private events = new Map<string, EventEntry>();
 	private query = "";
 	private selectedTypes = new Set<string>();
+	private selectedTags = new Set<string>();
+	private tagQuery = "";
 	private sort: SortKey = "occ";
 	private health: HealthKey = "all";
 	private stack: NavFrame[] = [
-		{ kind: "entities", query: "", types: [], sort: "occ", health: "all", scroll: 0 },
+		{
+			kind: "entities",
+			query: "",
+			types: [],
+			tags: [],
+			sort: "occ",
+			health: "all",
+			scroll: 0,
+		},
 	];
 	private pos = 0;
 	private bodyEl?: HTMLElement;
@@ -79,6 +93,8 @@ export class EntityBrowserView extends ItemView {
 	private countEl?: HTMLElement;
 	private scrollEl?: HTMLElement;
 	private spacerEl?: HTMLElement;
+	private tagBarEl?: HTMLElement;
+	private tagMenuBtn?: HTMLButtonElement;
 	private reloadTimer: number | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: HistoryLoggingPlugin) {
@@ -189,6 +205,7 @@ export class EntityBrowserView extends ItemView {
 		if (f.kind === "entities") {
 			f.query = this.query;
 			f.types = [...this.selectedTypes];
+			f.tags = [...this.selectedTags];
 			f.sort = this.sort;
 			f.health = this.health;
 			f.scroll = scroll;
@@ -283,6 +300,7 @@ export class EntityBrowserView extends ItemView {
 						kind: "entities",
 						query: this.query,
 						types: [...this.selectedTypes],
+						tags: [...this.selectedTags],
 						sort: this.sort,
 						health: this.health,
 						scroll: 0,
@@ -347,10 +365,30 @@ export class EntityBrowserView extends ItemView {
 	): void {
 		this.query = frame.query;
 		this.selectedTypes = new Set(frame.types);
+		this.selectedTags = new Set(frame.tags);
 		this.sort = frame.sort;
 		this.health = frame.health;
 
-		const bar = host.createDiv({ cls: "hl-eb-bar" });
+		const split = host.createDiv({ cls: "hl-eb-split" });
+		this.tagBarEl = split.createDiv({ cls: "hl-eb-tagbar" });
+		const main = split.createDiv({ cls: "hl-eb-main" });
+		// The tag sidebar needs real width; in a narrow pane it folds into a
+		// dropdown button in the toolbar instead.
+		const ro = new ResizeObserver(() =>
+			split.toggleClass("is-narrow", split.clientWidth < 560)
+		);
+		ro.observe(split);
+		this.register(() => ro.disconnect());
+
+		const bar = main.createDiv({ cls: "hl-eb-bar" });
+
+		this.tagMenuBtn = bar.createEl("button", {
+			cls: "hl-modal-foot-btn hl-eb-tag-menu-btn",
+		});
+		this.paintTagMenuBtn();
+		this.tagMenuBtn.addEventListener("click", (e) =>
+			this.openTagMenu(e)
+		);
 
 		const search = bar.createEl("input", {
 			cls: "hl-eb-search",
@@ -425,9 +463,9 @@ export class EntityBrowserView extends ItemView {
 		});
 		add.addEventListener("click", () => this.createEntity());
 
-		this.countEl = host.createDiv({ cls: "hl-eb-count" });
+		this.countEl = main.createDiv({ cls: "hl-eb-count" });
 
-		this.scrollEl = host.createDiv({ cls: "hl-eb-list" });
+		this.scrollEl = main.createDiv({ cls: "hl-eb-list" });
 		this.spacerEl = this.scrollEl.createDiv({ cls: "hl-eb-spacer" });
 		this.registerDomEvent(this.scrollEl, "scroll", () =>
 			this.renderWindow()
@@ -447,25 +485,194 @@ export class EntityBrowserView extends ItemView {
 			this.spacerEl.style.height = `${this.filtered.length * ROW_H}px`;
 		}
 		this.renderWindow(true);
+		this.renderTagBar();
+		this.paintTagMenuBtn();
+	}
+
+	// --- tag sidebar ------------------------------------------------------
+
+	// Entries that pass everything except the tag selection: the base set the
+	// sidebar counts against, so counts narrow along with search / type /
+	// health filters (Zotero-style co-occurrence).
+	private tagFilterBase(): Row[] {
+		return this.rows.filter((r) => this.passesNonTagFilters(r));
+	}
+
+	private matchesTags(r: Row): boolean {
+		for (const t of this.selectedTags) {
+			if (t === NO_TAG) {
+				if (r.entity.tags.length) return false;
+			} else if (!r.entity.tags.includes(t)) return false;
+		}
+		return true;
+	}
+
+	private toggleTag(tag: string): void {
+		if (this.selectedTags.has(tag)) this.selectedTags.delete(tag);
+		else {
+			// 「无标签」和具体 tag 互斥：交集必然为空。
+			if (tag === NO_TAG) this.selectedTags.clear();
+			else this.selectedTags.delete(NO_TAG);
+			this.selectedTags.add(tag);
+		}
+		this.refreshList();
+	}
+
+	private renderTagBar(): void {
+		const host = this.tagBarEl;
+		if (!host) return;
+		host.empty();
+
+		const search = host.createEl("input", {
+			cls: "hl-eb-tag-search",
+			type: "search",
+			placeholder: "筛选标签…",
+		});
+		search.value = this.tagQuery;
+		search.addEventListener("input", () => {
+			this.tagQuery = search.value;
+			this.renderTagBar();
+			const el = this.tagBarEl?.querySelector<HTMLInputElement>(
+				".hl-eb-tag-search"
+			);
+			el?.focus();
+			el?.setSelectionRange(el.value.length, el.value.length);
+		});
+
+		const list = host.createDiv({ cls: "hl-eb-tag-list" });
+		const base = this.tagFilterBase();
+		const withSel = base.filter((r) => this.matchesTags(r));
+
+		const mkItem = (
+			label: string,
+			count: number,
+			opts: { tag?: string; fixed?: boolean } = {}
+		): void => {
+			const { tag, fixed } = opts;
+			const active =
+				tag === undefined
+					? this.selectedTags.size === 0
+					: this.selectedTags.has(tag);
+			const item = list.createDiv({
+				cls: `hl-eb-tag-item${active ? " is-active" : ""}${
+					fixed ? " is-fixed" : ""
+				}${count || active ? "" : " is-dim"}`,
+			});
+			item.createSpan({ cls: "hl-eb-tag-name", text: label });
+			item.createSpan({ cls: "hl-eb-tag-count", text: String(count) });
+			item.addEventListener("click", () => {
+				if (tag === undefined) {
+					if (!this.selectedTags.size) return;
+					this.selectedTags.clear();
+					this.refreshList();
+				} else this.toggleTag(tag);
+			});
+		};
+
+		mkItem("全部", base.length);
+		mkItem(
+			"无标签",
+			withSel.filter((r) => !r.entity.tags.length).length,
+			{ tag: NO_TAG, fixed: true }
+		);
+
+		const counts = new Map<string, number>();
+		for (const r of withSel)
+			for (const t of r.entity.tags)
+				counts.set(t, (counts.get(t) ?? 0) + 1);
+		// Selected tags stay listed even when the narrowed count hits zero.
+		for (const t of this.selectedTags)
+			if (t !== NO_TAG && !counts.has(t)) counts.set(t, 0);
+		// Unselected tags absent from the current result set still show,
+		// dimmed, so the full vocabulary stays surveyable.
+		for (const r of base)
+			for (const t of r.entity.tags)
+				if (!counts.has(t)) counts.set(t, 0);
+
+		const q = this.tagQuery.trim().toLowerCase();
+		const tags = [...counts.entries()]
+			.filter(([t]) => !q || t.toLowerCase().includes(q))
+			.sort(
+				(a, b) => b[1] - a[1] || a[0].localeCompare(b[0])
+			);
+		for (const [t, n] of tags) mkItem(t, n, { tag: t });
+		if (!tags.length)
+			list.createDiv({
+				cls: "hl-eb-tag-empty",
+				text: q ? "没有匹配的标签。" : "还没有标签。",
+			});
+	}
+
+	private paintTagMenuBtn(): void {
+		const btn = this.tagMenuBtn;
+		if (!btn) return;
+		const n = this.selectedTags.size;
+		btn.setText(n ? `标签 · ${n} ▾` : "标签 ▾");
+		btn.toggleClass("is-active", n > 0);
+	}
+
+	// Narrow-pane fallback: the sidebar's content as a checkable menu.
+	private openTagMenu(e: MouseEvent): void {
+		const menu = new Menu();
+		const base = this.tagFilterBase();
+		const withSel = base.filter((r) => this.matchesTags(r));
+		menu.addItem((item) =>
+			item
+				.setTitle(`全部（${base.length}）`)
+				.setChecked(this.selectedTags.size === 0)
+				.onClick(() => {
+					this.selectedTags.clear();
+					this.refreshList();
+				})
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle(
+					`无标签（${withSel.filter((r) => !r.entity.tags.length).length}）`
+				)
+				.setChecked(this.selectedTags.has(NO_TAG))
+				.onClick(() => this.toggleTag(NO_TAG))
+		);
+		menu.addSeparator();
+		const counts = new Map<string, number>();
+		for (const r of withSel)
+			for (const t of r.entity.tags)
+				counts.set(t, (counts.get(t) ?? 0) + 1);
+		for (const t of this.selectedTags)
+			if (t !== NO_TAG && !counts.has(t)) counts.set(t, 0);
+		for (const r of base)
+			for (const t of r.entity.tags)
+				if (!counts.has(t)) counts.set(t, 0);
+		const tags = [...counts.entries()].sort(
+			(a, b) => b[1] - a[1] || a[0].localeCompare(b[0])
+		);
+		for (const [t, n] of tags)
+			menu.addItem((item) =>
+				item
+					.setTitle(`${t}（${n}）`)
+					.setChecked(this.selectedTags.has(t))
+					.onClick(() => this.toggleTag(t))
+			);
+		menu.showAtMouseEvent(e);
+	}
+
+	private passesNonTagFilters(r: Row): boolean {
+		const q = this.query.trim().toLowerCase();
+		if (this.selectedTypes.size && !this.selectedTypes.has(r.entity.type))
+			return false;
+		if (this.health === "unused" && r.occ.length) return false;
+		if (this.health === "no-notes" && r.entity.body.trim()) return false;
+		if (!q) return true;
+		return (
+			entitySearchText(r.entity).toLowerCase().includes(q) ||
+			r.entity.body.toLowerCase().includes(q)
+		);
 	}
 
 	private applyFilters(): void {
-		const q = this.query.trim().toLowerCase();
-		this.filtered = this.rows.filter((r) => {
-			if (
-				this.selectedTypes.size &&
-				!this.selectedTypes.has(r.entity.type)
-			)
-				return false;
-			if (this.health === "unused" && r.occ.length) return false;
-			if (this.health === "no-notes" && r.entity.body.trim())
-				return false;
-			if (!q) return true;
-			return (
-				entitySearchText(r.entity).toLowerCase().includes(q) ||
-				r.entity.body.toLowerCase().includes(q)
-			);
-		});
+		this.filtered = this.rows.filter(
+			(r) => this.passesNonTagFilters(r) && this.matchesTags(r)
+		);
 		const name = (r: Row): string => displayName(r.entity);
 		if (this.sort === "occ")
 			this.filtered.sort(
@@ -533,8 +740,11 @@ export class EntityBrowserView extends ItemView {
 			pill.style.color = color;
 			pill.style.borderColor = color;
 		}
+		const tagsCell = el.createSpan({ cls: "hl-eb-row-tags" });
+		for (const t of row.entity.tags)
+			tagsCell.createSpan({ cls: "hl-eb-row-tag", text: t });
 		const hint = entityHint(row.entity, displayName(row.entity));
-		if (hint) el.createSpan({ cls: "hl-eb-hint", text: hint });
+		el.createSpan({ cls: "hl-eb-hint", text: hint ?? "" });
 
 		const badge = el.createSpan({
 			cls: `hl-eb-badge${row.occ.length ? "" : " is-zero"}`,
@@ -779,6 +989,7 @@ export class EntityBrowserView extends ItemView {
 					kind: "entities",
 					query: "",
 					types: [t.name],
+					tags: [],
 					sort: this.sort,
 					health: "all",
 					scroll: 0,
@@ -924,6 +1135,7 @@ export class EntityBrowserView extends ItemView {
 				kind: "entities",
 				query: "",
 				types: [],
+				tags: [],
 				sort: this.sort,
 				health: "all",
 				scroll: 0,

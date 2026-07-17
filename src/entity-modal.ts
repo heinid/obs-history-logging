@@ -1,4 +1,11 @@
-import { App, FuzzySuggestModal, Modal, Notice, TFile } from "obsidian";
+import {
+	AbstractInputSuggest,
+	App,
+	FuzzySuggestModal,
+	Modal,
+	Notice,
+	TFile,
+} from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { DbType, EntityEntry, displayName, orderLangs } from "./db-format";
 import { entitySearchText } from "./db-marker";
@@ -76,6 +83,7 @@ export class EntityModal extends Modal {
 	private everSaved = false;
 	private notified = false;
 	private notes?: LiveEditor;
+	private knownTags: string[] = [];
 
 	constructor(
 		app: App,
@@ -97,6 +105,10 @@ export class EntityModal extends Modal {
 			this.notes?.closeSuggestIfOpen() ?? false
 		);
 		this.types = await this.plugin.store.readDbTypes();
+		const all = await this.plugin.store.readEntities();
+		this.knownTags = [
+			...new Set([...all.values()].flatMap((e) => e.tags)),
+		].sort((a, b) => a.localeCompare(b));
 		if (!this.entity.type) this.entity.type = this.types[0]?.name ?? "";
 		this.cards = toCards(this.entity, this.plugin.settings.entityLangs);
 		this.render();
@@ -385,6 +397,19 @@ export class EntityModal extends Modal {
 		input.addEventListener("blur", () => {
 			if (input.value.trim()) commit();
 		});
+		new EntityTagSuggest(
+			this.app,
+			input,
+			() => this.knownTags.filter((t) => !this.entity.tags.includes(t)),
+			(tag) => {
+				this.entity.tags.push(tag);
+				this.markDirty();
+				this.renderTags(host);
+				(
+					host.querySelector("input") as HTMLInputElement | null
+				)?.focus();
+			}
+		);
 	}
 
 	private syncCards(): void {
@@ -443,6 +468,36 @@ export class EntityModal extends Modal {
 		// unsaved new entity simply discards it.
 		this.notes?.destroy();
 		this.contentEl.empty();
+	}
+}
+
+// Completes the tag-chip input against tags already used on other entities,
+// so spelling variants don't multiply.
+class EntityTagSuggest extends AbstractInputSuggest<string> {
+	constructor(
+		app: App,
+		input: HTMLInputElement,
+		private candidates: () => string[],
+		private onPick: (tag: string) => void
+	) {
+		super(app, input);
+	}
+
+	protected getSuggestions(query: string): string[] {
+		const q = query.trim().toLowerCase();
+		if (!q) return [];
+		return this.candidates()
+			.filter((t) => t.toLowerCase().includes(q))
+			.slice(0, 12);
+	}
+
+	renderSuggestion(tag: string, el: HTMLElement): void {
+		el.setText(tag);
+	}
+
+	selectSuggestion(tag: string): void {
+		this.close();
+		this.onPick(tag);
 	}
 }
 
