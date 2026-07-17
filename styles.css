@@ -1755,11 +1755,14 @@ input.hl-tag-chip-input:focus-visible {
 	width: min(680px, calc(100vw - 32px));
 	max-width: 92vw;
 }
-.modal:has(.hl-quiz-practice),
 .modal:has(.hl-quiz-editor) {
 	width: min(560px, calc(100vw - 64px));
 	max-width: 84vw;
 	min-height: min(560px, calc(100vh - 96px));
+}
+.modal:has(.hl-quiz-practice) {
+	width: min(480px, calc(100vw - 64px));
+	max-width: 84vw;
 }
 .hl-quiz-modal {
 	width: 100%;
@@ -2113,7 +2116,7 @@ input.hl-tag-chip-input:focus-visible {
 	width: 100%;
 	max-width: 100%;
 	min-width: 0;
-	height: clamp(360px, 52vh, 460px);
+	height: clamp(300px, 44vh, 380px);
 	max-height: calc(100vh - 120px);
 	display: flex;
 	flex-direction: column;
@@ -2169,8 +2172,10 @@ input.hl-tag-chip-input:focus-visible {
 }
 .hl-quiz-practice-panel {
 	min-height: 0;
-	padding: 15px 18px;
+	padding: 12px 15px;
 	overflow-y: auto;
+	user-select: text;
+	-webkit-user-select: text;
 }
 .hl-quiz-practice-question-panel {
 	border-bottom: 1px solid var(--background-modifier-border);
