@@ -2622,13 +2622,20 @@ input.hl-tag-chip-input:focus-visible {
 	font-size: 0.9em;
 }
 
-/* In-view player */
+/* In-view player: one continuous block — header, progress bar as the
+   card's top edge, body, and a footer bar the buttons anchor to. */
 .hl-player {
 	display: flex;
 	flex-direction: column;
-	height: 100%;
-	max-width: 640px;
+	max-width: 560px;
 	margin: 0 auto;
+	padding-top: 32px;
+}
+.hl-player-block {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	overflow: hidden;
+	background: var(--background-secondary);
 }
 .hl-player-top {
 	display: flex;
@@ -2658,8 +2665,7 @@ input.hl-tag-chip-input:focus-visible {
 	margin-left: 0;
 }
 .hl-player-progress {
-	height: 3px;
-	border-radius: 2px;
+	height: 4px;
 	background: var(--background-modifier-border);
 	overflow: hidden;
 }
@@ -2669,7 +2675,7 @@ input.hl-tag-chip-input:focus-visible {
 	transition: width 200ms ease;
 }
 .hl-player-toast {
-	margin-top: 8px;
+	margin-top: 10px;
 	padding: 6px 10px;
 	border-radius: 6px;
 	font-size: 0.85em;
@@ -2677,23 +2683,33 @@ input.hl-tag-chip-input:focus-visible {
 	border: 1px solid var(--color-yellow);
 	color: var(--text-normal);
 }
-.hl-player-stage {
-	flex: 1;
+.hl-player-card {
 	display: flex;
 	flex-direction: column;
-	justify-content: center;
-	padding: 16px 0;
-	min-height: 0;
-	overflow-y: auto;
 }
-.hl-player-card {
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 10px;
-	background: var(--background-secondary);
-	padding: 22px 24px;
+.hl-player-body {
+	padding: 20px 22px;
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+	min-height: 120px;
+}
+.hl-player-footer {
+	display: flex;
+	align-items: stretch;
+	gap: 8px;
+	padding: 10px 12px;
+	border-top: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+}
+.hl-player-footer button {
+	flex: 1;
+}
+.hl-player-key-tip {
+	align-self: center;
+	color: var(--text-faint);
+	font-size: 0.75em;
+	padding: 0 8px;
 }
 .hl-player-question {
 	font-size: 1.15em;
@@ -2734,24 +2750,6 @@ input.hl-tag-chip-input:focus-visible {
 .hl-player-hint-btn:hover {
 	color: var(--text-normal);
 }
-.hl-player-flip-tip {
-	text-align: center;
-	color: var(--text-faint);
-	font-size: 0.8em;
-	margin-top: 10px;
-}
-.hl-player-actions {
-	display: flex;
-	gap: 10px;
-	justify-content: center;
-	align-items: center;
-	padding: 10px 0 16px;
-	flex-wrap: wrap;
-}
-.hl-player-actions button {
-	min-width: 130px;
-	padding: 8px 14px;
-}
 .hl-player-rate {
 	display: flex;
 	flex-direction: column;
@@ -2772,6 +2770,7 @@ input.hl-tag-chip-input:focus-visible {
 .hl-player-summary {
 	text-align: center;
 	gap: 14px;
+	padding: 22px;
 }
 .hl-player-summary h2 {
 	margin: 0;
@@ -2834,17 +2833,54 @@ input.hl-tag-chip-input:focus-visible {
 }
 
 /* Deck detail */
-.hl-detail-title {
-	font-weight: 600;
-}
-.hl-detail-title .hl-deck-match {
-	font-weight: 400;
-}
-.hl-detail-body {
-	margin-top: 10px;
+.hl-detail-page {
+	max-width: 720px;
+	margin: 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+}
+.hl-detail-summary {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	background: var(--background-secondary);
+	padding: 14px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+.hl-detail-group-head {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	background: var(--background-primary);
+	padding: 6px 2px 4px;
+}
+.hl-detail-kind {
+	flex-shrink: 0;
+	font-size: 0.7em;
+	font-weight: 600;
+	padding: 1px 6px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+}
+.hl-detail-kind-year {
+	color: var(--color-cyan);
+	border-color: var(--color-cyan);
+}
+.hl-detail-kind-cloze {
+	color: var(--color-purple);
+	border-color: var(--color-purple);
+}
+.hl-detail-kind-qa {
+	color: var(--color-blue);
+	border-color: var(--color-blue);
+}
+.hl-detail-row-title p {
+	margin: 0;
+	display: inline;
 }
 .hl-detail-list {
 	display: flex;
@@ -2885,4 +2921,10 @@ input.hl-tag-chip-input:focus-visible {
 	font-size: 0.85em;
 	padding: 3px 10px;
 	height: auto;
+}
+.hl-player-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 2px;
 }

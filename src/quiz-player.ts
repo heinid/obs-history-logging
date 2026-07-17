@@ -3,6 +3,7 @@
 // Cards of this deck coming off a short wait while the session runs are
 // interjected right after the current card instead of raising an alarm.
 
+import { setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { EventEntry } from "./types";
 import {
@@ -208,10 +209,22 @@ export class QuizPlayerPage extends PlayerPage {
 			const hint = card.createDiv({ cls: "hl-player-hint" });
 			renderQuizText(this.plugin, quiz.hint, hint, this.dbColors);
 		}
-		card.createDiv({
+		const meta = card.createDiv({ cls: "hl-player-meta" });
+		meta.createSpan({
 			cls: "hl-player-mastery",
 			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
 		});
+		const tag = this.eventOf(quiz)?.tag;
+		if (tag) {
+			const reveal = meta.createEl("button", {
+				cls: "hl-icon-btn hl-player-reveal",
+			});
+			setIcon(reveal, "gantt-chart");
+			reveal.setAttr("aria-label", "在时间线上显示");
+			reveal.addEventListener("click", () =>
+				void this.plugin.revealOnTimeline(quiz.sourceEvId, tag)
+			);
+		}
 	}
 
 	protected renderActions(bar: HTMLElement): void {

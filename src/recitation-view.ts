@@ -18,6 +18,7 @@ import { QuizPlayerPage } from "./quiz-player";
 import { RecitePlayerPage } from "./recite-player";
 import {
 	renderEventDeckDetail,
+	renderMasteryBar,
 	renderReciteDeckDetail,
 } from "./deck-detail";
 
@@ -190,13 +191,20 @@ export class RecitationView extends ItemView {
 					d.profile.name === this.page.profile
 			);
 			if (deck) {
-				renderEventDeckDetail(
+				void renderEventDeckDetail(
 					root,
-					deck.profile.name,
-					deck.profile.match,
-					deck.allIds
-						.map((id) => this.quizzes.get(id))
-						.filter((q): q is QuizEntry => !!q),
+					{
+						name: deck.profile.name,
+						match: deck.profile.match,
+						quizzes: deck.allIds
+							.map((id) => this.quizzes.get(id))
+							.filter((q): q is QuizEntry => !!q),
+						stats: deck.stats,
+						dueIds: deck.dueIds,
+						activeIds: deck.activeIds,
+						onStart: (label, ids) =>
+							this.startQuizSession(label, ids, deck.allIds),
+					},
 					{
 						plugin: this.plugin,
 						onBack: () => this.showList(),
@@ -214,10 +222,15 @@ export class RecitationView extends ItemView {
 					d.name === this.page.deck
 			);
 			if (deck) {
+				const candidates = reciteDeckCandidates(
+					this.entities.values(),
+					deck
+				);
 				renderReciteDeckDetail(
 					root,
 					deck,
-					reciteDeckCandidates(this.entities.values(), deck),
+					candidates,
+					() => this.startReciteSession(deck, candidates),
 					{
 						plugin: this.plugin,
 						onBack: () => this.showList(),
@@ -413,7 +426,7 @@ export class RecitationView extends ItemView {
 			return;
 		}
 
-		this.renderProgressBar(card, deck.stats);
+		renderMasteryBar(card, deck.stats);
 
 		const meta = card.createDiv({ cls: "hl-deck-meta" });
 		meta.createSpan({
@@ -479,22 +492,6 @@ export class RecitationView extends ItemView {
 				) && Date.parse(quiz.nextReview) <= now
 			);
 		});
-	}
-
-	// Mastery distribution: mastered + one segment per progress step.
-	private renderProgressBar(card: HTMLElement, stats: DeckStats): void {
-		const total = stats.active + stats.mastered;
-		if (!total) return;
-		const bar = card.createDiv({ cls: "hl-deck-bar" });
-		const seg = (cls: string, count: number): void => {
-			if (!count) return;
-			bar.createDiv({
-				cls: `hl-deck-bar-seg ${cls}`,
-			}).style.width = `${(count / total) * 100}%`;
-		};
-		seg("is-mastered", stats.mastered);
-		for (let step = stats.progressDist.length - 1; step >= 0; step--)
-			seg(`is-step-${Math.min(step, 3)}`, stats.progressDist[step]);
 	}
 
 	private renderReciteDecks(root: HTMLElement): void {

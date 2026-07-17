@@ -74,7 +74,11 @@ export abstract class PlayerPage {
 				text: `第 ${this.done() + 1} 题 · 共 ${this.total()} 题`,
 			});
 
-		const progress = host.createDiv({ cls: "hl-player-progress" });
+		// One continuous block: progress bar as the card's top edge, the
+		// question body, then a footer bar the buttons are anchored in —
+		// nothing floats on empty space.
+		const block = host.createDiv({ cls: "hl-player-block" });
+		const progress = block.createDiv({ cls: "hl-player-progress" });
 		const fraction = this.total()
 			? Math.min(1, this.done() / this.total())
 			: 0;
@@ -82,29 +86,22 @@ export abstract class PlayerPage {
 			cls: "hl-player-progress-fill",
 		}).style.width = `${Math.round(fraction * 100)}%`;
 
-		this.toastEl = host.createDiv({ cls: "hl-player-toast" });
-		this.toastEl.hide();
-
-		const stage = host.createDiv({ cls: "hl-player-stage" });
 		if (this.finished()) {
-			this.renderSummary(stage);
+			this.renderSummary(block.createDiv({ cls: "hl-player-card" }));
+			this.toastEl = host.createDiv({ cls: "hl-player-toast" });
+			this.toastEl.hide();
 			return;
 		}
-		const card = stage.createDiv({ cls: "hl-player-card" });
+		const card = block.createDiv({ cls: "hl-player-card" });
+		const body = card.createDiv({ cls: "hl-player-body" });
+		const footer = card.createDiv({ cls: "hl-player-footer" });
 		if (!this.revealed) {
-			this.renderFront(card);
-			card.addEventListener("click", (ev) => {
-				if ((ev.target as HTMLElement).closest("button, a, details"))
-					return;
-				this.revealed = true;
-				this.render();
+			this.renderFront(body);
+			footer.createSpan({
+				cls: "hl-player-key-tip",
+				text: "空格",
 			});
-			stage.createDiv({
-				cls: "hl-player-flip-tip",
-				text: "点击卡片或按 空格 翻面",
-			});
-			const bar = host.createDiv({ cls: "hl-player-actions" });
-			const show = bar.createEl("button", {
+			const show = footer.createEl("button", {
 				cls: "mod-cta hl-player-show",
 				text: "显示答案",
 			});
@@ -112,11 +109,12 @@ export abstract class PlayerPage {
 				this.revealed = true;
 				this.render();
 			});
-			return;
+		} else {
+			this.renderBack(body);
+			this.renderActions(footer);
 		}
-		this.renderBack(card);
-		const bar = host.createDiv({ cls: "hl-player-actions" });
-		this.renderActions(bar);
+		this.toastEl = host.createDiv({ cls: "hl-player-toast" });
+		this.toastEl.hide();
 	}
 
 	private toastEl: HTMLElement | null = null;
