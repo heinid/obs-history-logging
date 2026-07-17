@@ -218,23 +218,9 @@ export class QuizPlayerPage extends PlayerPage {
 			question,
 			this.dbColors
 		);
-		card.createDiv({
-			cls: "hl-player-mastery",
-			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
-		});
 		if (this.hintShown && quiz.hint) {
 			const hint = card.createDiv({ cls: "hl-player-hint" });
 			renderQuizText(this.plugin, quiz.hint, hint, this.dbColors);
-		}
-		if (quiz.hint && !this.hintShown) {
-			const hintBtn = card.createEl("button", {
-				cls: "hl-player-hint-btn",
-				text: "💡 提示",
-			});
-			hintBtn.addEventListener("click", () => {
-				this.hintShown = true;
-				this.render();
-			});
 		}
 	}
 
@@ -263,14 +249,39 @@ export class QuizPlayerPage extends PlayerPage {
 			const hint = card.createDiv({ cls: "hl-player-hint" });
 			renderQuizText(this.plugin, quiz.hint, hint, this.dbColors);
 		}
-		const meta = card.createDiv({ cls: "hl-player-meta" });
-		meta.createSpan({
-			cls: "hl-player-mastery",
-			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
-		});
+	}
+
+	protected headExtra(head: HTMLElement): void {
+		const quiz = this.current();
+		if (!quiz) return;
+		const steps = this.plugin.settings.quizMasterySteps;
+		const dots = head.createSpan({ cls: "hl-player-dots" });
+		dots.setAttr("aria-label", `掌握 ${quiz.progress}/${steps}`);
+		for (let i = 0; i < steps; i++)
+			dots.createSpan({
+				cls:
+					i < quiz.progress
+						? "hl-player-dot is-on"
+						: "hl-player-dot",
+			});
+	}
+
+	protected footerExtras(left: HTMLElement, right: HTMLElement): void {
+		const quiz = this.current();
+		if (!quiz) return;
+		if (quiz.hint && !this.hintShown) {
+			const hintBtn = left.createEl("button", {
+				cls: "hl-player-hint-btn",
+				text: "💡 提示",
+			});
+			hintBtn.addEventListener("click", () => {
+				this.hintShown = true;
+				this.render();
+			});
+		}
 		const tag = this.eventOf(quiz)?.tag;
 		if (tag) {
-			const reveal = meta.createEl("button", {
+			const reveal = right.createEl("button", {
 				cls: "hl-icon-btn hl-player-reveal",
 			});
 			setIcon(reveal, "gantt-chart");

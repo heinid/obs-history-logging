@@ -73,20 +73,22 @@ export class RecitePlayerPage extends PlayerPage {
 		this.renderContextHint(card, entity);
 	}
 
+	protected footerExtras(left: HTMLElement, _right: HTMLElement): void {
+		if (this.hintShown || this.finished()) return;
+		const btn = left.createEl("button", {
+			cls: "hl-player-hint-btn",
+			text: "💡 语境",
+		});
+		btn.addEventListener("click", () => {
+			this.hintShown = true;
+			this.render();
+		});
+	}
+
 	// Masked occurrence lines as optional context. Lazy: scanned on first
 	// request per entity and cached for the session.
 	private renderContextHint(card: HTMLElement, entity: EntityEntry): void {
-		if (!this.hintShown) {
-			const btn = card.createEl("button", {
-				cls: "hl-player-hint-btn",
-				text: "💡 语境",
-			});
-			btn.addEventListener("click", () => {
-				this.hintShown = true;
-				this.render();
-			});
-			return;
-		}
+		if (!this.hintShown) return;
 		const box = card.createDiv({ cls: "hl-player-hint hl-recite-context" });
 		const cached = this.hints.get(entity.id);
 		if (!cached) {

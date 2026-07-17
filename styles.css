@@ -2708,36 +2708,57 @@ input.hl-tag-chip-input:focus-visible {
 	flex-direction: column;
 }
 .hl-player-body {
-	position: relative;
-	padding: 20px 22px 44px;
+	padding: 18px 22px;
 	display: flex;
 	flex-direction: column;
 	justify-content: safe center;
 	gap: 10px;
-	height: 300px;
+	height: 240px;
 	overflow-y: auto;
-}
-.hl-player-body > .hl-player-mastery {
-	position: absolute;
-	left: 16px;
-	bottom: 12px;
+	background: var(--background-primary);
 }
 .hl-player-footer {
-	display: flex;
+	display: grid;
+	grid-template-columns: 1fr minmax(200px, 320px) 1fr;
 	align-items: stretch;
 	gap: 8px;
 	padding: 10px 12px;
 	border-top: 1px solid var(--background-modifier-border);
-	background: var(--background-primary);
+	background: var(--background-secondary);
 }
-.hl-player-footer button {
+.hl-player-foot-side {
+	display: flex;
+	align-items: center;
+}
+.hl-player-foot-side.is-right {
+	justify-content: flex-end;
+}
+.hl-player-foot-main {
+	display: flex;
+	align-items: stretch;
+	gap: 8px;
+}
+.hl-player-foot-main button {
 	flex: 1;
 }
-.hl-player-footer .hl-player-show {
-	flex: 0 0 auto;
-	width: 60%;
-	max-width: 320px;
-	margin: 0 auto;
+.hl-player-dots {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: auto;
+	padding: 0 6px;
+}
+.hl-player-dots + .hl-player-counter {
+	margin-left: 0;
+}
+.hl-player-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--background-modifier-border);
+}
+.hl-player-dot.is-on {
+	background: var(--interactive-accent);
 }
 .hl-player-question {
 	font-size: 1.15em;
@@ -2768,9 +2789,6 @@ input.hl-tag-chip-input:focus-visible {
 	padding-left: 10px;
 }
 .hl-player-hint-btn {
-	position: absolute;
-	right: 14px;
-	bottom: 10px;
 	background: transparent;
 	box-shadow: none;
 	color: var(--text-muted);
@@ -2843,7 +2861,6 @@ input.hl-tag-chip-input:focus-visible {
 .hl-recite-prompt {
 	font-size: 1.3em;
 	font-weight: 600;
-	text-align: center;
 }
 .hl-recite-context {
 	border-left: 3px solid var(--interactive-accent);
@@ -2972,10 +2989,6 @@ input.hl-tag-chip-input:focus-visible {
 	height: auto;
 }
 .hl-player-meta {
-	position: absolute;
-	left: 16px;
-	right: 14px;
-	bottom: 8px;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;

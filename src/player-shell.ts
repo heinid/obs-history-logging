@@ -35,6 +35,9 @@ export abstract class PlayerPage {
 	protected abstract renderActions(bar: HTMLElement): void;
 	protected abstract renderSummary(host: HTMLElement): void;
 	protected headExtra(_head: HTMLElement): void {}
+	// Small controls anchored in the footer's side zones (hint toggle,
+	// timeline jump…); the card face itself carries content only.
+	protected footerExtras(_left: HTMLElement, _right: HTMLElement): void {}
 
 	// Header counter text; subclasses may redefine the semantics.
 	protected counterText(): string {
@@ -108,9 +111,15 @@ export abstract class PlayerPage {
 		const card = block.createDiv({ cls: "hl-player-card" });
 		const body = card.createDiv({ cls: "hl-player-body" });
 		const footer = card.createDiv({ cls: "hl-player-footer" });
+		const left = footer.createDiv({ cls: "hl-player-foot-side" });
+		const main = footer.createDiv({ cls: "hl-player-foot-main" });
+		const right = footer.createDiv({
+			cls: "hl-player-foot-side is-right",
+		});
+		this.footerExtras(left, right);
 		if (!this.revealed) {
 			this.renderFront(body);
-			const show = footer.createEl("button", {
+			const show = main.createEl("button", {
 				cls: "mod-cta hl-player-show",
 				text: "显示答案",
 			});
@@ -120,7 +129,7 @@ export abstract class PlayerPage {
 			});
 		} else {
 			this.renderBack(body);
-			this.renderActions(footer);
+			this.renderActions(main);
 		}
 		this.toastEl = host.createDiv({ cls: "hl-player-toast" });
 		this.toastEl.hide();
