@@ -1759,6 +1759,26 @@ input.hl-tag-chip-input:focus-visible {
 	width: min(560px, calc(100vw - 64px));
 	max-width: 84vw;
 	min-height: min(560px, calc(100vh - 96px));
+	display: flex;
+	flex-direction: column;
+}
+/* Fill the fixed modal height: the form's text areas absorb the free
+   space and the button row sits on the bottom edge. */
+.modal:has(.hl-quiz-editor) .modal-content {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.hl-quiz-editor .hl-quiz-form {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+.hl-quiz-editor .hl-quiz-form .hl-quiz-textarea {
+	flex: 1 1 auto;
+}
+.hl-quiz-editor .hl-modal-foot {
+	margin-top: auto;
 }
 .modal:has(.hl-quiz-practice) {
 	width: min(480px, calc(100vw - 64px));
