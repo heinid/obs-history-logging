@@ -401,29 +401,6 @@ export class EntityBrowserView extends ItemView {
 			this.refreshList();
 		});
 
-		const pills = bar.createDiv({ cls: "hl-eb-pills" });
-		for (const t of this.types) {
-			const pill = pills.createSpan({
-				cls: "hl-type-pill hl-eb-pill",
-				text: t.name,
-			});
-			const paint = (): void => {
-				const on = this.selectedTypes.has(t.name);
-				pill.toggleClass("is-active", on);
-				pill.style.color = on ? "#fff" : t.color;
-				pill.style.borderColor = t.color;
-				pill.style.backgroundColor = on ? t.color : "";
-			};
-			paint();
-			pill.addEventListener("click", () => {
-				if (this.selectedTypes.has(t.name))
-					this.selectedTypes.delete(t.name);
-				else this.selectedTypes.add(t.name);
-				paint();
-				this.refreshList();
-			});
-		}
-
 		const sortSel = bar.createEl("select", { cls: "dropdown hl-eb-select" });
 		for (const [v, label] of [
 			["occ", "按出现次数"],
@@ -489,13 +466,26 @@ export class EntityBrowserView extends ItemView {
 		this.paintTagMenuBtn();
 	}
 
-	// --- tag sidebar ------------------------------------------------------
+	// --- filter sidebar ---------------------------------------------------
 
 	// Entries that pass everything except the tag selection: the base set the
-	// sidebar counts against, so counts narrow along with search / type /
-	// health filters (Zotero-style co-occurrence).
+	// tag counts are computed against, so counts narrow along with search /
+	// type / health filters (Zotero-style co-occurrence).
 	private tagFilterBase(): Row[] {
 		return this.rows.filter((r) => this.passesNonTagFilters(r));
+	}
+
+	// Same idea for the type section: everything except the type selection.
+	private typeFilterBase(): Row[] {
+		return this.rows.filter(
+			(r) => this.passesFiltersIgnoringTypes(r) && this.matchesTags(r)
+		);
+	}
+
+	private toggleType(name: string): void {
+		if (this.selectedTypes.has(name)) this.selectedTypes.delete(name);
+		else this.selectedTypes.add(name);
+		this.refreshList();
 	}
 
 	private matchesTags(r: Row): boolean {
@@ -523,6 +513,34 @@ export class EntityBrowserView extends ItemView {
 		if (!host) return;
 		host.empty();
 
+		// 范畴 section: single-valued attribute, multi-select = union. Fixed
+		// max height with its own scrollbar so a long type list never squeezes
+		// the tag section out.
+		host.createDiv({ cls: "hl-eb-side-head", text: "范畴" });
+		const typeList = host.createDiv({ cls: "hl-eb-type-filter-list" });
+		const typeBase = this.typeFilterBase();
+		const typeCounts = new Map<string, number>();
+		for (const r of typeBase)
+			typeCounts.set(
+				r.entity.type,
+				(typeCounts.get(r.entity.type) ?? 0) + 1
+			);
+		for (const t of this.types) {
+			const n = typeCounts.get(t.name) ?? 0;
+			const active = this.selectedTypes.has(t.name);
+			const item = typeList.createDiv({
+				cls: `hl-eb-tag-item${active ? " is-active" : ""}${
+					n || active ? "" : " is-dim"
+				}`,
+			});
+			const dot = item.createSpan({ cls: "hl-eb-type-dot" });
+			dot.style.backgroundColor = t.color;
+			item.createSpan({ cls: "hl-eb-tag-name", text: t.name });
+			item.createSpan({ cls: "hl-eb-tag-count", text: String(n) });
+			item.addEventListener("click", () => this.toggleType(t.name));
+		}
+
+		host.createDiv({ cls: "hl-eb-side-head", text: "标签" });
 		const search = host.createEl("input", {
 			cls: "hl-eb-tag-search",
 			type: "search",
@@ -606,14 +624,29 @@ export class EntityBrowserView extends ItemView {
 	private paintTagMenuBtn(): void {
 		const btn = this.tagMenuBtn;
 		if (!btn) return;
-		const n = this.selectedTags.size;
-		btn.setText(n ? `标签 · ${n} ▾` : "标签 ▾");
+		const n = this.selectedTags.size + this.selectedTypes.size;
+		btn.setText(n ? `筛选 · ${n} ▾` : "筛选 ▾");
 		btn.toggleClass("is-active", n > 0);
 	}
 
 	// Narrow-pane fallback: the sidebar's content as a checkable menu.
 	private openTagMenu(e: MouseEvent): void {
 		const menu = new Menu();
+		const typeBase = this.typeFilterBase();
+		const typeCounts = new Map<string, number>();
+		for (const r of typeBase)
+			typeCounts.set(
+				r.entity.type,
+				(typeCounts.get(r.entity.type) ?? 0) + 1
+			);
+		for (const t of this.types)
+			menu.addItem((item) =>
+				item
+					.setTitle(`${t.name}（${typeCounts.get(t.name) ?? 0}）`)
+					.setChecked(this.selectedTypes.has(t.name))
+					.onClick(() => this.toggleType(t.name))
+			);
+		menu.addSeparator();
 		const base = this.tagFilterBase();
 		const withSel = base.filter((r) => this.matchesTags(r));
 		menu.addItem((item) =>
@@ -657,9 +690,13 @@ export class EntityBrowserView extends ItemView {
 	}
 
 	private passesNonTagFilters(r: Row): boolean {
-		const q = this.query.trim().toLowerCase();
 		if (this.selectedTypes.size && !this.selectedTypes.has(r.entity.type))
 			return false;
+		return this.passesFiltersIgnoringTypes(r);
+	}
+
+	private passesFiltersIgnoringTypes(r: Row): boolean {
+		const q = this.query.trim().toLowerCase();
 		if (this.health === "unused" && r.occ.length) return false;
 		if (this.health === "no-notes" && r.entity.body.trim()) return false;
 		if (!q) return true;
@@ -731,30 +768,31 @@ export class EntityBrowserView extends ItemView {
 		el.style.height = `${ROW_H}px`;
 
 		el.createSpan({ cls: "hl-eb-name", text: displayName(row.entity) });
-		const pill = el.createSpan({
-			cls: "hl-type-pill hl-type-pill-static hl-eb-row-pill",
+		const typeCell = el.createSpan({ cls: "hl-eb-row-type" });
+		const dot = typeCell.createSpan({ cls: "hl-eb-type-dot" });
+		const color = this.typeColor(row.entity.type);
+		if (color) dot.style.backgroundColor = color;
+		typeCell.createSpan({
+			cls: "hl-eb-row-type-name",
 			text: row.entity.type || "?",
 		});
-		const color = this.typeColor(row.entity.type);
-		if (color) {
-			pill.style.color = color;
-			pill.style.borderColor = color;
-		}
 		const tagsCell = el.createSpan({ cls: "hl-eb-row-tags" });
 		for (const t of row.entity.tags)
 			tagsCell.createSpan({ cls: "hl-eb-row-tag", text: t });
 		const hint = entityHint(row.entity, displayName(row.entity));
 		el.createSpan({ cls: "hl-eb-hint", text: hint ?? "" });
 
-		const badge = el.createSpan({
-			cls: `hl-eb-badge${row.occ.length ? "" : " is-zero"}`,
-			text: row.occ.length ? `×${row.occ.length}` : "未使用",
-		});
-		if (row.occ.length)
+		const occCell = el.createSpan({ cls: "hl-eb-row-occ" });
+		if (row.occ.length) {
+			const badge = occCell.createSpan({
+				cls: "hl-eb-badge",
+				text: `×${row.occ.length}`,
+			});
 			badge.addEventListener("click", (e) => {
 				e.stopPropagation();
 				this.openOccMenu(e, row);
 			});
+		}
 
 		// Left click navigates in place; middle / Ctrl-click opens the
 		// standalone tab, like a browser's "open in new tab".

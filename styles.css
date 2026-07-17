@@ -1554,6 +1554,34 @@ input.hl-tag-chip-input:focus-visible {
 	padding: 8px 8px 12px;
 	gap: 6px;
 }
+.hl-eb-side-head {
+	flex: 0 0 auto;
+	padding: 2px 8px;
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	color: var(--text-faint);
+	text-transform: none;
+	letter-spacing: 0.03em;
+}
+.hl-eb-side-head + .hl-eb-side-head,
+.hl-eb-type-filter-list + .hl-eb-side-head {
+	margin-top: 10px;
+}
+.hl-eb-type-filter-list {
+	flex: 0 0 auto;
+	max-height: 180px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.hl-eb-type-dot {
+	flex: 0 0 auto;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--background-modifier-border);
+}
 .hl-eb-tag-search {
 	flex: 0 0 auto;
 	width: 100%;
@@ -1638,15 +1666,6 @@ input.hl-tag-chip-input:focus-visible {
 	flex: 1 1 12em;
 	min-width: 8em;
 }
-.hl-eb-pills {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-}
-.hl-eb-pill {
-	cursor: pointer;
-	user-select: none;
-}
 .hl-eb-select {
 	flex: 0 0 auto;
 }
@@ -1673,10 +1692,10 @@ input.hl-tag-chip-input:focus-visible {
 	left: 0;
 	right: 0;
 	display: grid;
-	grid-template-columns: minmax(120px, 200px) 88px minmax(0, 1fr) minmax(
+	grid-template-columns: minmax(120px, 200px) minmax(70px, 110px) minmax(
 			0,
-			1.2fr
-		) auto;
+			1fr
+		) minmax(0, 1.2fr) auto;
 	align-items: center;
 	column-gap: 10px;
 	padding: 0 8px;
@@ -1694,12 +1713,25 @@ input.hl-tag-chip-input:focus-visible {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.hl-eb-row-pill {
-	justify-self: start;
-	max-width: 100%;
+.hl-eb-row-type {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	overflow: hidden;
+}
+.hl-eb-row-type-name {
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+.hl-eb-row-occ {
+	justify-self: end;
+	min-width: 2.2em;
+	text-align: right;
 }
 .hl-eb-row-tags {
 	display: flex;
@@ -1728,7 +1760,6 @@ input.hl-tag-chip-input:focus-visible {
 .hl-eb-badge {
 	flex: 0 0 auto;
 	margin-left: auto;
-	justify-self: end;
 	padding: 1px 8px;
 	border-radius: 10px;
 	font-size: var(--font-ui-smaller);
