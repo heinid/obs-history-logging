@@ -59,6 +59,10 @@ export interface HistoryLoggingSettings {
 	annotTag: string;
 	// Deck display mode in the recitation hub: card wall or compact list.
 	reciteDeckDisplay: "wall" | "list";
+	// UI font scaling in percent (100 = theme default), per surface.
+	fontScalePlayer: number;
+	fontScaleModals: number;
+	fontScaleLists: number;
 }
 
 export interface EvMenuView {
@@ -88,6 +92,9 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	annotColor: "green",
 	annotTag: "专名和Entities积累",
 	reciteDeckDisplay: "wall",
+	fontScalePlayer: 100,
+	fontScaleModals: 100,
+	fontScaleLists: 100,
 };
 
 export const EVENTS_FILE = "events.md";
@@ -133,6 +140,51 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		new Setting(containerEl)
+			.setName("界面字体大小")
+			.setDesc("按区域缩放插件界面的字体（100% 为主题默认）。")
+			.setHeading();
+
+		const scaleSetting = (
+			name: string,
+			desc: string,
+			get: () => number,
+			set: (v: number) => void
+		) =>
+			new Setting(containerEl)
+				.setName(name)
+				.setDesc(desc)
+				.addSlider((slider) =>
+					slider
+						.setLimits(80, 150, 5)
+						.setValue(get())
+						.setDynamicTooltip()
+						.onChange(async (value) => {
+							set(value);
+							this.plugin.applyFontScales();
+							await this.plugin.saveSettings();
+						})
+				);
+
+		scaleSetting(
+			"背诵器",
+			"背诵页卡片与作答栏。",
+			() => this.plugin.settings.fontScalePlayer,
+			(v) => (this.plugin.settings.fontScalePlayer = v)
+		);
+		scaleSetting(
+			"弹窗",
+			"Quiz 编辑、练习与提醒弹窗。",
+			() => this.plugin.settings.fontScaleModals,
+			(v) => (this.plugin.settings.fontScaleModals = v)
+		);
+		scaleSetting(
+			"列表与后台",
+			"deck 列表、deck 详情与管理后台。",
+			() => this.plugin.settings.fontScaleLists,
+			(v) => (this.plugin.settings.fontScaleLists = v)
+		);
 
 		new Setting(containerEl)
 			.setName("管理后台")

@@ -1756,9 +1756,9 @@ input.hl-tag-chip-input:focus-visible {
 	max-width: 92vw;
 }
 .modal:has(.hl-quiz-editor) {
-	width: min(560px, calc(100vw - 64px));
+	width: min(500px, calc(100vw - 64px));
 	max-width: 84vw;
-	min-height: min(560px, calc(100vh - 96px));
+	min-height: min(500px, calc(100vh - 96px));
 	display: flex;
 	flex-direction: column;
 }
@@ -1783,6 +1783,23 @@ input.hl-tag-chip-input:focus-visible {
 .modal:has(.hl-quiz-practice) {
 	width: min(480px, calc(100vw - 64px));
 	max-width: 84vw;
+}
+
+/* Per-surface font scaling (settings sliders, 100% = theme default). */
+.hl-recitation-view,
+.hl-entity-browser {
+	font-size: calc(var(--hl-scale-lists, 1) * 100%);
+}
+.hl-quiz-modal,
+.hl-quiz-practice {
+	font-size: calc(var(--hl-scale-modals, 1) * 100%);
+}
+/* The player sits inside the recitation view: divide the list scale back
+   out so its own slider applies from the theme baseline. */
+.hl-recitation-view .hl-player {
+	font-size: calc(
+		var(--hl-scale-player, 1) / var(--hl-scale-lists, 1) * 100%
+	);
 }
 .hl-quiz-modal {
 	width: 100%;
@@ -1831,6 +1848,7 @@ input.hl-tag-chip-input:focus-visible {
 	width: 100%;
 	min-height: 76px;
 	resize: vertical;
+	font-size: 1.05em;
 }
 .hl-quiz-form .hl-quiz-textarea:first-of-type {
 	min-height: 110px;

@@ -61,6 +61,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+		this.applyFontScales();
 		this.store = new DataStore(this.app, () => this.settings.dataFolder);
 		this.modalStash = new ModalStash(this);
 
@@ -210,12 +211,30 @@ export default class HistoryLoggingPlugin extends Plugin {
 		});
 	}
 
+	// Per-surface UI font scaling, driven by CSS variables on the body.
+	applyFontScales(): void {
+		const set = (name: string, pct: number) =>
+			document.body.style.setProperty(
+				name,
+				`${Math.min(150, Math.max(80, pct)) / 100}`
+			);
+		set("--hl-scale-player", this.settings.fontScalePlayer);
+		set("--hl-scale-modals", this.settings.fontScaleModals);
+		set("--hl-scale-lists", this.settings.fontScaleLists);
+	}
+
 	onunload(): void {
 		this.app.workspace.detachLeavesOfType(TIMELINE_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(ERA_MANAGER_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(ENTITY_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(ENTITY_BROWSER_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(RECITATION_VIEW_TYPE);
+		for (const name of [
+			"--hl-scale-player",
+			"--hl-scale-modals",
+			"--hl-scale-lists",
+		])
+			document.body.style.removeProperty(name);
 	}
 
 	// Open (or focus) the recitation hub tab.
