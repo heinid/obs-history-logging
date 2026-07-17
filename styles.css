@@ -2734,6 +2734,7 @@ input.hl-tag-chip-input:focus-visible {
 .hl-player-foot-side {
 	display: flex;
 	align-items: center;
+	gap: 8px;
 }
 .hl-player-foot-side.is-right {
 	justify-content: flex-end;
