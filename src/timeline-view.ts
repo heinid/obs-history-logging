@@ -963,6 +963,26 @@ export class TimelineView extends ItemView {
 		}
 	}
 
+	// Name of the profile currently loaded in the filter bar ("" = none).
+	getProfileName(): string {
+		return this.bar.getTrack().profile;
+	}
+
+	// Jump landing from the recitation hub: load the deck's profile, switch
+	// the Show filter to all quizzes so the target's quiz cards are visible,
+	// then focus the event.
+	async focusEventWithProfile(
+		profile: Profile,
+		evId: string,
+		tag: string
+	): Promise<void> {
+		this.bar.loadProfile(profile);
+		this.bar.show = "all-quizzes";
+		this.tracks[this.active] = this.bar.getTrack();
+		await this.refresh();
+		await this.focusEvent(evId, tag);
+	}
+
 	// Scroll to the card of a specific event (by ev id, falling back to the
 	// bare tag) — the ⌛ menu's "Show on timeline" landing.
 	async focusEvent(evId: string, tag: string): Promise<void> {

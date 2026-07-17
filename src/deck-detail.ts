@@ -34,6 +34,7 @@ export interface EventDeckDetailData {
 	dueIds: string[];
 	activeIds: string[];
 	onStart(label: string, sessionIds: string[]): void;
+	profileName: string;
 }
 
 const KIND_LABEL: Record<QuizKind, string> = {
@@ -146,7 +147,16 @@ export async function renderEventDeckDetail(
 		});
 		const list = page.createDiv({ cls: "hl-detail-list" });
 		for (const quiz of group.items)
-			renderQuizRow(list, quiz, events, colors, schedule, now, ctx);
+			renderQuizRow(
+				list,
+				quiz,
+				events,
+				colors,
+				schedule,
+				now,
+				data.profileName,
+				ctx
+			);
 	}
 }
 
@@ -157,6 +167,7 @@ function renderQuizRow(
 	colors: Map<string, string>,
 	schedule: ReturnType<typeof quizSchedule>,
 	now: Date,
+	profileName: string,
 	ctx: DeckDetailCtx
 ): void {
 	const row = list.createDiv({ cls: "hl-detail-row" });
@@ -190,7 +201,11 @@ function renderQuizRow(
 		reveal.setAttr("aria-label", "在时间线上显示");
 		reveal.addEventListener("click", (ev) => {
 			ev.stopPropagation();
-			void ctx.plugin.revealOnTimeline(quiz.sourceEvId, tag);
+			void ctx.plugin.revealOnTimelineForProfile(
+				profileName,
+				quiz.sourceEvId,
+				tag
+			);
 		});
 	}
 	if (quiz.status === "mastered") {

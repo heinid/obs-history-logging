@@ -56,6 +56,9 @@ export class QuizPlayerPage extends PlayerPage {
 		private sessionIds: string[],
 		// Every quiz id belonging to the deck — the interjection scope.
 		private scopeIds: Set<string>,
+		// Profile behind this deck ("" for cross-deck sessions) — timeline
+		// jumps land on this profile's layout.
+		private profileName: string,
 		onExit: () => void
 	) {
 		super(plugin, deckLabel, onExit);
@@ -222,7 +225,13 @@ export class QuizPlayerPage extends PlayerPage {
 			setIcon(reveal, "gantt-chart");
 			reveal.setAttr("aria-label", "在时间线上显示");
 			reveal.addEventListener("click", () =>
-				void this.plugin.revealOnTimeline(quiz.sourceEvId, tag)
+				void (this.profileName
+					? this.plugin.revealOnTimelineForProfile(
+							this.profileName,
+							quiz.sourceEvId,
+							tag
+						)
+					: this.plugin.revealOnTimeline(quiz.sourceEvId, tag))
 			);
 		}
 	}

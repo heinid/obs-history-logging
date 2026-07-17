@@ -57,6 +57,8 @@ export interface HistoryLoggingSettings {
 	annotColor: string;
 	// Tag (without `#`) written inside the `{;; id #tag }` comment.
 	annotTag: string;
+	// Deck display mode in the recitation hub: card wall or compact list.
+	reciteDeckDisplay: "wall" | "list";
 }
 
 export interface EvMenuView {
@@ -85,6 +87,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	annotOnCreate: false,
 	annotColor: "green",
 	annotTag: "专名和Entities积累",
+	reciteDeckDisplay: "wall",
 };
 
 export const EVENTS_FILE = "events.md";

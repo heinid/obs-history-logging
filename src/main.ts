@@ -409,6 +409,44 @@ export default class HistoryLoggingPlugin extends Plugin {
 		if (view instanceof TimelineView) await view.focusEvent(id, tag);
 	}
 
+	// Deck-aware variant used by the recitation hub: land on a timeline
+	// showing the deck's profile with the quiz filter set to all, so the
+	// target's quiz cards are guaranteed visible.
+	async revealOnTimelineForProfile(
+		profileName: string,
+		id: string,
+		tag: string
+	): Promise<void> {
+		const profile = (await this.store.readProfiles()).find(
+			(p) => p.name === profileName
+		);
+		if (!profile) {
+			await this.revealOnTimeline(id, tag);
+			return;
+		}
+		const { workspace } = this.app;
+		const leaves = workspace
+			.getLeavesOfType(TIMELINE_VIEW_TYPE)
+			.filter((l) => l.getRoot() !== workspace.rightSplit);
+		let leaf = leaves.find(
+			(l) =>
+				l.view instanceof TimelineView &&
+				l.view.getProfileName() === profile.name
+		);
+		if (!leaf)
+			leaf = leaves.find(
+				(l) => l.view instanceof TimelineView && l.view.isPlainView()
+			);
+		if (!leaf) {
+			leaf = workspace.getLeaf("tab");
+			await leaf.setViewState({ type: TIMELINE_VIEW_TYPE, active: true });
+		}
+		workspace.revealLeaf(leaf);
+		const view = leaf.view;
+		if (view instanceof TimelineView)
+			await view.focusEventWithProfile(profile, id, tag);
+	}
+
 	async openEntity(id: string): Promise<void> {
 		await this.openEntityView(id);
 	}

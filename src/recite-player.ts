@@ -10,6 +10,8 @@ import { langDisplayName, playEntityAudio } from "./quiz-render";
 import { ContextHint, contextHintsFor } from "./recite-context";
 import { PlayerPage } from "./player-shell";
 import { shuffle } from "./session-queue";
+import { jumpToLocation } from "./jump";
+import { setIcon } from "obsidian";
 
 export class RecitePlayerPage extends PlayerPage {
 	private cards: EntityEntry[] = [];
@@ -102,7 +104,24 @@ export class RecitePlayerPage extends PlayerPage {
 		const hint = cached[this.hintIndex % cached.length];
 		box.createDiv({ cls: "hl-recite-context-text", text: hint.text });
 		const foot = box.createDiv({ cls: "hl-recite-context-foot" });
-		foot.createSpan({ text: hint.source });
+		const link = foot.createEl("a", { cls: "hl-recite-context-src" });
+		const icon = link.createSpan();
+		setIcon(icon, hint.kind === "note" ? "file-text" : "gantt-chart");
+		link.createSpan({ text: hint.source });
+		link.setAttr(
+			"aria-label",
+			hint.kind === "note" ? "跳到笔记原文" : "在时间线上显示"
+		);
+		link.addEventListener("click", () => {
+			if (hint.kind === "note")
+				void jumpToLocation(
+					this.plugin.app,
+					hint.path,
+					hint.offset,
+					hint.length
+				);
+			else void this.plugin.revealOnTimeline(hint.evId, hint.tag);
+		});
 		if (cached.length > 1) {
 			const next = foot.createEl("button", {
 				text: `换一条 (${(this.hintIndex % cached.length) + 1}/${

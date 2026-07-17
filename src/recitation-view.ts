@@ -203,7 +203,13 @@ export class RecitationView extends ItemView {
 						dueIds: deck.dueIds,
 						activeIds: deck.activeIds,
 						onStart: (label, ids) =>
-							this.startQuizSession(label, ids, deck.allIds),
+							this.startQuizSession(
+								label,
+								ids,
+								deck.allIds,
+								deck.profile.name
+							),
+						profileName: deck.profile.name,
 					},
 					{
 						plugin: this.plugin,
@@ -254,7 +260,8 @@ export class RecitationView extends ItemView {
 	private startQuizSession(
 		label: string,
 		sessionIds: string[],
-		scopeIds: string[]
+		scopeIds: string[],
+		profileName: string
 	): void {
 		if (!sessionIds.length) return;
 		this.player?.unmount();
@@ -263,6 +270,7 @@ export class RecitationView extends ItemView {
 			label,
 			sessionIds,
 			new Set(scopeIds),
+			profileName,
 			() => this.showList()
 		);
 		this.player = player;
@@ -310,6 +318,19 @@ export class RecitationView extends ItemView {
 	private renderList(root: HTMLElement): void {
 		const toolbar = root.createDiv({ cls: "hl-recite-toolbar" });
 		toolbar.createEl("h2", { text: "背诵" });
+		const display = toolbar.createEl("select", {
+			cls: "dropdown hl-recite-display",
+		});
+		display.setAttr("aria-label", "deck 显示方式");
+		display.createEl("option", { value: "wall", text: "卡片墙" });
+		display.createEl("option", { value: "list", text: "列表" });
+		display.value = this.plugin.settings.reciteDeckDisplay;
+		display.addEventListener("change", () => {
+			this.plugin.settings.reciteDeckDisplay =
+				display.value === "list" ? "list" : "wall";
+			void this.plugin.saveSettings();
+			this.render();
+		});
 
 		this.renderOverview(root);
 		this.renderEventDecks(root);
@@ -366,7 +387,8 @@ export class RecitationView extends ItemView {
 				this.startQuizSession(
 					"全部",
 					allDue,
-					[...this.quizzes.keys()]
+					[...this.quizzes.keys()],
+					""
 				)
 			);
 		else start.disabled = true;
@@ -375,7 +397,7 @@ export class RecitationView extends ItemView {
 	private renderEventDecks(root: HTMLElement): void {
 		const section = root.createDiv({ cls: "hl-recite-section" });
 		section.createEl("h3", { text: "事件背诵" });
-		const wall = section.createDiv({ cls: "hl-deck-wall" });
+		const wall = section.createDiv({ cls: this.wallCls() });
 		if (!this.eventDecks.length) {
 			wall.createDiv({ cls: "hl-deck-empty", text: "还没有 profile。" });
 			return;
@@ -454,7 +476,8 @@ export class RecitationView extends ItemView {
 				this.startQuizSession(
 					deck.profile.name,
 					deck.dueIds,
-					deck.allIds
+					deck.allIds,
+					deck.profile.name
 				);
 			});
 		else start.disabled = true;
@@ -467,7 +490,8 @@ export class RecitationView extends ItemView {
 				this.startQuizSession(
 					deck.profile.name,
 					deck.activeIds,
-					deck.allIds
+					deck.allIds,
+					deck.profile.name
 				);
 			});
 		}
@@ -497,7 +521,7 @@ export class RecitationView extends ItemView {
 	private renderReciteDecks(root: HTMLElement): void {
 		const section = root.createDiv({ cls: "hl-recite-section" });
 		section.createEl("h3", { text: "词条背诵" });
-		const wall = section.createDiv({ cls: "hl-deck-wall" });
+		const wall = section.createDiv({ cls: this.wallCls() });
 		for (const deck of this.reciteDecks)
 			this.renderReciteDeck(wall, deck);
 
@@ -547,6 +571,12 @@ export class RecitationView extends ItemView {
 			this.page = { kind: "recite-detail", deck: deck.name };
 			this.render();
 		});
+	}
+
+	private wallCls(): string {
+		return this.plugin.settings.reciteDeckDisplay === "list"
+			? "hl-deck-wall is-list"
+			: "hl-deck-wall";
 	}
 
 	private editDeck(existing: ReciteDeck | null): void {
