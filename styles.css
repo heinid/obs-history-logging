@@ -766,8 +766,8 @@
 	max-width: 92vw;
 }
 .modal:has(.hl-entity-modal) {
-	width: 720px;
-	max-width: 92vw;
+	width: 560px;
+	max-width: 88vw;
 }
 .hl-modal-head {
 	display: flex;
@@ -1398,10 +1398,10 @@ input.hl-tag-chip-input:focus-visible {
 }
 .hl-entity-modal,
 .hl-db-types-modal {
-	max-height: 80vh;
+	max-height: 74vh;
 }
 .hl-entity-body-wrap {
-	max-height: 60vh;
+	max-height: 54vh;
 	overflow-y: auto;
 	padding-right: 4px;
 }
