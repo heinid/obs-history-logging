@@ -2684,6 +2684,10 @@ input.hl-tag-chip-input:focus-visible {
 	height: 4px;
 	background: var(--background-modifier-border);
 	overflow: hidden;
+	display: flex;
+}
+.hl-player-progress-fill.is-wait {
+	background: var(--color-yellow);
 }
 .hl-player-progress-fill {
 	height: 100%;

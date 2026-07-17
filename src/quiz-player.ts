@@ -148,6 +148,57 @@ export class QuizPlayerPage extends PlayerPage {
 		return this.loaded && this.queue.index >= this.queue.ids.length;
 	}
 
+	// Session-clearing semantics: a card only counts as cleared once it is
+	// answered and NOT sitting out a short retry/recheck wait — "forgot" and
+	// a first "remembered" move it to the waiting bucket instead.
+	private sessionState(): {
+		total: number;
+		cleared: number;
+		waiting: number;
+		remaining: number;
+	} {
+		const schedule = quizSchedule(this.plugin.settings);
+		const now = new Date();
+		const ids = new Set(this.queue.ids);
+		let cleared = 0;
+		let waiting = 0;
+		for (const id of ids) {
+			const quiz = this.quizzes.get(id);
+			if (!quiz || quiz.status === "mastered") {
+				cleared++;
+				continue;
+			}
+			if (isQuizWaiting(quiz, now, schedule)) {
+				waiting++;
+				continue;
+			}
+			if (this.answered.has(id) && !isQuizReady(quiz, now, schedule))
+				cleared++;
+		}
+		return {
+			total: ids.size,
+			cleared,
+			waiting,
+			remaining: ids.size - cleared - waiting,
+		};
+	}
+
+	protected counterText(): string {
+		const s = this.sessionState();
+		return s.waiting
+			? `剩余 ${s.remaining} · 等待重试 ${s.waiting}`
+			: `剩余 ${s.remaining} · 共 ${s.total} 题`;
+	}
+
+	protected progressSegments(): { cls: string; frac: number }[] {
+		const s = this.sessionState();
+		if (!s.total) return [];
+		return [
+			{ cls: "", frac: s.cleared / s.total },
+			{ cls: "is-wait", frac: s.waiting / s.total },
+		];
+	}
+
 	private current(): QuizEntry | null {
 		const id = this.queue.ids[this.queue.index];
 		return (id && this.quizzes.get(id)) || null;
@@ -309,6 +360,9 @@ export class QuizPlayerPage extends PlayerPage {
 		this.queue = { ...this.queue, index: this.queue.index + 1 };
 		this.revealed = false;
 		this.hintShown = false;
+		// Clearing is the session's promise: reaching the end of the queue
+		// with cards still in retry wait keeps the session open by default.
+		if (this.finished() && this.waitingIds().length) this.waitMode = true;
 		this.render();
 	}
 
@@ -379,16 +433,6 @@ export class QuizPlayerPage extends PlayerPage {
 		}
 
 		const actions = card.createDiv({ cls: "hl-player-summary-actions" });
-		if (waiting.length && !this.waitMode) {
-			const stay = actions.createEl("button", {
-				cls: "mod-cta",
-				text: `留在本页等重试 (${waiting.length})`,
-			});
-			stay.addEventListener("click", () => {
-				this.waitMode = true;
-				this.render();
-			});
-		}
 		if (this.weakIds.size) {
 			const retry = actions.createEl("button", {
 				text: `重练弱项 ${this.weakIds.size}`,

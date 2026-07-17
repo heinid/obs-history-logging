@@ -36,6 +36,19 @@ export abstract class PlayerPage {
 	protected abstract renderSummary(host: HTMLElement): void;
 	protected headExtra(_head: HTMLElement): void {}
 
+	// Header counter text; subclasses may redefine the semantics.
+	protected counterText(): string {
+		return `第 ${this.done() + 1} 题 · 共 ${this.total()} 题`;
+	}
+
+	// Progress bar segments (fractions of the whole, drawn left to right).
+	protected progressSegments(): { cls: string; frac: number }[] {
+		const frac = this.total()
+			? Math.min(1, this.done() / this.total())
+			: 0;
+		return [{ cls: "", frac }];
+	}
+
 	// Keyboard: space flips, digits rate (delegated to subclass).
 	handleKey(ev: KeyboardEvent): boolean {
 		if (this.finished()) return false;
@@ -71,7 +84,7 @@ export abstract class PlayerPage {
 		if (!this.finished())
 			top.createSpan({
 				cls: "hl-player-counter",
-				text: `第 ${this.done() + 1} 题 · 共 ${this.total()} 题`,
+				text: this.counterText(),
 			});
 
 		// One continuous block: progress bar as the card's top edge, the
@@ -79,12 +92,12 @@ export abstract class PlayerPage {
 		// nothing floats on empty space.
 		const block = host.createDiv({ cls: "hl-player-block" });
 		const progress = block.createDiv({ cls: "hl-player-progress" });
-		const fraction = this.total()
-			? Math.min(1, this.done() / this.total())
-			: 0;
-		progress.createDiv({
-			cls: "hl-player-progress-fill",
-		}).style.width = `${Math.round(fraction * 100)}%`;
+		for (const seg of this.progressSegments()) {
+			if (seg.frac <= 0) continue;
+			progress.createDiv({
+				cls: `hl-player-progress-fill ${seg.cls}`,
+			}).style.width = `${Math.round(seg.frac * 1000) / 10}%`;
+		}
 
 		if (this.finished()) {
 			this.renderSummary(block.createDiv({ cls: "hl-player-card" }));
