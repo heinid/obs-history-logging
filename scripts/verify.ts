@@ -64,6 +64,7 @@ import {
 import { makeClozeMarked, mapDbText } from "../src/db-marker";
 import { normalizeTag, hasDbTag } from "../src/db-gate";
 import { matchesQuery, parseQuery } from "../src/query";
+import { scanNoteOccurrences } from "../src/db-occurrences";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -668,6 +669,54 @@ eq(
 	matchesQuery("元寇", parseQuery("file:#chem 元寇 OR file:#history/japan -罗马"), qctx),
 	true
 );
+
+// note occurrences: {db id} hits, fn-wrap detection, [fnid.date] lookup
+const occNote = [
+	"press conference in ~={green|fn:3t6m}{db 1tn835zw Ankara}=~ today {;; 3t6m #积累 }",
+	"later they returned to {db 1tn835zw Ankara} for the summit",
+	"a different city {db zz11zz11 Rome} here",
+	"`{db 1tn835zw Ankara}` in code is still counted at text level",
+	"",
+	"<!-- annotations -->",
+	"[3t6m.date]: 2026-07-15T00:40:48.723Z",
+].join("\n");
+const occ = scanNoteOccurrences(occNote, "1tn835zw");
+eq("occ count", occ.occurrences.length, 3);
+eq("occ first has fn", occ.occurrences[0]?.fnId, "3t6m");
+eq("occ second no fn", occ.occurrences[1]?.fnId, undefined);
+eq("occ first annotated", occ.firstAnnotated, "2026-07-15T00:40:48.723Z");
+eq(
+	"occ snippet cleaned",
+	occ.occurrences[0]?.snippet,
+	"press conference in Ankara today"
+);
+eq(
+	"occ jump slice",
+	occNote.slice(
+		occ.occurrences[1].offset,
+		occ.occurrences[1].offset + occ.occurrences[1].length
+	),
+	"{db 1tn835zw Ankara}"
+);
+eq("occ other id", scanNoteOccurrences(occNote, "zz11zz11").occurrences.length, 1);
+eq("occ no date", scanNoteOccurrences(occNote, "zz11zz11").firstAnnotated, undefined);
+eq("occ absent id", scanNoteOccurrences(occNote, "aaaa1111").occurrences, []);
+const occNoMeta = scanNoteOccurrences(
+	"x ~={red|fn:gbp6}{db 1tn835zw 安卡拉}=~ y",
+	"1tn835zw"
+);
+eq("occ wrap without date", occNoMeta.occurrences[0]?.fnId, "gbp6");
+eq("occ wrap without date time", occNoMeta.firstAnnotated, undefined);
+const occEarliest = scanNoteOccurrences(
+	[
+		"~={green|fn:aaaa}{db 1tn835zw A}=~",
+		"~={green|fn:bbbb}{db 1tn835zw B}=~",
+		"[aaaa.date]: 2026-07-15T10:00:00.000Z",
+		"[bbbb.date]: 2026-07-14T10:00:00.000Z",
+	].join("\n"),
+	"1tn835zw"
+);
+eq("occ earliest date wins", occEarliest.firstAnnotated, "2026-07-14T10:00:00.000Z");
 
 // ⌛ menu: wikipedia year pages + action URL templates
 const y1274 = parseYearTag("#ad/12/7/4")!;

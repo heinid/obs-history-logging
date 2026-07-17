@@ -11,6 +11,9 @@ import { dbMarkersToHtml, parseDbMarks, stripDbMarkers } from "./db-marker";
 import { EntityModal } from "./entity-modal";
 import { openDbEntityEditor } from "./quiz-render";
 import { describeYear, parseYearTag } from "./year-tag";
+import { NoteOccurrences, scanNoteOccurrences } from "./db-occurrences";
+import { dbEnabledFor } from "./vault-db";
+import { jumpToLocation } from "./jump";
 
 // Shared renderer for one entity's full page: hero (headword + type pill +
 // id), per-language cards, free notes and the emergent chronology. Used by
@@ -142,6 +145,7 @@ export async function renderEntityPage(
 	}
 
 	await renderOccurrences(root, entity, ctx);
+	await renderNoteOccurrences(root, entity, ctx);
 }
 
 async function renderOccurrences(
@@ -169,7 +173,7 @@ async function renderOccurrences(
 	hits.sort((a, b) => a.key - b.key);
 	root.createDiv({
 		cls: "hl-overline",
-		text: `Occurrences · ${hits.length}`,
+		text: `事件摘要中的出现 · ${hits.length}`,
 	});
 	const list = root.createDiv({ cls: "hl-page-occurrences" });
 	if (!hits.length) {
@@ -200,6 +204,137 @@ async function renderOccurrences(
 			plugin.openSummary(hit.evId, hit.tag, () => ctx.refresh())
 		);
 	}
+}
+
+interface FileHits extends NoteOccurrences {
+	path: string;
+	name: string;
+}
+
+// Occurrences inside enabled-tag notes. The timestamp belongs to the
+// entity × file pair (only the first annotation in a file gets the fn wrap
+// that keys the `[fnid.date]:` metadata), so it shows on the file heading,
+// never on individual occurrence rows.
+let notesOccFlat = false;
+
+async function scanEnabledNotes(
+	plugin: HistoryLoggingPlugin,
+	entityId: string
+): Promise<FileHits[]> {
+	const out: FileHits[] = [];
+	for (const file of plugin.app.vault.getMarkdownFiles()) {
+		if (!dbEnabledFor(plugin, file.path)) continue;
+		const content = await plugin.app.vault.cachedRead(file);
+		if (!content.includes(entityId)) continue;
+		const hits = scanNoteOccurrences(content, entityId);
+		if (!hits.occurrences.length) continue;
+		out.push({ path: file.path, name: file.basename, ...hits });
+	}
+	// Freshest first-annotated files first; undated ones after, by name.
+	out.sort((a, b) => {
+		if (a.firstAnnotated && b.firstAnnotated)
+			return b.firstAnnotated.localeCompare(a.firstAnnotated);
+		if (a.firstAnnotated) return -1;
+		if (b.firstAnnotated) return 1;
+		return a.name.localeCompare(b.name);
+	});
+	return out;
+}
+
+function firstAnnotatedLabel(iso: string): string {
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return iso;
+	return `首次标注 ${d.toLocaleDateString(undefined, {
+		year: "numeric",
+		month: "short",
+		day: "numeric",
+	})}`;
+}
+
+async function renderNoteOccurrences(
+	root: HTMLElement,
+	e: EntityEntry,
+	ctx: EntityPageCtx
+): Promise<void> {
+	const { plugin } = ctx;
+	const files = await scanEnabledNotes(plugin, e.id);
+	const total = files.reduce((n, f) => n + f.occurrences.length, 0);
+	const head = root.createDiv({ cls: "hl-overline hl-notes-occ-head" });
+	head.createSpan({ text: `笔记中的出现 · ${total}` });
+	if (files.length) {
+		const toggle = head.createEl("button", {
+			cls: "hl-icon-btn hl-notes-occ-toggle",
+		});
+		const paintIcon = (): void =>
+			setIcon(toggle, notesOccFlat ? "list" : "folder");
+		paintIcon();
+		toggle.setAttr("aria-label", "切换 按文件分组 / 平铺");
+		toggle.addEventListener("click", () => {
+			notesOccFlat = !notesOccFlat;
+			paintIcon();
+			paintList();
+		});
+	}
+	const list = root.createDiv({ cls: "hl-page-occurrences" });
+	const row = (
+		parent: HTMLElement,
+		file: FileHits,
+		hit: FileHits["occurrences"][number],
+		withFile: boolean
+	): void => {
+		const el = parent.createDiv({ cls: "hl-entity-occ" });
+		if (withFile)
+			el.createSpan({ cls: "hl-page-occ-year", text: file.name });
+		el.createSpan({ cls: "hl-entity-occ-snippet", text: hit.snippet });
+		if (hit.fnId) {
+			const badge = el.createSpan({
+				cls: "hl-occ-fn-badge",
+				text: "fn",
+			});
+			badge.setAttr(
+				"aria-label",
+				"首次标注处 — 时间元数据来自这里"
+			);
+		}
+		el.addEventListener("click", () =>
+			void jumpToLocation(
+				plugin.app,
+				file.path,
+				hit.offset,
+				hit.length
+			)
+		);
+	};
+	const paintList = (): void => {
+		list.empty();
+		if (!files.length) {
+			list.createDiv({
+				cls: "hl-entity-occ-empty",
+				text: "启用词条功能的笔记中还没有出现。",
+			});
+			return;
+		}
+		if (notesOccFlat) {
+			for (const file of files)
+				for (const hit of file.occurrences) row(list, file, hit, true);
+			return;
+		}
+		for (const file of files) {
+			const group = list.createDiv({ cls: "hl-occ-file-group" });
+			const gh = group.createDiv({ cls: "hl-occ-file-head" });
+			gh.createSpan({ cls: "hl-occ-file-name", text: file.name });
+			gh.createSpan({
+				cls: "hl-occ-file-meta",
+				text: `${file.occurrences.length} 处${
+					file.firstAnnotated
+						? ` · ${firstAnnotatedLabel(file.firstAnnotated)}`
+						: ""
+				}`,
+			});
+			for (const hit of file.occurrences) row(group, file, hit, false);
+		}
+	};
+	paintList();
 }
 
 function playAudio(plugin: HistoryLoggingPlugin, link: string): void {

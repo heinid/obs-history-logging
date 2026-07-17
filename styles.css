@@ -1430,6 +1430,44 @@ input.hl-tag-chip-input:focus-visible {
 	margin-top: 4px;
 	font-size: var(--font-ui-small);
 }
+/* Occurrences inside enabled-tag notes: grouped-by-file / flat toggle,
+   first-annotated time on the file heading, fn badge on the wrapped hit. */
+.hl-notes-occ-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.hl-notes-occ-toggle {
+	width: 1.4em;
+	height: 1.4em;
+}
+.hl-occ-file-group {
+	margin-bottom: 6px;
+}
+.hl-occ-file-head {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 2px 4px;
+}
+.hl-occ-file-name {
+	font-weight: 600;
+	font-size: var(--font-ui-small);
+}
+.hl-occ-file-meta {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+.hl-occ-fn-badge {
+	flex: 0 0 auto;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	line-height: 1;
+	padding: 1px 4px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-faint);
+}
 .hl-entity-occurrences {
 	max-height: 12em;
 	overflow-y: auto;
