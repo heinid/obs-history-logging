@@ -302,8 +302,12 @@ export class RecitationView extends ItemView {
 		player.mount(root.createDiv());
 	}
 
-	// Keyboard shortcuts pass through to the running player.
+	// Keyboard shortcuts pass through to the running player. Listens on the
+	// window (clicking a plain div doesn't focus the view container) and
+	// only acts while this view is the active one.
 	onKeyDown = (ev: KeyboardEvent): void => {
+		if (this.app.workspace.getActiveViewOfType(RecitationView) !== this)
+			return;
 		if (this.page.kind !== "player" || !this.player) return;
 		const target = ev.target as HTMLElement;
 		if (target.closest("input, textarea, [contenteditable]")) return;
@@ -312,7 +316,7 @@ export class RecitationView extends ItemView {
 
 	onload(): void {
 		super.onload();
-		this.registerDomEvent(this.containerEl, "keydown", this.onKeyDown);
+		this.registerDomEvent(window, "keydown", this.onKeyDown);
 	}
 
 	private renderList(root: HTMLElement): void {
