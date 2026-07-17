@@ -473,7 +473,7 @@ export class EntityModal extends Modal {
 
 // Completes the tag-chip input against tags already used on other entities,
 // so spelling variants don't multiply.
-class EntityTagSuggest extends AbstractInputSuggest<string> {
+export class EntityTagSuggest extends AbstractInputSuggest<string> {
 	constructor(
 		app: App,
 		input: HTMLInputElement,

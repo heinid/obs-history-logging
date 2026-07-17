@@ -5,6 +5,7 @@
 //   ## m3k7f9a2
 //   title: 伯罗奔尼撒战争形势图
 //   image: maps/peloponnesian-war.png
+//   tags: 希腊史, 战役图
 //   events: k7f3a9x1, p2d8c4n5
 //   entities: a1b2c3d4
 //   updated: 2026-07-17
@@ -22,6 +23,8 @@ export interface MapEntry {
 	// place in time is derived from its linked events' year tags.
 	events: string[];
 	entities: string[];
+	// Free multi-value tags, same semantics as entity tags.
+	tags: string[];
 	updated?: string;
 	// Free markdown annotation.
 	body: string;
@@ -64,12 +67,14 @@ function parseMapBlock(id: string, block: string): MapEntry {
 		image: "",
 		events: [],
 		entities: [],
+		tags: [],
 		body: "",
 	};
 	let i = 0;
 	for (; i < lines.length; i++) {
 		const line = lines[i];
-		const field = /^(title|image|range|events|entities|updated):\s*(.*)$/.exec(
+		const field =
+			/^(title|image|range|events|entities|tags|updated):\s*(.*)$/.exec(
 			line
 		);
 		if (!field) {
@@ -93,6 +98,9 @@ function parseMapBlock(id: string, block: string): MapEntry {
 			case "entities":
 				entry.entities = listOf(val);
 				break;
+			case "tags":
+				entry.tags = listOf(val);
+				break;
 			case "updated":
 				entry.updated = val;
 				break;
@@ -114,6 +122,7 @@ export function serializeMapsFile(entries: Map<string, MapEntry>): string {
 		if (e.events.length) parts.push(`events: ${e.events.join(", ")}`);
 		if (e.entities.length)
 			parts.push(`entities: ${e.entities.join(", ")}`);
+		if (e.tags.length) parts.push(`tags: ${e.tags.join(", ")}`);
 		if (e.updated) parts.push(`updated: ${e.updated}`);
 		parts.push("");
 		if (e.body.trim()) {

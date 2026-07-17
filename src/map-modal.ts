@@ -1,8 +1,8 @@
 // Create / edit a historical map entry (maps.md). The image is the hero:
 // paste or drop a picture straight into the modal (it is saved into the
-// vault via the attachment settings), or pick an existing vault image. The
-// linked events render as rich rows — year, tag, summary/source preview and
-// the full ⌛ menu — and entity chips open their entity pages.
+// vault via the attachment settings), or pick an existing vault image. All
+// fields share one label/content grid; events are linked via a timeline-style
+// search over tags, summaries and source blocks, and render as rich rows.
 
 import {
 	App,
@@ -15,13 +15,17 @@ import type HistoryLoggingPlugin from "./main";
 import { MapEntry } from "./maps-format";
 import { generateId } from "./id";
 import { displayName } from "./db-format";
-import { EntitySuggestModal } from "./entity-modal";
+import { EntitySuggestModal, EntityTagSuggest } from "./entity-modal";
 import { eventPreview } from "./map-candidates";
 import { openEvMenu } from "./ev-menu";
 import { describeYear, parseYearTag } from "./year-tag";
+import { TimelineEntry, scanVault } from "./scan";
+import { matchesQuery, parseQuery } from "./query";
 
 export class MapModal extends Modal {
 	private entry: MapEntry;
+	private knownTags: string[] = [];
+	private timeline: TimelineEntry[] | null = null;
 
 	constructor(
 		app: App,
@@ -32,6 +36,7 @@ export class MapModal extends Modal {
 	) {
 		super(app);
 		this.entry = JSON.parse(JSON.stringify(entry)) as MapEntry;
+		this.entry.tags ??= [];
 	}
 
 	async onOpen(): Promise<void> {
@@ -45,6 +50,10 @@ export class MapModal extends Modal {
 		this.contentEl.addEventListener("drop", (e) => {
 			void this.handleImageTransfer(e.dataTransfer, e);
 		});
+		const maps = await this.plugin.store.readMaps();
+		this.knownTags = [
+			...new Set([...maps.values()].flatMap((m) => m.tags)),
+		].sort((a, b) => a.localeCompare(b));
 		await this.render();
 	}
 
@@ -89,6 +98,17 @@ export class MapModal extends Modal {
 		);
 	}
 
+	// Scan once per modal; the event search filters these entries.
+	private async timelineEntries(): Promise<TimelineEntry[]> {
+		if (!this.timeline)
+			this.timeline = await scanVault(
+				this.app,
+				this.plugin.store,
+				this.plugin.settings.dataFolder
+			);
+		return this.timeline;
+	}
+
 	private async render(): Promise<void> {
 		const { contentEl } = this;
 		contentEl.empty();
@@ -114,11 +134,11 @@ export class MapModal extends Modal {
 			swap.addEventListener("click", () => this.pickFromVault());
 		} else {
 			const zone = hero.createDiv({ cls: "hl-map-dropzone" });
-			zone.createDiv({
+			zone.createSpan({
 				cls: "hl-map-dropzone-hint",
 				text: this.entry.image
 					? `找不到图片：${this.entry.image}`
-					: "粘贴（Ctrl+V）或拖入图片",
+					: "粘贴（Ctrl+V）或拖入图片，或",
 			});
 			const pick = zone.createEl("button", {
 				cls: "hl-map-hero-btn",
@@ -127,10 +147,15 @@ export class MapModal extends Modal {
 			pick.addEventListener("click", () => this.pickFromVault());
 		}
 
+		const grid = contentEl.createDiv({ cls: "hl-map-grid" });
+		const row = (label: string): HTMLElement => {
+			grid.createDiv({ cls: "hl-map-grid-label", text: label });
+			return grid.createDiv({ cls: "hl-map-grid-content" });
+		};
+
 		// Title.
-		const titleRow = contentEl.createDiv({ cls: "hl-map-field" });
-		titleRow.createSpan({ cls: "hl-map-field-label", text: "标题" });
-		const title = titleRow.createEl("input", {
+		const titleCell = row("标题");
+		const title = titleCell.createEl("input", {
 			cls: "hl-map-input",
 			type: "text",
 			attr: { placeholder: "地图标题" },
@@ -141,25 +166,23 @@ export class MapModal extends Modal {
 			() => (this.entry.title = title.value)
 		);
 
-		// Linked events: rich rows with year, tag, preview and the ⌛ menu.
-		contentEl.createDiv({ cls: "hl-overline", text: "事件" });
-		const evBox = contentEl.createDiv({ cls: "hl-map-ev-list" });
-		if (!this.entry.events.length)
-			evBox.createDiv({
-				cls: "hl-map-section-empty",
-				text: "尚无关联事件——从笔记里的 ⌛ 菜单联入。",
-			});
+		// Tags: chips plus an autocompleted input, same as the entity modal.
+		this.renderTagsCell(row("标签"));
+
+		// Events: rich rows plus a timeline-style search to add more.
+		const evCell = row("事件");
+		evCell.addClass("hl-map-ev-cell");
 		const events = await this.plugin.store.readEvents();
 		for (const evId of this.entry.events) {
 			const tag = events.get(evId)?.tag ?? "";
-			const row = evBox.createDiv({ cls: "hl-map-ev-row" });
+			const evRow = evCell.createDiv({ cls: "hl-map-ev-row" });
 			const decoded = tag ? parseYearTag(tag) : null;
-			row.createSpan({
+			evRow.createSpan({
 				cls: "hl-map-ev-year",
 				text: decoded ? describeYear(decoded) : "？",
 			});
-			if (tag) row.createSpan({ cls: "hl-map-ev-tag", text: tag });
-			const prev = row.createSpan({ cls: "hl-map-ev-preview" });
+			if (tag) evRow.createSpan({ cls: "hl-map-ev-tag", text: tag });
+			const prev = evRow.createSpan({ cls: "hl-map-ev-preview" });
 			void eventPreview(this.plugin, evId).then((p) => {
 				prev.setText(
 					p.text
@@ -167,7 +190,7 @@ export class MapModal extends Modal {
 						: "（无内容）"
 				);
 			});
-			const hour = row.createEl("button", {
+			const hour = evRow.createEl("button", {
 				cls: "hl-map-ev-btn",
 				text: "⌛",
 			});
@@ -175,7 +198,7 @@ export class MapModal extends Modal {
 			hour.addEventListener("click", (e) =>
 				openEvMenu(this.plugin, e, evId, tag)
 			);
-			const x = row.createEl("button", {
+			const x = evRow.createEl("button", {
 				cls: "hl-map-ev-btn hl-map-ev-x",
 				text: "×",
 			});
@@ -187,13 +210,14 @@ export class MapModal extends Modal {
 				void this.render();
 			});
 		}
+		this.renderEventSearch(evCell);
 
-		// Linked entities.
-		contentEl.createDiv({ cls: "hl-overline", text: "词条" });
-		const entRow = contentEl.createDiv({ cls: "hl-map-links" });
+		// Entities.
+		const entCell = row("词条");
+		entCell.addClass("hl-map-links");
 		const entities = await this.plugin.store.readEntities();
 		for (const entId of this.entry.entities) {
-			const chip = entRow.createSpan({
+			const chip = entCell.createSpan({
 				cls: "hl-map-chip hl-map-chip-link",
 			});
 			const ent = entities.get(entId);
@@ -212,7 +236,7 @@ export class MapModal extends Modal {
 				void this.render();
 			});
 		}
-		const add = entRow.createEl("button", {
+		const add = entCell.createEl("button", {
 			cls: "hl-map-chip-add",
 			text: "＋",
 		});
@@ -231,10 +255,9 @@ export class MapModal extends Modal {
 		});
 
 		// Free annotation.
-		contentEl.createDiv({ cls: "hl-overline", text: "注记" });
-		const notes = contentEl.createEl("textarea", {
+		const notes = row("注记").createEl("textarea", {
 			cls: "hl-map-notes",
-			attr: { placeholder: "markdown，可留空" },
+			attr: { placeholder: "markdown，可留空", rows: "2" },
 		});
 		notes.value = this.entry.body;
 		notes.addEventListener("input", () => (this.entry.body = notes.value));
@@ -277,6 +300,143 @@ export class MapModal extends Modal {
 		});
 	}
 
+	private renderTagsCell(cell: HTMLElement): void {
+		cell.addClass("hl-map-links");
+		const paint = (): void => {
+			cell.empty();
+			this.entry.tags.forEach((tag, i) => {
+				const chip = cell.createSpan({
+					cls: "hl-tag-chip",
+					text: tag,
+				});
+				const x = chip.createSpan({
+					cls: "hl-tag-chip-x",
+					text: "✕",
+				});
+				x.addEventListener("click", () => {
+					this.entry.tags.splice(i, 1);
+					paint();
+				});
+			});
+			const input = cell.createEl("input", {
+				type: "text",
+				cls: "hl-tag-chip-input",
+			});
+			input.placeholder = this.entry.tags.length ? "" : "＋ tag";
+			const commit = (): void => {
+				const v = input.value.trim().replace(/[,，]$/, "").trim();
+				if (v && !this.entry.tags.includes(v)) {
+					this.entry.tags.push(v);
+					paint();
+					(
+						cell.querySelector("input") as HTMLInputElement | null
+					)?.focus();
+				} else input.value = "";
+			};
+			input.addEventListener("keydown", (ev) => {
+				if (ev.key === "Enter" || ev.key === ",") {
+					ev.preventDefault();
+					commit();
+				}
+				if (
+					ev.key === "Backspace" &&
+					!input.value &&
+					this.entry.tags.length
+				) {
+					this.entry.tags.pop();
+					paint();
+					(
+						cell.querySelector("input") as HTMLInputElement | null
+					)?.focus();
+				}
+			});
+			input.addEventListener("blur", commit);
+			new EntityTagSuggest(
+				this.app,
+				input,
+				() =>
+					this.knownTags.filter(
+						(t) => !this.entry.tags.includes(t)
+					),
+				(tag) => {
+					this.entry.tags.push(tag);
+					paint();
+					(
+						cell.querySelector("input") as HTMLInputElement | null
+					)?.focus();
+				}
+			);
+		};
+		paint();
+	}
+
+	// Timeline-style event search: the query hits year tags, summaries and
+	// note source blocks; picking a hit links the event.
+	private renderEventSearch(cell: HTMLElement): void {
+		const box = cell.createDiv({ cls: "hl-map-ev-search" });
+		const input = box.createEl("input", {
+			cls: "hl-map-input",
+			type: "search",
+			attr: { placeholder: "＋ 搜索关联事件（年代 tag / 内容）…" },
+		});
+		const results = box.createDiv({ cls: "hl-map-ev-results" });
+		let timer: number | null = null;
+		input.addEventListener("input", () => {
+			if (timer !== null) window.clearTimeout(timer);
+			timer = window.setTimeout(() => {
+				timer = null;
+				void this.paintEventResults(input.value, results);
+			}, 150);
+		});
+	}
+
+	private async paintEventResults(
+		query: string,
+		host: HTMLElement
+	): Promise<void> {
+		host.empty();
+		const q = query.trim();
+		if (!q) return;
+		const pq = parseQuery(q);
+		const entries = await this.timelineEntries();
+		const seen = new Set<string>();
+		const hits: TimelineEntry[] = [];
+		for (const e of entries) {
+			if (!e.evId || seen.has(e.evId)) continue;
+			if (this.entry.events.includes(e.evId)) continue;
+			const hay = `${e.tag} ${e.snippet} ${
+				e.summary ?? ""
+			}`.toLowerCase();
+			if (!matchesQuery(hay, pq)) continue;
+			seen.add(e.evId);
+			hits.push(e);
+			if (hits.length >= 8) break;
+		}
+		if (!hits.length) {
+			host.createDiv({
+				cls: "hl-map-ev-result-empty",
+				text: "没有匹配的事件。",
+			});
+			return;
+		}
+		for (const e of hits) {
+			const item = host.createDiv({ cls: "hl-map-ev-result" });
+			const decoded = parseYearTag(e.tag);
+			item.createSpan({
+				cls: "hl-map-ev-year",
+				text: decoded ? describeYear(decoded) : e.tag,
+			});
+			item.createSpan({
+				cls: "hl-map-ev-preview",
+				text: (e.summary ?? "").trim() || e.snippet,
+			});
+			item.addEventListener("click", () => {
+				if (e.evId) this.entry.events.push(e.evId);
+				void this.render();
+			});
+		}
+	}
+
 	private pickFromVault(): void {
 		new ImageSuggestModal(this.app, (f) => {
 			this.entry.image = f.path;
@@ -300,6 +460,7 @@ export function newMapEntry(
 		image: "",
 		events: [],
 		entities: [],
+		tags: [],
 		body: "",
 		...partial,
 	};

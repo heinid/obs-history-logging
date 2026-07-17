@@ -967,6 +967,7 @@ eq(
 		"range: #bc/04/3/1",
 		"events: k7f3a9x1, p2d8c4n5",
 		"entities: a1b2c3d4",
+		"tags: 希腊史, 战役图",
 		"updated: 2026-07-17",
 		"",
 		"自由注记",
@@ -977,6 +978,7 @@ eq(
 	eq("maps parse title", m?.title, "伯罗奔尼撒战争形势图");
 	eq("maps parse image", m?.image, "maps/pelo.png");
 	eq("maps parse events", m?.events.join(","), "k7f3a9x1,p2d8c4n5");
+	eq("maps parse tags", m?.tags.join(","), "希腊史,战役图");
 	eq("maps parse body", m?.body, "自由注记");
 	eq("maps round trip", serializeMapsFile(parseMapsFile(serializeMapsFile(maps))), serializeMapsFile(maps));
 }

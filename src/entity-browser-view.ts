@@ -1000,6 +1000,8 @@ export class EntityBrowserView extends ItemView {
 	// --- maps section -----------------------------------------------------
 
 	private mapQuery = "";
+	// Selected map tags; multi-select = intersection, "" = untagged.
+	private mapTags = new Set<string>();
 
 	// A map's place in time: the earliest year among its linked events.
 	private mapSortKey(m: MapEntry): number {
@@ -1012,12 +1014,25 @@ export class EntityBrowserView extends ItemView {
 		return key;
 	}
 
+	private mapMatchesTags(m: MapEntry): boolean {
+		if (!this.mapTags.size) return true;
+		for (const t of this.mapTags) {
+			if (t === NO_TAG) {
+				if (m.tags.length) return false;
+			} else if (!m.tags.includes(t)) return false;
+		}
+		return true;
+	}
+
 	private renderMaps(
 		host: HTMLElement,
 		frame: Extract<NavFrame, { kind: "maps" }>
 	): void {
-		const wrap = host.createDiv({ cls: "hl-eb-maps" });
-		const head = wrap.createDiv({ cls: "hl-eb-maps-head" });
+		const split = host.createDiv({ cls: "hl-eb-split hl-eb-maps-split" });
+		const sidebar = split.createDiv({ cls: "hl-eb-tagbar" });
+		const main = split.createDiv({ cls: "hl-eb-main hl-eb-maps" });
+
+		const head = main.createDiv({ cls: "hl-eb-maps-head" });
 		const search = head.createEl("input", {
 			cls: "hl-eb-search hl-eb-maps-search",
 			type: "search",
@@ -1045,22 +1060,74 @@ export class EntityBrowserView extends ItemView {
 			).open();
 		});
 
-		if (!this.maps.length) {
-			wrap.createDiv({
-				cls: "hl-eb-maps-empty",
-				text: "还没有地图。在笔记里右键图片所在行、或点 ⌛ 菜单里的「联入地图」，也可以在这里新建。",
-			});
-			return;
-		}
-
 		const entities = new Map(
 			this.rows.map((r) => [r.entity.id, r.entity])
 		);
-		const list = wrap.createDiv({ cls: "hl-eb-map-list" });
+		const list = main.createDiv({ cls: "hl-eb-map-list" });
+
+		const paintSidebar = (): void => {
+			sidebar.empty();
+			sidebar.createDiv({ cls: "hl-eb-side-head", text: "标签" });
+			const listEl = sidebar.createDiv({ cls: "hl-eb-tag-list" });
+			const counts = new Map<string, number>();
+			let untagged = 0;
+			for (const m of this.maps) {
+				if (!m.tags.length) untagged++;
+				for (const t of m.tags)
+					counts.set(t, (counts.get(t) ?? 0) + 1);
+			}
+			const mkItem = (
+				label: string,
+				key: string | null,
+				count: number,
+				fixed: boolean
+			): void => {
+				const item = listEl.createDiv({
+					cls: "hl-eb-tag-item" + (fixed ? " is-fixed" : ""),
+				});
+				const active =
+					key === null
+						? this.mapTags.size === 0
+						: this.mapTags.has(key);
+				item.toggleClass("is-active", active);
+				item.createSpan({ cls: "hl-eb-tag-name", text: label });
+				item.createSpan({
+					cls: "hl-eb-tag-count",
+					text: String(count),
+				});
+				item.addEventListener("click", () => {
+					if (key === null) this.mapTags.clear();
+					else if (this.mapTags.has(key)) this.mapTags.delete(key);
+					else this.mapTags.add(key);
+					paintSidebar();
+					paint();
+				});
+			};
+			mkItem("全部", null, this.maps.length, true);
+			if (untagged) mkItem("无标签", NO_TAG, untagged, true);
+			const tags = [...counts.entries()].sort(
+				(a, b) => b[1] - a[1] || a[0].localeCompare(b[0])
+			);
+			for (const [t, n] of tags) mkItem(t, t, n, false);
+			if (!tags.length && !untagged)
+				listEl.createDiv({
+					cls: "hl-eb-tag-empty",
+					text: "地图还没有标签。",
+				});
+		};
+
 		const paint = (): void => {
 			list.empty();
+			if (!this.maps.length) {
+				list.createDiv({
+					cls: "hl-eb-maps-empty",
+					text: "还没有地图。在笔记里右键图片所在行、或点 ⌛ 菜单里的「联入地图」，也可以在这里新建。",
+				});
+				return;
+			}
 			const q = this.mapQuery.trim().toLowerCase();
 			const shown = this.maps.filter((m) => {
+				if (!this.mapMatchesTags(m)) return false;
 				if (!q) return true;
 				const tags = m.events
 					.map((id) => this.events.get(id)?.tag ?? "")
@@ -1071,7 +1138,9 @@ export class EntityBrowserView extends ItemView {
 						return e ? displayName(e) : "";
 					})
 					.join(" ");
-				return `${m.title} ${m.image} ${m.body} ${tags} ${names}`
+				return `${m.title} ${m.image} ${m.body} ${m.tags.join(
+					" "
+				)} ${tags} ${names}`
 					.toLowerCase()
 					.includes(q);
 			});
@@ -1089,6 +1158,7 @@ export class EntityBrowserView extends ItemView {
 				});
 			for (const m of shown) this.buildMapRow(list, m, entities);
 		};
+		paintSidebar();
 		paint();
 		host.scrollTop = frame.scroll;
 	}
@@ -1120,6 +1190,8 @@ export class EntityBrowserView extends ItemView {
 			cls: "hl-eb-map-title",
 			text: m.title || m.image,
 		});
+		for (const t of m.tags)
+			top.createSpan({ cls: "hl-tag-chip hl-eb-map-tag", text: t });
 		const edit = top.createEl("button", {
 			cls: "hl-eb-map-edit",
 			text: "编辑",
