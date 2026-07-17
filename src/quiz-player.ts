@@ -49,6 +49,9 @@ export class QuizPlayerPage extends PlayerPage {
 	// `updated` stamps at snapshot time, to tell "answered elsewhere" apart
 	// from "was queued while not yet due" during revalidation.
 	private stamps = new Map<string, string>();
+	// Deck cards already sitting out a short wait when the session started:
+	// part of the session's waiting bucket, interjected once due.
+	private waitingPool = new Set<string>();
 
 	constructor(
 		plugin: HistoryLoggingPlugin,
@@ -83,7 +86,19 @@ export class QuizPlayerPage extends PlayerPage {
 			const quiz = allQuizzes.get(id);
 			if (quiz) this.stamps.set(id, quiz.updated);
 		}
+		const schedule = quizSchedule(this.plugin.settings);
+		const now = new Date();
+		const queued = new Set(this.queue.ids);
+		for (const [id, quiz] of allQuizzes) {
+			if (!this.scopeIds.has(id) || queued.has(id)) continue;
+			if (quiz.status !== "active") continue;
+			if (isQuizWaiting(quiz, now, schedule)) {
+				this.waitingPool.add(id);
+				this.stamps.set(id, quiz.updated);
+			}
+		}
 		this.loaded = true;
+		if (this.finished() && this.waitingIds().length) this.waitMode = true;
 		this.render();
 	}
 
@@ -91,6 +106,7 @@ export class QuizPlayerPage extends PlayerPage {
 	// Returns true when consumed (the alarm stays silent).
 	handleDueQuiz(quiz: QuizEntry): boolean {
 		if (!this.loaded || !this.scopeIds.has(quiz.id)) return false;
+		this.waitingPool.delete(quiz.id);
 		this.quizzes.set(quiz.id, quiz);
 		this.stamps.set(quiz.id, quiz.updated);
 		if (this.queue.ids[this.queue.index] === quiz.id) return true;
@@ -130,6 +146,29 @@ export class QuizPlayerPage extends PlayerPage {
 			this.stamps.set(id, quiz.updated);
 			return isQuizReady(quiz, new Date(), schedule);
 		});
+		const now = new Date();
+		const due: { id: string; due: string }[] = [];
+		for (const id of [...this.waitingPool]) {
+			const quiz = fresh.get(id);
+			if (!quiz || quiz.status !== "active") {
+				this.waitingPool.delete(id);
+				continue;
+			}
+			this.stamps.set(id, quiz.updated);
+			if (isQuizReady(quiz, now, schedule)) {
+				this.waitingPool.delete(id);
+				due.push({ id, due: quiz.nextReview ?? "" });
+			} else if (!isQuizWaiting(quiz, now, schedule))
+				this.waitingPool.delete(id);
+		}
+		if (due.length) {
+			this.queue = interject(this.queue, due);
+			if (this.waitMode && this.queue.index < this.queue.ids.length) {
+				this.waitMode = false;
+				this.revealed = false;
+				this.hintShown = false;
+			}
+		}
 		if (this.queue.ids.length !== before) {
 			this.render();
 			this.toast("部分题目已在别处作答，已从队列移除");
@@ -159,7 +198,8 @@ export class QuizPlayerPage extends PlayerPage {
 	} {
 		const schedule = quizSchedule(this.plugin.settings);
 		const now = new Date();
-		const ids = new Set(this.queue.ids);
+		const queued = new Set(this.queue.ids);
+		const ids = new Set([...this.queue.ids, ...this.waitingPool]);
 		let cleared = 0;
 		let waiting = 0;
 		for (const id of ids) {
@@ -172,7 +212,10 @@ export class QuizPlayerPage extends PlayerPage {
 				waiting++;
 				continue;
 			}
-			if (this.answered.has(id) && !isQuizReady(quiz, now, schedule))
+			if (
+				!isQuizReady(quiz, now, schedule) &&
+				(this.answered.has(id) || !queued.has(id))
+			)
 				cleared++;
 		}
 		return {
@@ -381,7 +424,9 @@ export class QuizPlayerPage extends PlayerPage {
 	private waitingIds(): string[] {
 		const schedule = quizSchedule(this.plugin.settings);
 		const now = new Date();
-		return this.queue.ids.filter((id) => {
+		return [
+			...new Set([...this.queue.ids, ...this.waitingPool]),
+		].filter((id) => {
 			const quiz = this.quizzes.get(id);
 			return !!quiz && isQuizWaiting(quiz, now, schedule);
 		});
