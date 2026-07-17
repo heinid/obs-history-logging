@@ -251,7 +251,7 @@ function intlLanguageName(code: string, inLocale: string): string | undefined {
 	}
 }
 
-function langDisplayName(lang: string): string {
+export function langDisplayName(lang: string): string {
 	const endonym = intlLanguageName(lang, lang);
 	if (endonym && LATIN_OR_CJK.test(endonym))
 		return endonym[0].toUpperCase() + endonym.slice(1);
@@ -262,7 +262,10 @@ function langDisplayName(lang: string): string {
 
 // Play a vault audio attachment referenced as `[[file.mp3]]` (optional
 // `|alias` display text is ignored).
-function playEntityAudio(plugin: HistoryLoggingPlugin, link: string): void {
+export function playEntityAudio(
+	plugin: HistoryLoggingPlugin,
+	link: string
+): void {
 	const path = link.replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0];
 	const file = plugin.app.metadataCache.getFirstLinkpathDest(path, "");
 	if (!(file instanceof TFile)) {

@@ -24,6 +24,11 @@ import {
 } from "./db-format";
 import { QuizEntry } from "./quiz";
 import { parseQuizzesFile, serializeQuizzesFile } from "./quizzes-format";
+import {
+	ReciteDeck,
+	parseReciteDecksFile,
+	serializeReciteDecksFile,
+} from "./recite-format";
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
@@ -219,6 +224,27 @@ export class DataStore {
 		await this.ensureFolder();
 		const content = serializeDbTypesFile(types);
 		const path = this.dbTypesPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
+	}
+
+	private reciteDecksPath(): string {
+		return normalizePath(`${this.getFolder()}/recite-decks.md`);
+	}
+
+	async readReciteDecks(): Promise<ReciteDeck[]> {
+		const file = this.app.vault.getAbstractFileByPath(
+			this.reciteDecksPath()
+		);
+		if (!(file instanceof TFile)) return [];
+		return parseReciteDecksFile(await this.app.vault.read(file));
+	}
+
+	async writeReciteDecks(decks: ReciteDeck[]): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeReciteDecksFile(decks);
+		const path = this.reciteDecksPath();
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (file instanceof TFile) await this.app.vault.modify(file, content);
 		else await this.app.vault.create(path, content);

@@ -65,6 +65,14 @@ import { makeClozeMarked, mapDbText } from "../src/db-marker";
 import { normalizeTag, hasDbTag } from "../src/db-gate";
 import { matchesQuery, parseQuery } from "../src/query";
 import { scanNoteOccurrences } from "../src/db-occurrences";
+import {
+	parseReciteDecksFile,
+	serializeReciteDecksFile,
+	entityMatchesDeck,
+	reciteDeckCandidates,
+	ReciteDeck,
+} from "../src/recite-format";
+import { quizDeckStats } from "../src/deck-stats";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -736,6 +744,158 @@ eq(
 	fillActionUrl("https://x.test/?y={year}&t={tag}&k={track}", yBc44, "#bc/00/4/4", "ローマ史"),
 	"https://x.test/?y=-44&t=%23bc%2F00%2F4%2F4&k=" + encodeURIComponent("ローマ史")
 );
+
+// recite decks: parse / serialize round-trip
+{
+	const src = [
+		"# History Logging — recitation decks",
+		"",
+		"## 日本史 · 中→日",
+		"from: zh",
+		"to: ja, en",
+		"tags: 日本史",
+		"types: person, polity",
+		"",
+	].join("\n");
+	const decks = parseReciteDecksFile(src);
+	eq("recite parse count", decks.length, 1);
+	eq("recite parse from", decks[0].from, "zh");
+	eq("recite parse to", decks[0].to, ["ja", "en"]);
+	eq("recite parse tags", decks[0].tags, ["日本史"]);
+	eq("recite parse types", decks[0].types, ["person", "polity"]);
+	eq(
+		"recite round-trip",
+		parseReciteDecksFile(serializeReciteDecksFile(decks)),
+		decks
+	);
+}
+
+// recite deck candidate selection
+{
+	const mk = (
+		id: string,
+		type: string,
+		labels: [string, string][],
+		tags: string[]
+	): Ent => ({
+		id,
+		type,
+		labels: labels.map(([lang, text]) => ({ lang, text })),
+		readings: [],
+		audios: [],
+		tags,
+		body: "",
+	});
+	const deck: ReciteDeck = {
+		name: "d",
+		from: "zh",
+		to: ["ja", "en"],
+		tags: ["日本史"],
+		types: [],
+	};
+	const withBoth = mk(
+		"a",
+		"person",
+		[
+			["zh", "北条时宗"],
+			["ja", "北条時宗"],
+		],
+		["日本史"]
+	);
+	const noTarget = mk("b", "person", [["zh", "只有中文"]], ["日本史"]);
+	const noSource = mk("c", "person", [["ja", "日本語のみ"]], ["日本史"]);
+	const wrongTag = mk(
+		"d",
+		"person",
+		[
+			["zh", "中国史"],
+			["en", "China"],
+		],
+		["中国史"]
+	);
+	const nestedTag = mk(
+		"e",
+		"person",
+		[
+			["zh", "嵌套"],
+			["en", "Nested"],
+		],
+		["日本史/镰仓"]
+	);
+	eq("deck match both langs", entityMatchesDeck(withBoth, deck), true);
+	eq("deck reject no target", entityMatchesDeck(noTarget, deck), false);
+	eq("deck reject no source", entityMatchesDeck(noSource, deck), false);
+	eq("deck reject wrong tag", entityMatchesDeck(wrongTag, deck), false);
+	eq("deck nested tag hit", entityMatchesDeck(nestedTag, deck), true);
+	eq(
+		"deck candidates",
+		reciteDeckCandidates(
+			[withBoth, noTarget, noSource, wrongTag, nestedTag],
+			deck
+		).map((e) => e.id),
+		["a", "e"]
+	);
+	// type scope
+	const typed: ReciteDeck = { ...deck, tags: [], types: ["polity"] };
+	eq("deck type reject", entityMatchesDeck(withBoth, typed), false);
+	eq(
+		"deck type accept",
+		entityMatchesDeck({ ...withBoth, type: "polity" }, typed),
+		true
+	);
+}
+
+// quiz deck stats aggregation
+{
+	const q = (
+		id: string,
+		status: "active" | "mastered",
+		nextReview: string | undefined,
+		attempts: { at: string; result: QuizResult }[]
+	): QuizEntry => ({
+		id,
+		sourceEvId: "ev",
+		kind: "qa",
+		status,
+		progress: 0,
+		nextReview,
+		created: "2026-01-01",
+		updated: "2026-01-01",
+		question: "",
+		answer: "",
+		hint: "",
+		attempts: attempts.map((a) => ({
+			at: a.at,
+			result: a.result,
+			early: false,
+			progressBefore: 0,
+			progressAfter: 0,
+		})),
+		cycles: [],
+	});
+	const now = new Date("2026-07-15T12:00:00Z");
+	const stats = quizDeckStats(
+		[
+			q("1", "active", undefined, [
+				{ at: "2026-07-14T09:00:00Z", result: "remembered" },
+			]),
+			q("2", "active", "2026-07-15T12:05:00Z", [
+				{ at: "2026-07-14T10:00:00Z", result: "forgot" },
+			]),
+			q("3", "mastered", undefined, [
+				{ at: "2026-07-13T10:00:00Z", result: "remembered" },
+			]),
+		],
+		now,
+		DEFAULT_QUIZ_SCHEDULE
+	);
+	eq("deck stats active", stats.active, 2);
+	eq("deck stats mastered", stats.mastered, 1);
+	eq("deck stats due (no nextReview ready)", stats.due, 1);
+	eq("deck stats last day", stats.lastReviewedAt, "2026-07-14T10:00:00Z");
+	eq("deck stats last remembered", stats.lastResults.remembered, 1);
+	eq("deck stats last forgot", stats.lastResults.forgot, 1);
+}
 
 if (failures > 0) {
 	console.error(`\n${failures} failure(s)`);

@@ -33,6 +33,10 @@ import {
 	ENTITY_BROWSER_VIEW_TYPE,
 	EntityBrowserView,
 } from "./entity-browser-view";
+import {
+	RECITATION_VIEW_TYPE,
+	RecitationView,
+} from "./recitation-view";
 import { QuizManagerModal, QuizPracticeModal } from "./quiz-modal";
 import { QuizEntry } from "./quiz";
 import { quizSchedule } from "./quiz-display";
@@ -99,6 +103,10 @@ export default class HistoryLoggingPlugin extends Plugin {
 			ENTITY_BROWSER_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new EntityBrowserView(leaf, this)
 		);
+		this.registerView(
+			RECITATION_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new RecitationView(leaf, this)
+		);
 
 		// Open views cache file paths from the last scan; a rename would leave
 		// their jump-to-source stale until the next manual refresh.
@@ -110,6 +118,9 @@ export default class HistoryLoggingPlugin extends Plugin {
 		);
 		this.addRibbonIcon("library", "Open entity browser", () =>
 			void this.browseEntities()
+		);
+		this.addRibbonIcon("brain-circuit", "打开背诵", () =>
+			void this.openRecitation()
 		);
 
 		this.addCommand({
@@ -174,6 +185,11 @@ export default class HistoryLoggingPlugin extends Plugin {
 			callback: () => void this.browseEntities("quizzes"),
 		});
 		this.addCommand({
+			id: "open-recitation",
+			name: "打开背诵",
+			callback: () => void this.openRecitation(),
+		});
+		this.addCommand({
 			id: "check-data-health",
 			name: "Check data health",
 			callback: () => void checkDataHealth(this),
@@ -199,6 +215,22 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.app.workspace.detachLeavesOfType(ERA_MANAGER_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(ENTITY_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(ENTITY_BROWSER_VIEW_TYPE);
+		this.app.workspace.detachLeavesOfType(RECITATION_VIEW_TYPE);
+	}
+
+	// Open (or focus) the recitation hub tab.
+	async openRecitation(): Promise<void> {
+		const { workspace } = this.app;
+		const existing = workspace.getLeavesOfType(RECITATION_VIEW_TYPE)[0];
+		if (existing) {
+			workspace.revealLeaf(existing);
+			if (existing.view instanceof RecitationView)
+				await existing.view.reload();
+			return;
+		}
+		const leaf = workspace.getLeaf("tab");
+		await leaf.setViewState({ type: RECITATION_VIEW_TYPE, active: true });
+		workspace.revealLeaf(leaf);
 	}
 
 	// Open the timeline either as a full main-pane tab (default) or a narrow
