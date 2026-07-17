@@ -349,6 +349,36 @@ export class QuizPlayerPage extends PlayerPage {
 		}
 	}
 
+	// The current card went into a short wait through some other surface
+	// (reminder modal, timeline): move it to the waiting bucket and step
+	// past it instead of showing an unanswerable card.
+	private skipWaitingCurrent(): boolean {
+		if (!this.loaded) return false;
+		const schedule = quizSchedule(this.plugin.settings);
+		const now = new Date();
+		let skipped = false;
+		for (;;) {
+			const quiz = this.current();
+			if (!quiz || !isQuizWaiting(quiz, now, schedule)) break;
+			const ids = [...this.queue.ids];
+			ids.splice(this.queue.index, 1);
+			this.queue = { ids, index: this.queue.index };
+			this.waitingPool.add(quiz.id);
+			this.revealed = false;
+			this.hintShown = false;
+			skipped = true;
+		}
+		if (skipped && this.finished() && this.waitingIds().length)
+			this.waitMode = true;
+		return skipped;
+	}
+
+	protected render(): void {
+		const skipped = this.skipWaitingCurrent();
+		super.render();
+		if (skipped) this.toast("已在别处作答 · 进入等待重试");
+	}
+
 	protected renderActions(bar: HTMLElement): void {
 		const quiz = this.current();
 		if (!quiz) return;
@@ -356,7 +386,7 @@ export class QuizPlayerPage extends PlayerPage {
 		if (!isQuizReady(quiz, new Date(), schedule)) {
 			bar.createSpan({
 				cls: "hl-quiz-wait-note",
-				text: nextReviewLabel(quiz, new Date(), schedule),
+				text: `未到期 · ${nextReviewLabel(quiz, new Date(), schedule)}`,
 			});
 			const next = bar.createEl("button", {
 				cls: "mod-cta",
