@@ -1,0 +1,10 @@
+{
+	"id": "obs-history-logging",
+	"name": "History Logging",
+	"version": "0.1.0",
+	"minAppVersion": "0.15.0",
+	"description": "Organise notes on a chronological timeline driven by #ad / #bc year tags.",
+	"author": "Me",
+	"authorUrl": "",
+	"isDesktopOnly": false
+}

@@ -1,0 +1,684 @@
+/* Inline ⌛ event marker (Live Preview + reading mode) */
+.hl-ev-symbol {
+	cursor: pointer;
+	margin-left: 0.15em;
+	opacity: 0.75;
+	font-size: 0.9em;
+	user-select: none;
+}
+.hl-ev-symbol:hover {
+	opacity: 1;
+}
+
+/* Timeline view */
+/* Constrain content to a readable line length, centered in the pane. In
+   parallel mode the wide pane is filled by adding more track columns, not by
+   widening the cards. */
+.hl-timeline-list,
+.hl-timeline-bar {
+	max-width: 46em;
+	margin-inline: auto;
+}
+.hl-timeline-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+	padding: 6px 4px 10px;
+	position: sticky;
+	top: 0;
+	background: var(--background-primary);
+	z-index: 2;
+}
+.hl-bar-row {
+	display: flex;
+	width: 100%;
+	gap: 6px;
+	align-items: center;
+	min-width: 0;
+}
+/* Query builder: committed chips + a free-text draft in one box. */
+.hl-filter-box {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+	padding: 3px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-secondary);
+	cursor: text;
+}
+.hl-filter-box:focus-within {
+	border-color: var(--interactive-accent);
+}
+.hl-filter-icon {
+	display: inline-flex;
+	color: var(--text-faint);
+}
+.hl-filter-icon svg {
+	width: 0.9em;
+	height: 0.9em;
+}
+.hl-chips {
+	display: contents;
+}
+.hl-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 1px 6px;
+	border-radius: 1em;
+	background: var(--background-modifier-hover);
+	font-size: 0.85em;
+	white-space: nowrap;
+}
+.hl-chip-x {
+	display: inline-flex;
+	color: var(--text-faint);
+	cursor: pointer;
+}
+.hl-chip-x:hover {
+	color: var(--text-normal);
+}
+.hl-chip-x svg {
+	width: 0.8em;
+	height: 0.8em;
+}
+.hl-filter-input {
+	flex: 1;
+	min-width: 8em;
+	border: none;
+	background: transparent;
+	box-shadow: none;
+	padding: 2px 0;
+}
+.hl-filter-input:focus {
+	box-shadow: none;
+}
+.hl-count {
+	color: var(--text-faint);
+	font-size: 0.8em;
+	white-space: nowrap;
+}
+/* Era-system lens + fallback grouping: labelled, visually apart from the
+   filter — the lens renames the axis's segments, it never filters. */
+.hl-lens {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.hl-lens-icon {
+	display: inline-flex;
+	color: var(--text-faint);
+}
+.hl-lens-icon svg {
+	width: 0.9em;
+	height: 0.9em;
+}
+.hl-lens-label {
+	color: var(--text-faint);
+	font-size: 0.8em;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.hl-lens-select {
+	font-size: 0.9em;
+}
+.hl-bar-spacer {
+	flex: 1;
+}
+/* Saved-view menu button: bookmark + name + dirty dot. */
+.hl-view-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 8px;
+	font-size: 0.9em;
+	max-width: 16em;
+}
+.hl-view-icon,
+.hl-view-caret {
+	display: inline-flex;
+	color: var(--text-faint);
+}
+.hl-view-icon svg,
+.hl-view-caret svg {
+	width: 0.85em;
+	height: 0.85em;
+}
+.hl-view-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hl-view-dirty {
+	color: var(--interactive-accent);
+	font-weight: 700;
+}
+.hl-icon-btn {
+	padding: 4px 6px;
+}
+/* Year-sync toggle: lit while this pane is linked to the others. */
+.hl-icon-btn.hl-sync-on {
+	color: var(--interactive-accent);
+}
+.hl-group {
+	margin: 14px 0 6px;
+	padding-bottom: 2px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	color: var(--text-accent);
+}
+/* Multi-track comparison grid: shared time rows crossing track columns,
+   all inside one view under a single scrollbar. The view itself scrolls
+   horizontally when columns overflow, so sticky heads keep working; the bar
+   pins to the visible left edge. */
+.hl-timeline-list:has(.hl-multi-scroll) {
+	max-width: none;
+}
+.hl-timeline:has(.hl-multi-grid) {
+	overflow-x: auto;
+}
+.hl-timeline:has(.hl-multi-grid) .hl-timeline-bar {
+	max-width: none;
+	margin-inline: 0;
+	width: 100%;
+	left: 0;
+}
+.hl-multi-grid {
+	position: relative;
+	display: grid;
+	column-gap: 12px;
+}
+.hl-track-head {
+	position: sticky;
+	top: var(--hl-bar-h, 60px);
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 8px;
+	background: var(--background-primary);
+	border-bottom: 2px solid var(--background-modifier-border);
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.hl-track-head.hl-track-active {
+	color: var(--text-accent);
+	border-bottom-color: var(--interactive-accent);
+}
+.hl-track-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.hl-track-count {
+	font-size: 0.75em;
+	color: var(--text-faint);
+}
+.hl-track-x {
+	margin-left: auto;
+	visibility: hidden;
+}
+.hl-track-head:hover .hl-track-x {
+	visibility: visible;
+}
+/* A shared time-segment row label spans every column. When the first column
+   carries an era gutter, the label steps aside so the two never collide. */
+.hl-row-label {
+	grid-column: 1 / -1;
+}
+.hl-multi-grid:has(.hl-era-gutter) .hl-row-label {
+	padding-left: 36px;
+}
+.hl-cell {
+	min-width: 0;
+	padding-bottom: 4px;
+}
+/* A track's own era name (its lens), shown inside its column. */
+.hl-era-band {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin: 8px 0 4px;
+	padding: 3px 8px;
+	border-left: 4px solid var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+	border-radius: 0 5px 5px 0;
+	font-weight: 700;
+	color: var(--text-accent);
+}
+.hl-era-band .hl-era-name {
+	font-size: 1.05em;
+}
+.hl-era-band .hl-group-range {
+	font-size: 0.8em;
+	font-weight: 400;
+	color: var(--text-faint);
+}
+/* Textbook-style era gutter: one continuous rounded band per era, absolutely
+   placed over the column's left gutter, its name written vertically. Lensed
+   cells reserve the gutter width. */
+.hl-cell.hl-has-gutter {
+	padding-left: 32px;
+}
+.hl-era-gutter {
+	position: absolute;
+	width: 22px;
+	border-radius: 11px;
+	background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+	border: 1px solid color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+	cursor: pointer;
+	z-index: 1;
+}
+.hl-era-gutter:hover {
+	background: color-mix(in srgb, var(--interactive-accent) 16%, transparent);
+}
+.hl-era-gutter.hl-era-empty {
+	opacity: 0.55;
+}
+/* The name slides inside its band while scrolling, so long eras stay named. */
+.hl-era-gutter-label {
+	position: sticky;
+	top: calc(var(--hl-bar-h, 60px) + 42px);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 0;
+}
+.hl-era-gutter-name {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1px;
+}
+.hl-era-gutter-ch {
+	font-size: 0.78em;
+	line-height: 1.3;
+	font-weight: 600;
+	color: var(--text-accent);
+}
+.hl-era-gutter-label .hl-era-count {
+	font-size: 0.68em;
+	color: var(--text-faint);
+}
+/* Expanded context stays bounded in the comparison grid, scrolling inside
+   its card so one long block never blows up the shared row height. */
+.hl-multi-grid .hl-card.hl-expanded .hl-content.hl-context {
+	max-height: max(40vh, 280px);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+/* An era the track has no entries in — present for the full skeleton. */
+.hl-era-band.hl-era-empty {
+	opacity: 0.55;
+	font-weight: 400;
+}
+.hl-era-band .hl-era-count {
+	font-size: 0.8em;
+	font-weight: 400;
+	color: var(--text-faint);
+}
+/* Flash an era band after jumping to it from the navigator. */
+.hl-era-band.hl-flash-band,
+.hl-era-gutter.hl-flash-band,
+.hl-group.hl-flash-band {
+	animation: hl-card-flash 1.2s ease-out;
+}
+.hl-era-nav-item.hl-era-nav-empty {
+	color: var(--text-faint);
+}
+/* Floating era navigator: the active track's table of contents. The wrap
+   pins to the visible top-left corner (its width is set to the pane's visible
+   width from JS), so the panel stays put under horizontal scrolling too. */
+.hl-era-nav-wrap {
+	position: sticky;
+	top: 0;
+	left: 0;
+	height: 0;
+	z-index: 4;
+}
+.hl-era-nav {
+	position: absolute;
+	top: calc(var(--hl-bar-h, 44px) + 6px);
+	right: 4px;
+	max-width: 210px;
+	max-height: 60vh;
+	overflow-y: auto;
+	padding: 8px;
+	background: color-mix(in srgb, var(--background-primary) 94%, transparent);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	box-shadow: var(--shadow-s);
+	backdrop-filter: blur(6px);
+	font-size: 0.82em;
+}
+.hl-era-nav-title {
+	padding: 2px 8px 5px;
+	font-weight: 700;
+	font-size: 0.92em;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-faint);
+	border-bottom: 1px solid var(--background-modifier-border);
+	margin-bottom: 5px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.hl-era-nav-item {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 3px 8px;
+	border-left: 2px solid transparent;
+	border-radius: 5px;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.hl-era-nav-item:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-era-nav-item.hl-era-nav-current {
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+	border-left-color: var(--interactive-accent);
+	color: var(--text-accent);
+	font-weight: 600;
+}
+.hl-era-nav-item .hl-group-range {
+	margin-left: auto;
+}
+.hl-era-nav-item .hl-group-range {
+	font-size: 0.85em;
+	color: var(--text-faint);
+}
+
+/* Era range suffix on a named-era group heading, e.g. "509 BC – 27 BC". */
+.hl-group .hl-group-range {
+	margin-left: 8px;
+	font-size: 0.75em;
+	font-weight: 400;
+	color: var(--text-faint);
+}
+.hl-card {
+	padding: 6px 8px;
+	margin: 4px 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+}
+.hl-card:hover {
+	background: var(--background-modifier-hover);
+}
+/* Per-card action buttons, revealed on hover / focus. */
+.hl-card-actions {
+	display: flex;
+	gap: 2px;
+	margin-left: 6px;
+	opacity: 0;
+	transition: opacity 0.12s ease;
+}
+.hl-card:hover .hl-card-actions,
+.hl-card:focus-within .hl-card-actions {
+	opacity: 1;
+}
+.hl-card-actions .hl-icon-btn {
+	padding: 2px 4px;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+}
+.hl-card-actions .hl-icon-btn:hover {
+	color: var(--text-normal);
+}
+.hl-card-head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: baseline;
+	font-size: 0.85em;
+}
+.hl-year {
+	font-weight: 600;
+}
+.hl-card-head .hl-tag {
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	font-size: 0.85em;
+}
+.hl-file {
+	margin-left: auto;
+	color: var(--text-faint);
+	font-size: 0.85em;
+}
+.hl-card-body {
+	margin-top: 4px;
+}
+.hl-summary.hl-clamp {
+	display: -webkit-box;
+	-webkit-line-clamp: 4;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+.hl-summary > :first-child {
+	margin-top: 0;
+}
+.hl-summary > :last-child {
+	margin-bottom: 0;
+}
+/* Rendered straight from the note (no written summary yet). */
+.hl-from-note {
+	color: var(--text-muted);
+}
+.hl-snippet {
+	color: var(--text-muted);
+	font-size: 0.9em;
+}
+.hl-empty {
+	color: var(--text-faint);
+	padding: 12px 4px;
+}
+
+/* A written summary (digested understanding): accent spine. */
+.hl-card.hl-has-summary {
+	border-left: 3px solid var(--interactive-accent);
+}
+/* Card text stays selectable / copyable; a clean click still toggles expand. */
+.hl-card-body {
+	user-select: text;
+}
+/* Subtle expand chevron, always visible on expandable cards. */
+.hl-chevron {
+	display: inline-flex;
+	align-items: center;
+	color: var(--text-faint);
+	order: 5;
+}
+.hl-chevron svg {
+	width: 0.85em;
+	height: 0.85em;
+}
+.hl-card.hl-expandable:hover .hl-chevron {
+	color: var(--text-muted);
+}
+/* Expanded state: the raw source block, set apart from your own words. */
+.hl-content.hl-context {
+	margin-top: 2px;
+	padding-left: 8px;
+	border-left: 2px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: 0.95em;
+}
+.hl-content.hl-context img {
+	max-width: 100%;
+	height: auto;
+	border-radius: 4px;
+}
+.hl-content > :first-child {
+	margin-top: 0;
+}
+.hl-content > :last-child {
+	margin-bottom: 0;
+}
+/* The exact year tag a card is about, emphasised inside its expanded block. */
+.hl-content.hl-context a.tag.hl-target-tag {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+/* Other year tags in an expanded block jump to their own card on the timeline. */
+.hl-content.hl-context a.tag.hl-sibling-tag {
+	cursor: pointer;
+	text-decoration: underline dotted;
+	text-underline-offset: 2px;
+}
+/* Flash a card after scrolling to it from a sibling year tag. */
+.hl-card.hl-flash-card {
+	animation: hl-card-flash 1.2s ease-out;
+}
+@keyframes hl-card-flash {
+	0%,
+	40% {
+		background-color: var(--text-highlight-bg);
+	}
+	100% {
+		background-color: transparent;
+	}
+}
+
+/* Flash the jump target in the editor, then fade back to a normal selection. */
+.cm-selectionBackground.hl-flash {
+	animation: hl-flash 1.2s ease-out;
+}
+@keyframes hl-flash {
+	0%,
+	40% {
+		background-color: var(--text-highlight-bg);
+	}
+	100% {
+		background-color: transparent;
+	}
+}
+
+/* Era-system manager view */
+.hl-eramgr {
+	display: flex;
+	gap: 16px;
+	height: 100%;
+	overflow: hidden;
+}
+.hl-eramgr-sidebar {
+	flex: 0 0 200px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	overflow-y: auto;
+	border-right: 1px solid var(--background-modifier-border);
+	padding-right: 12px;
+}
+.hl-eramgr-title {
+	font-weight: 600;
+	color: var(--text-muted);
+	font-size: 0.85em;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-bottom: 4px;
+}
+.hl-eramgr-sysrow {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 5px 8px;
+	border-radius: 6px;
+	cursor: pointer;
+}
+.hl-eramgr-sysrow:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-eramgr-sysrow.is-active {
+	background: var(--background-modifier-active-hover);
+	font-weight: 600;
+}
+.hl-eramgr-sysname {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hl-eramgr-del {
+	opacity: 0;
+}
+.hl-eramgr-sysrow:hover .hl-eramgr-del {
+	opacity: 0.7;
+}
+.hl-eramgr-add {
+	margin-top: 4px;
+	width: 100%;
+	text-align: left;
+}
+.hl-eramgr-main {
+	flex: 1;
+	min-width: 0;
+	overflow-y: auto;
+	max-width: 40em;
+}
+.hl-eramgr-header {
+	margin-bottom: 12px;
+}
+.hl-eramgr-nameinput {
+	font-size: 1.4em;
+	font-weight: 600;
+	width: 100%;
+	border: none;
+	background: transparent;
+	padding: 2px 0;
+}
+.hl-eramgr-nameinput:focus {
+	border-bottom: 1px solid var(--interactive-accent);
+}
+.hl-eramgr-coverage {
+	color: var(--text-faint);
+	font-size: 0.85em;
+	margin-top: 2px;
+}
+.hl-eramgr-table {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.hl-eramgr-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 0;
+}
+.hl-eramgr-year {
+	flex: 0 0 8em;
+	font-family: var(--font-monospace);
+}
+.hl-eramgr-year.is-invalid {
+	border-color: var(--text-error);
+	color: var(--text-error);
+}
+.hl-eramgr-eraname {
+	flex: 1;
+	min-width: 0;
+}
+.hl-eramgr-addrow {
+	margin-top: 8px;
+}
+
+/* Summary editor modal */
+.hl-summary-modal .hl-summary-textarea {
+	width: 100%;
+	min-height: 12em;
+	resize: vertical;
+	font-family: var(--font-text);
+	line-height: 1.5;
+}
