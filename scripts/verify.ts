@@ -73,6 +73,8 @@ import {
 	ReciteDeck,
 } from "../src/recite-format";
 import { quizDeckStats } from "../src/deck-stats";
+import { interject, pruneUpcoming } from "../src/session-queue";
+import { maskLabels } from "../src/db-occurrences";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -895,6 +897,61 @@ eq(
 	eq("deck stats last day", stats.lastReviewedAt, "2026-07-14T10:00:00Z");
 	eq("deck stats last remembered", stats.lastResults.remembered, 1);
 	eq("deck stats last forgot", stats.lastResults.forgot, 1);
+}
+
+// session queue interjection
+{
+	const base = { ids: ["a", "b", "c", "d"], index: 1 };
+	eq(
+		"interject after current, earliest due first",
+		interject(base, [
+			{ id: "y", due: "2026-01-01T10:05:00Z" },
+			{ id: "x", due: "2026-01-01T10:01:00Z" },
+		]).ids,
+		["a", "b", "x", "y", "c", "d"]
+	);
+	eq(
+		"interject moves an upcoming duplicate forward",
+		interject(base, [{ id: "d", due: "2026-01-01T10:00:00Z" }]).ids,
+		["a", "b", "d", "c"]
+	);
+	eq(
+		"interject re-adds an already-answered card (retry loop)",
+		interject(base, [{ id: "a", due: "2026-01-01T10:00:00Z" }]).ids,
+		["a", "b", "a", "c", "d"]
+	);
+	eq(
+		"interject leaves the current card alone",
+		interject(base, [{ id: "b", due: "2026-01-01T10:00:00Z" }]).ids,
+		["a", "b", "c", "d"]
+	);
+	eq(
+		"prune keeps head, filters upcoming",
+		pruneUpcoming(base, (id) => id !== "c").ids,
+		["a", "b", "d"]
+	);
+}
+
+// context hint masking
+{
+	eq(
+		"mask all spellings, longest first",
+		maskLabels("Caesar crossed the Rubicon; caesar again", [
+			"Caesar",
+			"Gaius Julius Caesar",
+		]),
+		"____ crossed the Rubicon; ____ again"
+	);
+	eq(
+		"mask collapses adjacent blanks",
+		maskLabels("ローマ 罗马 Rome", ["ローマ", "罗马", "Rome"]),
+		"____ "
+	);
+	eq(
+		"mask escapes regex metacharacters",
+		maskLabels("c++ is here", ["c++"]),
+		"____ is here"
+	);
 }
 
 if (failures > 0) {

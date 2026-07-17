@@ -8,6 +8,19 @@
 
 import { dbRegex } from "./db-marker";
 
+// Replace every occurrence of any label (longest first, case-insensitive)
+// with a blank — context hints must not spoil the recalled spelling.
+export function maskLabels(snippet: string, labels: string[]): string {
+	const cleaned = [...new Set(labels.map((l) => l.trim()).filter(Boolean))];
+	cleaned.sort((a, b) => b.length - a.length);
+	let out = snippet;
+	for (const label of cleaned) {
+		const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		out = out.replace(new RegExp(escaped, "gi"), "____");
+	}
+	return out.replace(/(?:____\s*)+/g, "____ ");
+}
+
 export interface NoteOccurrence {
 	offset: number; // char offset of the marker (LF-normalised)
 	length: number; // marker length, for jump selection

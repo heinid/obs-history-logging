@@ -512,6 +512,23 @@ export default class HistoryLoggingPlugin extends Plugin {
 	// queue; if another modal is in the way, fall back to a persistent notice
 	// that opens the reminder on click.
 	private surfaceQuizReminder(quizId: string): void {
+		void this.routeQuizReminder(quizId);
+	}
+
+	// When the recitation hub is the active view the user is already inside
+	// the practice surface: the due card joins the running session (or the
+	// wall's badges light up) instead of a popup.
+	private async routeQuizReminder(quizId: string): Promise<void> {
+		const active =
+			this.app.workspace.getActiveViewOfType(RecitationView);
+		if (active) {
+			const quiz = (await this.store.readQuizzes()).get(quizId);
+			if (quiz && active.handleDueQuiz(quiz)) return;
+		}
+		this.popQuizReminder(quizId);
+	}
+
+	private popQuizReminder(quizId: string): void {
 		if (this.reminderModal) {
 			this.reminderModal.enqueue(quizId);
 			return;
