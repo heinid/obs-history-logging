@@ -28,6 +28,7 @@ import {
 	shuffle,
 } from "./session-queue";
 import { PlayerPage } from "./player-shell";
+import { QuizEditorModal } from "./quiz-modal";
 
 export class QuizPlayerPage extends PlayerPage {
 	private queue: SessionQueueState = { ids: [], index: 0 };
@@ -44,6 +45,7 @@ export class QuizPlayerPage extends PlayerPage {
 	private answered = new Set<string>();
 	private hintShown = false;
 	private waitMode = false;
+	private editing = false;
 	private waitTimer = 0;
 	private loaded = false;
 	// `updated` stamps at snapshot time, to tell "answered elsewhere" apart
@@ -322,6 +324,12 @@ export class QuizPlayerPage extends PlayerPage {
 				this.render();
 			});
 		}
+		const edit = right.createEl("button", {
+			cls: "hl-icon-btn hl-player-reveal",
+		});
+		setIcon(edit, "pencil");
+		edit.setAttr("aria-label", "编辑这道 Quiz (E)");
+		edit.addEventListener("click", () => this.openEditor());
 		const tag = this.eventOf(quiz)?.tag;
 		if (tag) {
 			const reveal = right.createEl("button", {
@@ -374,6 +382,48 @@ export class QuizPlayerPage extends PlayerPage {
 				void this.rate(quiz, result)
 			);
 		}
+	}
+
+	handleKey(ev: KeyboardEvent): boolean {
+		if (this.editing) return false;
+		if ((ev.key === "e" || ev.key === "E") && !this.finished()) {
+			this.openEditor();
+			return true;
+		}
+		return super.handleKey(ev);
+	}
+
+	// E / footer pencil: edit the current quiz's text fields in place.
+	// Scheduling state is untouched; the card re-renders on save.
+	private openEditor(): void {
+		const quiz = this.current();
+		const event = quiz && this.eventOf(quiz);
+		if (!quiz || !event) return;
+		this.editing = true;
+		new QuizEditorModal(this.plugin.app, this.plugin, {
+			event,
+			tag: event.tag ?? "",
+			quizIds: new Set(this.quizzes.keys()),
+			existing: quiz,
+			initialKind: quiz.kind,
+			clozeAnswer: "",
+			ensure: async () => true,
+			onSaved: () => void this.reloadCurrent(quiz.id),
+			onClosed: () => {
+				this.editing = false;
+			},
+		}).open();
+	}
+
+	private async reloadCurrent(id: string): Promise<void> {
+		const fresh = await this.plugin.store.readQuizzes();
+		const updated = fresh.get(id);
+		if (updated) {
+			this.quizzes.set(id, updated);
+			this.stamps.set(id, updated.updated);
+		}
+		void this.plugin.refreshTimelines();
+		this.render();
 	}
 
 	protected rateFromKey(n: number): boolean {
