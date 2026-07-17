@@ -2964,9 +2964,10 @@ input.hl-tag-chip-input:focus-visible {
 	gap: 4px;
 }
 .hl-deck-wall.is-list .hl-deck-card {
-	flex-direction: row;
+	display: grid;
+	grid-template-columns: minmax(200px, 260px) 160px 1fr auto;
 	align-items: center;
-	gap: 12px;
+	column-gap: 16px;
 	padding: 6px 12px;
 }
 .hl-deck-wall.is-list .hl-deck-match,
@@ -2974,25 +2975,41 @@ input.hl-tag-chip-input:focus-visible {
 .hl-deck-wall.is-list .hl-deck-last {
 	display: none;
 }
-.hl-deck-wall.is-list .hl-deck-head {
-	flex: 0 0 auto;
-	min-width: 140px;
+.hl-deck-wall.is-list .hl-deck-head,
+.hl-deck-wall.is-list .hl-deck-card > .hl-deck-name {
+	grid-column: 1;
+}
+.hl-deck-wall.is-list .hl-deck-head .hl-deck-name {
+	flex: 0 0 140px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .hl-deck-wall.is-list .hl-deck-bar {
-	width: 120px;
-	flex: 0 0 auto;
+	grid-column: 2;
+	width: 100%;
 	margin: 0;
 }
 .hl-deck-wall.is-list .hl-deck-meta {
-	margin-left: auto;
+	grid-column: 3;
+	justify-self: end;
+	text-align: right;
 	white-space: nowrap;
 }
 .hl-deck-wall.is-list .hl-deck-actions {
+	grid-column: 4;
+	justify-self: end;
 	margin: 0;
-	flex: 0 0 auto;
+	display: flex;
+	gap: 8px;
+}
+.hl-deck-wall.is-list .hl-deck-actions button {
+	min-width: 116px;
 }
 .hl-deck-wall.is-list .hl-deck-add {
+	display: flex;
 	flex-direction: row;
+	align-items: center;
 	justify-content: flex-start;
 	gap: 8px;
 	padding: 6px 12px;
