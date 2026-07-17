@@ -2712,7 +2712,8 @@ input.hl-tag-chip-input:focus-visible {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	min-height: 120px;
+	height: 300px;
+	overflow-y: auto;
 }
 .hl-player-footer {
 	display: flex;
@@ -2725,11 +2726,11 @@ input.hl-tag-chip-input:focus-visible {
 .hl-player-footer button {
 	flex: 1;
 }
-.hl-player-key-tip {
-	align-self: center;
-	color: var(--text-faint);
-	font-size: 0.75em;
-	padding: 0 8px;
+.hl-player-footer .hl-player-show {
+	flex: 0 0 auto;
+	width: 60%;
+	max-width: 320px;
+	margin: 0 auto;
 }
 .hl-player-question {
 	font-size: 1.15em;
@@ -2835,21 +2836,40 @@ input.hl-tag-chip-input:focus-visible {
 	font-weight: 600;
 	text-align: center;
 }
+.hl-recite-context {
+	border-left: 3px solid var(--interactive-accent);
+	background: var(--background-primary-alt);
+	border-radius: 0 6px 6px 0;
+	padding: 10px 12px 8px;
+}
 .hl-recite-context .hl-recite-context-text {
 	font-style: italic;
+	line-height: 1.6;
 }
 .hl-recite-context-foot {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
 	gap: 10px;
-	margin-top: 4px;
+	margin-top: 8px;
+	padding-top: 6px;
+	border-top: 1px solid var(--background-modifier-border);
 	font-size: 0.8em;
 	color: var(--text-faint);
 }
 .hl-recite-context-foot button {
 	font-size: 0.9em;
-	padding: 1px 8px;
+	padding: 1px 10px;
 	height: auto;
+	box-shadow: none;
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	color: var(--text-muted);
+}
+.hl-recite-context-foot button:hover {
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
 }
 
 /* Deck detail */
@@ -3017,6 +3037,15 @@ input.hl-tag-chip-input:focus-visible {
 .hl-recite-context-src {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: 5px;
 	cursor: pointer;
+	color: var(--text-muted);
+	text-decoration: none;
+}
+.hl-recite-context-src:hover {
+	color: var(--interactive-accent);
+}
+.hl-recite-context-src .svg-icon {
+	width: 13px;
+	height: 13px;
 }

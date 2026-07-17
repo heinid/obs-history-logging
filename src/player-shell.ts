@@ -110,10 +110,6 @@ export abstract class PlayerPage {
 		const footer = card.createDiv({ cls: "hl-player-footer" });
 		if (!this.revealed) {
 			this.renderFront(body);
-			footer.createSpan({
-				cls: "hl-player-key-tip",
-				text: "空格",
-			});
 			const show = footer.createEl("button", {
 				cls: "mod-cta hl-player-show",
 				text: "显示答案",
