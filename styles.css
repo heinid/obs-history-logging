@@ -3896,29 +3896,127 @@ input.hl-tag-chip-input:focus-visible {
 	max-height: 42vh;
 }
 
-/* Map exam layout: the usual top-down card layout in a taller window, with
-   the inline map replaced by the zoomable exam stage. Shared by the
-   practice/reminder/session modals. */
+/* Immersive map exam: the zoomable map fills the whole window, the
+   question floats in a bar over the top edge and the answer slides in as
+   a bottom drawer. Shared by the practice/reminder/session modals. */
 .hl-map-exam-window {
 	width: min(960px, 92vw);
 	max-width: 92vw;
 	height: min(660px, 84vh);
+	padding: 0;
+}
+.hl-map-exam-window .modal-close-button {
+	z-index: 5;
 }
 .hl-map-exam {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
-	gap: 10px;
+	padding: 0 !important;
 }
-.hl-map-exam .hl-quiz-practice-surface {
+.hl-map-exam-stage {
+	border-radius: var(--modal-radius, 12px);
+	overflow: hidden;
+}
+.hl-map-exam-stage .hl-occ-stage-wrap {
+	border: none;
+	border-radius: 0;
+	box-shadow: none;
+	background: var(--background-secondary-alt);
+}
+.hl-map-exam-topbar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 3;
+	padding: 12px 44px 10px 16px;
+	background: linear-gradient(
+		color-mix(in srgb, var(--background-primary) 92%, transparent),
+		color-mix(in srgb, var(--background-primary) 72%, transparent) 70%,
+		transparent
+	);
+}
+.hl-map-exam-question {
+	font-size: 1.02em;
+	font-weight: 600;
+	line-height: 1.45;
+}
+.hl-map-exam-question p {
+	margin: 0;
+}
+.hl-map-exam-state {
+	margin-top: 2px;
+	color: var(--text-muted);
+	font-size: 0.78em;
+}
+.hl-map-exam-hint {
+	margin-top: 6px;
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	font-size: 0.85em;
+}
+.hl-map-exam-hint > span {
+	color: var(--text-muted);
+	font-size: 0.85em;
+	flex: none;
+}
+.hl-map-exam-hint p {
+	margin: 0;
+}
+.hl-map-exam-bottombar {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 3;
 	display: flex;
 	flex-direction: column;
-	flex: 1 1 auto;
-	min-height: 0;
+	gap: 8px;
+	padding: 10px 16px 12px;
+	background: linear-gradient(
+		transparent,
+		color-mix(in srgb, var(--background-primary) 78%, transparent) 30%,
+		color-mix(in srgb, var(--background-primary) 94%, transparent)
+	);
 }
-.hl-mq-exam-host {
-	flex: 1 1 auto;
-	min-height: 180px;
+.hl-map-exam-drawer {
+	max-height: 30vh;
+	overflow-y: auto;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	padding: 10px 14px;
+	box-shadow: 0 6px 18px rgb(0 0 0 / 14%);
+	animation: hl-drawer-in 0.18s ease-out;
+}
+@keyframes hl-drawer-in {
+	from {
+		transform: translateY(12px);
+		opacity: 0;
+	}
+	to {
+		transform: none;
+		opacity: 1;
+	}
+}
+.hl-map-exam-answer p:first-child {
+	margin-top: 0;
+}
+.hl-map-exam-answer p:last-child {
+	margin-bottom: 0;
+}
+.hl-map-exam-bottombar .hl-quiz-practice-footer {
+	margin: 0;
+	padding: 0;
+	border: none;
+}
+.hl-map-exam-bottombar .hl-quiz-review-actions {
+	justify-content: flex-end;
+}
+.hl-map-exam-stage .hl-occ-nav-hint {
+	display: none;
 }
 .hl-mq-exam-stage .hl-occ-box {
 	cursor: default;

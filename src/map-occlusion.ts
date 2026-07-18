@@ -163,7 +163,8 @@ export async function renderMapExamStage(
 	plugin: HistoryLoggingPlugin,
 	quiz: QuizEntry,
 	host: HTMLElement,
-	revealed: boolean
+	revealed: boolean,
+	focusAsked = false
 ): Promise<void> {
 	const maps = await plugin.store.readMaps();
 	const map = quiz.sourceMapId ? maps.get(quiz.sourceMapId) : undefined;
@@ -172,9 +173,11 @@ export async function renderMapExamStage(
 	const stage = new MapStage(host, plugin.app.vault.getResourcePath(file));
 	stage.stage.addClass("hl-mq-exam-stage");
 	buildBoxes(stage.stage, map, quiz, revealed);
+	const asked = map.occlusions.find((o) => o.id === quiz.occlusionId);
+	if (focusAsked && asked) stage.focusOn(asked);
 	stage.wrap.createDiv({
 		cls: "hl-occ-nav-hint",
-		text: "拖拽平移 · 滚轮缩放 · 双击复位",
+		text: "拖拽平移 · 滚轮缩放 · 双击看全图",
 	});
 }
 

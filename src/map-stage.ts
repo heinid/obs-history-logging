@@ -6,6 +6,13 @@
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 12;
 
+export interface FracRect {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+}
+
 export class MapStage {
 	readonly wrap: HTMLElement;
 	readonly stage: HTMLElement;
@@ -14,6 +21,7 @@ export class MapStage {
 	private tx = 0;
 	private ty = 0;
 	private fitW = 0;
+	private pendingFocus: FracRect | null = null;
 
 	// onPress handles a primary-button press before panning kicks in;
 	// returning true consumes the press (the editor draws/moves frames).
@@ -32,6 +40,10 @@ export class MapStage {
 				this.img.style.width = `${this.fitW}px`;
 				this.applyTransform();
 			} else this.fit();
+			if (this.pendingFocus) {
+				this.applyFocus(this.pendingFocus);
+				this.pendingFocus = null;
+			}
 		};
 		if (this.img.complete) window.setTimeout(settle, 0);
 		else this.img.addEventListener("load", settle, { once: true });
@@ -52,6 +64,28 @@ export class MapStage {
 		this.scale = 1;
 		this.tx = (wrap.width - this.fitW) / 2;
 		this.ty = (wrap.height - this.img.naturalHeight * fit) / 2;
+		this.applyTransform();
+	}
+
+	// Open on the given image region: pan it to the center and, when the
+	// region is small on screen, zoom in gently (capped). Double-click
+	// still resets to the full fitted picture.
+	focusOn(rect: FracRect): void {
+		if (this.fitW) this.applyFocus(rect);
+		else this.pendingFocus = rect;
+	}
+
+	private applyFocus(rect: FracRect): void {
+		const wrap = this.wrap.getBoundingClientRect();
+		if (!wrap.width || !wrap.height || !this.img.naturalWidth) return;
+		const fitH =
+			(this.fitW * this.img.naturalHeight) / this.img.naturalWidth;
+		const onScreen = Math.max(rect.w * this.fitW, rect.h * fitH);
+		this.scale = Math.min(2.2, Math.max(1, 140 / Math.max(1, onScreen)));
+		this.tx =
+			wrap.width / 2 - (rect.x + rect.w / 2) * this.fitW * this.scale;
+		this.ty =
+			wrap.height / 2 - (rect.y + rect.h / 2) * fitH * this.scale;
 		this.applyTransform();
 	}
 

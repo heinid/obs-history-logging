@@ -592,14 +592,21 @@ export class QuizPracticeModal extends Modal {
 		host.empty();
 		host.addClass("hl-quiz-practice");
 		const quiz = this.quiz;
-		// Map quizzes keep the same top-down card layout; the inline map is
-		// simply replaced by the large zoomable exam stage in a taller window.
+		// Map quizzes get the immersive exam layout: the zoomable map fills
+		// the whole window, the question floats on top and the answer slides
+		// in as a bottom drawer.
 		const isMap = quiz?.kind === "map";
 		this.modalEl.toggleClass("hl-map-exam-window", isMap);
 		host.toggleClass("hl-map-exam", isMap);
 		this.renderBanner(host);
 		if (!quiz) {
 			host.createDiv({ cls: "hl-empty", text: "找不到这个 Quiz。" });
+			return;
+		}
+		const schedule = quizSchedule(this.plugin.settings);
+		const ready = isQuizReady(quiz, new Date(), schedule);
+		if (isMap) {
+			this.renderMapExam(host, quiz, ready, schedule);
 			return;
 		}
 
@@ -612,8 +619,6 @@ export class QuizPracticeModal extends Modal {
 		state.createSpan({
 			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
 		});
-		const schedule = quizSchedule(this.plugin.settings);
-		const ready = isQuizReady(quiz, new Date(), schedule);
 		if (!ready)
 			state.createSpan({
 				cls: "hl-quiz-cooling",
@@ -621,7 +626,7 @@ export class QuizPracticeModal extends Modal {
 			});
 
 		const surface = host.createDiv({ cls: "hl-quiz-practice-surface" });
-		if (!isMap) {
+		{
 			const context = surface.createDiv({
 				cls: "hl-quiz-practice-context",
 			});
@@ -653,13 +658,6 @@ export class QuizPracticeModal extends Modal {
 			question,
 			this.dbColors
 		);
-		if (isMap)
-			void renderMapExamStage(
-				this.plugin,
-				quiz,
-				surface.createDiv({ cls: "hl-occ-stage-host hl-mq-exam-host" }),
-				this.revealed
-			);
 
 		if (this.hintShown && quiz.hint) {
 			const hint = questionPanel.createDiv({ cls: "hl-quiz-practice-hint" });
@@ -668,11 +666,6 @@ export class QuizPracticeModal extends Modal {
 			renderQuizText(this.plugin, quiz.hint, hintBody, this.dbColors);
 		}
 
-		// Before reveal, a map card is just the covered map — no answer panel.
-		if (isMap && !this.revealed) {
-			this.renderPracticeFooter(host, quiz, ready, schedule, isMap);
-			return;
-		}
 		const answerPanel = surface.createDiv({
 			cls: `hl-quiz-practice-panel hl-quiz-practice-answer-panel${
 				this.revealed ? " is-revealed" : ""
@@ -706,7 +699,64 @@ export class QuizPracticeModal extends Modal {
 			);
 		}
 
-		this.renderPracticeFooter(host, quiz, ready, schedule, isMap);
+		this.renderPracticeFooter(host, quiz, ready, schedule, false);
+	}
+
+	// Immersive map exam: the map fills the window; the question floats in
+	// a bar over the top edge and the answer slides in as a bottom drawer
+	// with the actions. The view opens gently focused on the asked frame.
+	private renderMapExam(
+		host: HTMLElement,
+		quiz: QuizEntry,
+		ready: boolean,
+		schedule: QuizSchedule
+	): void {
+		const stageHost = host.createDiv({
+			cls: "hl-occ-stage-host hl-map-exam-stage",
+		});
+		void renderMapExamStage(
+			this.plugin,
+			quiz,
+			stageHost,
+			this.revealed,
+			!this.revealed
+		);
+
+		const top = stageHost.createDiv({ cls: "hl-map-exam-topbar" });
+		const question = top.createDiv({ cls: "hl-map-exam-question" });
+		renderQuizText(
+			this.plugin,
+			quizQuestion(quiz, this.event, this.revealed),
+			question,
+			this.dbColors
+		);
+		top.createDiv({
+			cls: "hl-map-exam-state",
+			text: `${quiz.status === "mastered" ? "学过" : "在学"} · 掌握 ${
+				quiz.progress
+			}/${this.plugin.settings.quizMasterySteps}${
+				ready ? "" : ` · ${nextReviewLabel(quiz, new Date(), schedule)}`
+			}`,
+		});
+		if (this.hintShown && quiz.hint) {
+			const hint = top.createDiv({ cls: "hl-map-exam-hint" });
+			hint.createSpan({ text: "提示" });
+			const hintBody = hint.createDiv();
+			renderQuizText(this.plugin, quiz.hint, hintBody, this.dbColors);
+		}
+
+		const bottom = stageHost.createDiv({ cls: "hl-map-exam-bottombar" });
+		if (this.revealed) {
+			const drawer = bottom.createDiv({ cls: "hl-map-exam-drawer" });
+			const answer = drawer.createDiv({ cls: "hl-map-exam-answer" });
+			renderQuizText(
+				this.plugin,
+				quizAnswer(quiz, this.event),
+				answer,
+				this.dbColors
+			);
+		}
+		this.renderPracticeFooter(bottom, quiz, ready, schedule, true);
 	}
 
 	private renderPracticeFooter(

@@ -73,45 +73,75 @@ export class QuizSessionModal extends Modal {
 		const event = this.events.get(quiz.sourceEvId);
 		const schedule = quizSchedule(this.plugin.settings);
 		const ready = isQuizReady(quiz, new Date(), schedule);
-		// Map quizzes keep the same top-down card layout; the inline map is
-		// simply replaced by the large zoomable exam stage in a taller window.
+		// Map quizzes get the immersive exam layout: the zoomable map fills
+		// the whole window, the question floats on top and the answer slides
+		// in as a bottom drawer.
 		const isMap = quiz.kind === "map";
 		this.modalEl.toggleClass("hl-map-exam-window", isMap);
 		host.toggleClass("hl-map-exam", isMap);
 
-		const head = host.createDiv({ cls: "hl-quiz-session-head" });
-		head.createSpan({
-			text: `第 ${this.index + 1} 题，共 ${this.quizzes.length} 题`,
-		});
-
-		const question = host.createDiv({ cls: "hl-quiz-practice-question" });
-		renderQuizText(
-			this.plugin,
-			quizQuestion(quiz, event, this.revealed),
-			question,
-			this.dbColors
-		);
-		if (isMap)
+		let main = host;
+		if (isMap) {
+			const stageHost = host.createDiv({
+				cls: "hl-occ-stage-host hl-map-exam-stage",
+			});
 			void renderMapExamStage(
 				this.plugin,
 				quiz,
-				host.createDiv({ cls: "hl-occ-stage-host hl-mq-exam-host" }),
-				this.revealed
+				stageHost,
+				this.revealed,
+				!this.revealed
 			);
-		host.createDiv({
-			cls: "hl-quiz-session-mastery",
-			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}${
-				ready ? "" : ` · ${nextReviewLabel(quiz, new Date(), schedule)}`
-			}`,
-		});
+			const top = stageHost.createDiv({ cls: "hl-map-exam-topbar" });
+			const question = top.createDiv({ cls: "hl-map-exam-question" });
+			renderQuizText(
+				this.plugin,
+				quizQuestion(quiz, event, this.revealed),
+				question,
+				this.dbColors
+			);
+			top.createDiv({
+				cls: "hl-map-exam-state",
+				text: `第 ${this.index + 1}/${this.quizzes.length} 题 · 掌握 ${
+					quiz.progress
+				}/${this.plugin.settings.quizMasterySteps}${
+					ready
+						? ""
+						: ` · ${nextReviewLabel(quiz, new Date(), schedule)}`
+				}`,
+			});
+			main = stageHost.createDiv({ cls: "hl-map-exam-bottombar" });
+		} else {
+			const head = host.createDiv({ cls: "hl-quiz-session-head" });
+			head.createSpan({
+				text: `第 ${this.index + 1} 题，共 ${this.quizzes.length} 题`,
+			});
+			const question = host.createDiv({ cls: "hl-quiz-practice-question" });
+			renderQuizText(
+				this.plugin,
+				quizQuestion(quiz, event, this.revealed),
+				question,
+				this.dbColors
+			);
+			host.createDiv({
+				cls: "hl-quiz-session-mastery",
+				text: `掌握 ${quiz.progress}/${
+					this.plugin.settings.quizMasterySteps
+				}${
+					ready
+						? ""
+						: ` · ${nextReviewLabel(quiz, new Date(), schedule)}`
+				}`,
+			});
+		}
 		if (!this.revealed) {
 			if (quiz.hint) {
-				const details = host.createEl("details", { cls: "hl-quiz-hint" });
+				const details = main.createEl("details", { cls: "hl-quiz-hint" });
 				details.createEl("summary", { text: "提示" });
 				const hint = details.createDiv();
 				renderQuizText(this.plugin, quiz.hint, hint, this.dbColors);
 			}
-			const show = host.createEl("button", {
+			const show = main.createEl("button", {
 				cls: "mod-cta hl-quiz-show-answer",
 				text: "显示答案",
 			});
@@ -123,7 +153,12 @@ export class QuizSessionModal extends Modal {
 		}
 
 		if (!clozeRevealsInline(quiz)) {
-			const answer = host.createDiv({ cls: "hl-quiz-practice-answer" });
+			const answerHost = isMap
+				? main.createDiv({ cls: "hl-map-exam-drawer" })
+				: main;
+			const answer = answerHost.createDiv({
+				cls: isMap ? "hl-map-exam-answer" : "hl-quiz-practice-answer",
+			});
 			renderQuizText(
 				this.plugin,
 				quizAnswer(quiz, event),
@@ -131,7 +166,7 @@ export class QuizSessionModal extends Modal {
 				this.dbColors
 			);
 		}
-		const actions = host.createDiv({ cls: "hl-quiz-review-actions" });
+		const actions = main.createDiv({ cls: "hl-quiz-review-actions" });
 		if (!ready) {
 			actions.createSpan({
 				cls: "hl-quiz-wait-note",
