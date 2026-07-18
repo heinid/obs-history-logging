@@ -10,6 +10,7 @@ import {
 	quizSchedule,
 } from "./quiz-display";
 import { DbColors, loadDbColors, renderQuizText } from "./quiz-render";
+import { renderMapQuizSurface } from "./map-occlusion";
 
 export class QuizSessionModal extends Modal {
 	private quizzes: QuizEntry[] = [];
@@ -85,6 +86,14 @@ export class QuizSessionModal extends Modal {
 			question,
 			this.dbColors
 		);
+		if (quiz.kind === "map")
+			void renderMapQuizSurface(
+				this.plugin,
+				quiz,
+				question.createDiv({ cls: "hl-mq-host" }),
+				this.dbColors,
+				this.revealed
+			);
 		host.createDiv({
 			cls: "hl-quiz-session-mastery",
 			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}${

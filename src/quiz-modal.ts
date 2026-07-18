@@ -641,30 +641,19 @@ export class QuizPracticeModal extends Modal {
 		const question = questionPanel.createDiv({
 			cls: "hl-quiz-practice-question",
 		});
+		renderQuizText(
+			this.plugin,
+			quizQuestion(quiz, this.event, this.revealed),
+			question,
+			this.dbColors
+		);
 		if (quiz.kind === "map")
 			void renderMapQuizSurface(
 				this.plugin,
 				quiz,
-				question,
+				question.createDiv({ cls: "hl-mq-host" }),
 				this.dbColors,
 				this.revealed
-			).then((surface) => {
-				if (!surface) return;
-				const open = question.createEl("button", {
-					cls: "hl-mq-open",
-					text: "在地图查看器中打开",
-				});
-				open.addEventListener("click", () => {
-					this.close();
-					surface.openViewer();
-				});
-			});
-		else
-			renderQuizText(
-				this.plugin,
-				quizQuestion(quiz, this.event, this.revealed),
-				question,
-				this.dbColors
 			);
 
 		if (this.hintShown && quiz.hint) {

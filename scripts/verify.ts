@@ -1015,6 +1015,8 @@ eq(
 		"",
 		"### occlusions",
 		"- o1f8k2c1 | 0.4200,0.3100,0.1200,0.0800",
+		"  q: 拜占庭首都是哪座城？",
+		"  hint: 博斯普鲁斯海峡边",
 		"  君士坦丁堡，{db a1b2c3d4} 的首都",
 		"  第二行",
 		"- o2f8k2c2 | 0.6100,0.5500,0.1000,0.0600",
@@ -1034,6 +1036,9 @@ eq(
 		"君士坦丁堡，{db a1b2c3d4} 的首都\n第二行"
 	);
 	eq("occ answer 2", m?.occlusions[1]?.answer, "黑海");
+	eq("occ question", m?.occlusions[0]?.question, "拜占庭首都是哪座城？");
+	eq("occ hint", m?.occlusions[0]?.hint, "博斯普鲁斯海峡边");
+	eq("occ no question", m?.occlusions[1]?.question, "");
 	eq(
 		"occ round trip",
 		serializeMapsFile(parseMapsFile(serializeMapsFile(maps))),

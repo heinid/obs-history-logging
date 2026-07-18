@@ -9,10 +9,17 @@ import type HistoryLoggingPlugin from "./main";
 import { MapEntry, MapOcclusion } from "./maps-format";
 import { QuizEntry } from "./quiz";
 import { generateId } from "./id";
-import { DbColors, renderQuizText } from "./quiz-render";
+import { DbColors } from "./quiz-render";
 
-export function mapQuizQuestion(map: MapEntry, index: number): string {
-	return `🗺 ${map.title || map.image} · 遮罩 ${index + 1}`;
+export function mapQuizQuestion(
+	map: MapEntry,
+	occ: MapOcclusion,
+	index: number
+): string {
+	return (
+		occ.question.trim() ||
+		`🗺 ${map.title || map.image} · 遮罩 ${index + 1}`
+	);
 }
 
 // Mirror a map's occlusion frames into quizzes.md. Returns occlusionId →
@@ -39,11 +46,22 @@ export async function syncMapQuizzes(
 		}
 
 	map.occlusions.forEach((occ, i) => {
-		const question = mapQuizQuestion(map, i);
+		const question = mapQuizQuestion(map, occ, i);
+		const hint = occ.hint.trim();
 		const existing = byOcc.get(occ.id);
 		if (existing) {
-			if (existing.question !== question || existing.answer !== occ.answer) {
-				const updated = { ...existing, question, answer: occ.answer, updated: now };
+			if (
+				existing.question !== question ||
+				existing.answer !== occ.answer ||
+				existing.hint !== hint
+			) {
+				const updated = {
+					...existing,
+					question,
+					answer: occ.answer,
+					hint,
+					updated: now,
+				};
 				all.set(updated.id, updated);
 				byOcc.set(occ.id, updated);
 				dirty = true;
@@ -62,7 +80,7 @@ export async function syncMapQuizzes(
 			updated: now,
 			question,
 			answer: occ.answer,
-			hint: "",
+			hint,
 			attempts: [],
 			cycles: [{ startedAt: now }],
 		};
@@ -88,17 +106,17 @@ export async function renderMapQuizSurface(
 	host: HTMLElement,
 	colors: DbColors,
 	revealed: boolean
-): Promise<{ openViewer: () => void } | null> {
+): Promise<void> {
 	const maps = await plugin.store.readMaps();
 	const map = quiz.sourceMapId ? maps.get(quiz.sourceMapId) : undefined;
 	if (!map) {
 		host.createDiv({ cls: "hl-empty", text: "来源地图已不存在。" });
-		return null;
+		return;
 	}
 	const file = plugin.app.metadataCache.getFirstLinkpathDest(map.image, "");
 	if (!(file instanceof TFile)) {
 		host.createDiv({ cls: "hl-empty", text: `找不到图片：${map.image}` });
-		return null;
+		return;
 	}
 	const stage = host.createDiv({ cls: "hl-mq-stage" });
 	const img = stage.createEl("img", { cls: "hl-mq-img" });
@@ -111,9 +129,6 @@ export async function renderMapQuizSurface(
 			if (revealed) box.addClass("is-revealed");
 		}
 	}
-	return {
-		openViewer: () => plugin.openMapViewer(map.id),
-	};
 }
 
 export function positionBox(box: HTMLElement, occ: MapOcclusion): void {
@@ -123,13 +138,3 @@ export function positionBox(box: HTMLElement, occ: MapOcclusion): void {
 	box.style.height = `${occ.h * 100}%`;
 }
 
-// The rendered answer of a map frame, with full inline entity behaviour.
-export function renderOcclusionAnswer(
-	plugin: HistoryLoggingPlugin,
-	answer: string,
-	host: HTMLElement,
-	colors: DbColors
-): void {
-	if (answer.trim()) renderQuizText(plugin, answer, host, colors);
-	else host.createSpan({ cls: "hl-occ-answer-empty", text: "（未填写答案）" });
-}

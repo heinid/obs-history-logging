@@ -12,7 +12,6 @@ import {
 } from "./deck-stats";
 import { EntityEntry, orderLangs } from "./db-format";
 import { ReciteDeck, reciteDeckCandidates } from "./recite-format";
-import { MapEntry } from "./maps-format";
 import { ReciteDeckModal } from "./recite-deck-modal";
 import { langDisplayName } from "./quiz-render";
 import { QuizPlayerPage } from "./quiz-player";
@@ -24,11 +23,6 @@ import {
 } from "./deck-detail";
 
 export const RECITATION_VIEW_TYPE = "history-logging-recitation";
-
-interface MapDeck {
-	map: MapEntry;
-	stats: DeckStats;
-}
 
 interface EventDeck {
 	profile: Profile;
@@ -52,7 +46,6 @@ type Page =
 // alarm modal.
 export class RecitationView extends ItemView {
 	private eventDecks: EventDeck[] = [];
-	private mapDecks: MapDeck[] = [];
 	private reciteDecks: ReciteDeck[] = [];
 	private entities = new Map<string, EntityEntry>();
 	private quizzes = new Map<string, QuizEntry>();
@@ -155,6 +148,15 @@ export class RecitationView extends ItemView {
 				list.push(q);
 				this.byEvent.set(q.sourceEvId, list);
 			}
+			// Map quizzes belong to the events their map links; through those
+			// events they join the same profile decks as ordinary quizzes.
+			for (const q of quizzes.values())
+				if (q.kind === "map" && q.sourceMapId)
+					for (const evId of maps.get(q.sourceMapId)?.events ?? []) {
+						const list = this.byEvent.get(evId) ?? [];
+						list.push(q);
+						this.byEvent.set(evId, list);
+					}
 
 			const schedule = quizSchedule(this.plugin.settings);
 			const now = new Date();
@@ -165,9 +167,13 @@ export class RecitationView extends ItemView {
 					profile.match
 				);
 				const deckQuizzes: QuizEntry[] = [];
+				const seen = new Set<string>();
 				for (const id of eventIds)
 					for (const q of this.byEvent.get(id) ?? [])
-						deckQuizzes.push(q);
+						if (!seen.has(q.id)) {
+							seen.add(q.id);
+							deckQuizzes.push(q);
+						}
 				const active = deckQuizzes.filter(
 					(q) => q.status === "active"
 				);
@@ -182,21 +188,6 @@ export class RecitationView extends ItemView {
 				};
 			});
 
-			// Each map with occlusion frames is its own small deck; review
-			// happens on the map itself, so the card opens the viewer.
-			const byMap = new Map<string, QuizEntry[]>();
-			for (const q of quizzes.values())
-				if (q.kind === "map" && q.sourceMapId) {
-					const list = byMap.get(q.sourceMapId) ?? [];
-					list.push(q);
-					byMap.set(q.sourceMapId, list);
-				}
-			this.mapDecks = [...maps.values()]
-				.filter((m) => byMap.has(m.id))
-				.map((m) => ({
-					map: m,
-					stats: quizDeckStats(byMap.get(m.id) ?? [], now, schedule),
-				}));
 		} finally {
 			this.loading = false;
 		}
@@ -362,7 +353,6 @@ export class RecitationView extends ItemView {
 
 		this.renderOverview(root);
 		this.renderEventDecks(root);
-		this.renderMapDecks(root);
 		this.renderReciteDecks(root);
 	}
 
@@ -421,46 +411,6 @@ export class RecitationView extends ItemView {
 				)
 			);
 		else start.disabled = true;
-	}
-
-	private renderMapDecks(root: HTMLElement): void {
-		if (!this.mapDecks.length) return;
-		const section = root.createDiv({ cls: "hl-recite-section" });
-		section.createEl("h3", { text: "地图遮罩" });
-		const wall = section.createDiv({ cls: this.wallCls() });
-		for (const deck of this.mapDecks) {
-			const total = deck.stats.active + deck.stats.mastered;
-			const card = wall.createDiv({
-				cls: "hl-deck-card hl-deck-clickable",
-			});
-			const head = card.createDiv({ cls: "hl-deck-head" });
-			head.createDiv({
-				cls: "hl-deck-name",
-				text: `🗺 ${deck.map.title || deck.map.image}`,
-			});
-			if (deck.stats.due > 0)
-				head.createSpan({
-					cls: "hl-deck-badge",
-					text: String(deck.stats.due),
-				});
-			else if (total && !deck.stats.waiting)
-				head.createSpan({ cls: "hl-deck-check", text: "✓" });
-			if (deck.stats.waiting > 0)
-				head.createSpan({
-					cls: "hl-deck-badge hl-deck-badge-wait",
-					text: `⏰ ${deck.stats.waiting}`,
-				});
-			renderMasteryBar(card, deck.stats);
-			card.createDiv({
-				cls: "hl-deck-meta",
-				text: `在学 ${deck.stats.active} · 学过 ${deck.stats.mastered}`,
-			});
-			card.addEventListener("click", () =>
-				void this.plugin.openMapViewer(deck.map.id, () =>
-					this.queueReload()
-				)
-			);
-		}
 	}
 
 	private renderEventDecks(root: HTMLElement): void {

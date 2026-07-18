@@ -5,6 +5,7 @@ import { MapEntry } from "./maps-format";
 import {
 	QuizEntry,
 	QuizStatus,
+	isQuizReady,
 	reviveQuiz,
 } from "./quiz";
 import {
@@ -13,6 +14,7 @@ import {
 	quizSchedule,
 } from "./quiz-display";
 import { QuizPracticeModal } from "./quiz-modal";
+import { QuizSessionModal } from "./quiz-session-modal";
 import { describeYear, parseYearTag } from "./year-tag";
 import { ConfirmModal } from "./name-modal";
 import { DbColors, renderQuizText } from "./quiz-render";
@@ -170,7 +172,8 @@ export function renderQuizBackstage(
 }
 
 // A map's occlusion quizzes as one section: 🗺 title in the head opens the
-// viewer, and rows lose the rebind action (the frame is the binding).
+// frame editor, a 练习 button runs the map's due cards as a normal quiz
+// session, and rows lose the rebind action (the frame is the binding).
 function renderMapGroup(
 	list: HTMLElement,
 	plugin: HistoryLoggingPlugin,
@@ -195,10 +198,27 @@ function renderMapGroup(
 			cls: "hl-icon-btn hl-quiz-event-open",
 		});
 		setIcon(open, "map");
-		open.setAttr("aria-label", "打开地图查看器");
+		open.setAttr("aria-label", "编辑地图遮罩");
 		open.addEventListener("click", () =>
 			void plugin.openMapViewer(map.id, () => void onChanged())
 		);
+		const due = group.filter(
+			(q) =>
+				q.status === "active" &&
+				isQuizReady(q, new Date(), quizSchedule(plugin.settings))
+		);
+		if (due.length) {
+			const practice = head.createEl("button", {
+				text: `练习 ${due.length} 题`,
+			});
+			practice.addEventListener("click", () =>
+				new QuizSessionModal(
+					plugin.app,
+					plugin,
+					due.map((q) => q.id)
+				).open()
+			);
+		}
 	}
 	if (group.some((quiz) => quiz.status === "mastered")) {
 		const revive = head.createEl("button", { text: "重新学习已掌握题" });
@@ -267,7 +287,16 @@ function renderQuizRow(
 				quiz.id
 			)
 		);
-	} else if (!mapBound && quiz.kind !== "map") {
+	} else if (quiz.kind === "map" && quiz.sourceMapId) {
+		const edit = actions.createEl("button", { cls: "hl-icon-btn" });
+		setIcon(edit, "pencil");
+		edit.setAttr("aria-label", "在地图上编辑这张卡");
+		edit.addEventListener("click", () =>
+			void plugin.openMapViewer(quiz.sourceMapId ?? "", () =>
+				void onChanged()
+			)
+		);
+	} else if (!mapBound) {
 		const rebind = actions.createEl("button", { text: "重新绑定" });
 		rebind.addEventListener("click", () =>
 			new RebindQuizModal(plugin, quiz, events, onChanged).open()

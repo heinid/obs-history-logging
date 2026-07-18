@@ -15,7 +15,9 @@ import { generateId } from "./id";
 import { ConfirmModal } from "./name-modal";
 import { renderEntityPage } from "./entity-page";
 import { describeYear, parseYearTag } from "./year-tag";
-import { QuizEntry } from "./quiz";
+import { QuizEntry, isQuizReady } from "./quiz";
+import { quizSchedule } from "./quiz-display";
+import { QuizSessionModal } from "./quiz-session-modal";
 import {
 	QuizBackstageStatus,
 	renderQuizBackstage,
@@ -1193,11 +1195,34 @@ export class EntityBrowserView extends ItemView {
 		});
 		for (const t of m.tags)
 			top.createSpan({ cls: "hl-tag-chip hl-eb-map-tag", text: t });
-		if (m.occlusions.length)
+		const mapQuizzes = this.quizzes.filter(
+			(q) => q.kind === "map" && q.sourceMapId === m.id
+		);
+		if (m.occlusions.length) {
+			const active = mapQuizzes.filter((q) => q.status === "active");
+			const mastered = mapQuizzes.length - active.length;
 			top.createSpan({
 				cls: "hl-eb-map-occ",
-				text: `遮罩 ${m.occlusions.length}`,
+				text: `遮罩 ${m.occlusions.length} · 在学 ${active.length} · 学过 ${mastered}`,
 			});
+			const due = active.filter((q) =>
+				isQuizReady(q, new Date(), quizSchedule(this.plugin.settings))
+			);
+			if (due.length) {
+				const practice = top.createEl("button", {
+					cls: "hl-eb-map-practice",
+					text: `练习 ${due.length} 题`,
+				});
+				practice.addEventListener("click", (e) => {
+					e.stopPropagation();
+					new QuizSessionModal(
+						this.app,
+						this.plugin,
+						due.map((q) => q.id)
+					).open();
+				});
+			}
+		}
 		const edit = top.createEl("button", {
 			cls: "hl-eb-map-edit",
 			text: "编辑",

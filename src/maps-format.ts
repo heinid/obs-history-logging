@@ -14,20 +14,25 @@
 //
 //   ### occlusions
 //   - o3f8k2c1 | 0.4200,0.3100,0.1200,0.0800
+//     q: 拜占庭首都是哪座城？
+//     hint: 博斯普鲁斯海峡边
 //     君士坦丁堡，{db a1b2c3d4} 的首都
 
 export const MAPS_HEADER = "# History Logging — maps";
 
 // One occlusion frame on a map: a rectangle in image-relative fractions
 // (0–1, so zoom / resolution never desyncs it) plus a free-markdown answer
-// (`{db …}` markers welcome). The id is stable across edits so per-frame
-// quiz progress survives adding / removing other frames.
+// (`{db …}` markers welcome). An optional single-line front question and
+// hint override the auto-generated card front. The id is stable across
+// edits so per-frame quiz progress survives adding / removing other frames.
 export interface MapOcclusion {
 	id: string;
 	x: number;
 	y: number;
 	w: number;
 	h: number;
+	question: string;
+	hint: string;
 	answer: string;
 }
 
@@ -167,11 +172,25 @@ function parseOcclusions(block: string): MapOcclusion[] {
 				y: clamp01(nums[1]),
 				w: clamp01(nums[2]),
 				h: clamp01(nums[3]),
+				question: "",
+				hint: "",
 				answer: "",
 			};
 			continue;
 		}
-		if (current) answerLines.push(line.replace(/^ {2}|^\t/, ""));
+		if (!current) continue;
+		const body = line.replace(/^ {2}|^\t/, "");
+		// q:/hint: lines belong to the frame header while the answer has not
+		// started yet; after that they are ordinary answer text.
+		if (!answerLines.some((l) => l.trim())) {
+			const meta = /^(q|hint):\s*(.*)$/.exec(body);
+			if (meta) {
+				if (meta[1] === "q") current.question = meta[2].trim();
+				else current.hint = meta[2].trim();
+				continue;
+			}
+		}
+		answerLines.push(body);
 	}
 	flush();
 	return occlusions;
@@ -210,6 +229,9 @@ export function serializeMapsFile(entries: Map<string, MapEntry>): string {
 						o.h
 					)}`
 				);
+				if (o.question.trim())
+					parts.push(`  q: ${o.question.trim()}`);
+				if (o.hint.trim()) parts.push(`  hint: ${o.hint.trim()}`);
 				for (const line of o.answer.trim().split("\n"))
 					if (line.trim() || o.answer.trim()) parts.push(`  ${line}`);
 			}

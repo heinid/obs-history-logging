@@ -29,6 +29,7 @@ import {
 } from "./session-queue";
 import { PlayerPage } from "./player-shell";
 import { QuizEditorModal } from "./quiz-modal";
+import { renderMapQuizSurface } from "./map-occlusion";
 
 export class QuizPlayerPage extends PlayerPage {
 	private queue: SessionQueueState = { ids: [], index: 0 };
@@ -263,6 +264,14 @@ export class QuizPlayerPage extends PlayerPage {
 			question,
 			this.dbColors
 		);
+		if (quiz.kind === "map")
+			void renderMapQuizSurface(
+				this.plugin,
+				quiz,
+				card.createDiv({ cls: "hl-player-map" }),
+				this.dbColors,
+				false
+			);
 		if (this.hintShown && quiz.hint) {
 			const hint = card.createDiv({ cls: "hl-player-hint" });
 			renderQuizText(this.plugin, quiz.hint, hint, this.dbColors);
@@ -281,6 +290,14 @@ export class QuizPlayerPage extends PlayerPage {
 			question,
 			this.dbColors
 		);
+		if (quiz.kind === "map")
+			void renderMapQuizSurface(
+				this.plugin,
+				quiz,
+				card.createDiv({ cls: "hl-player-map" }),
+				this.dbColors,
+				true
+			);
 		if (!clozeRevealsInline(quiz)) {
 			const answer = card.createDiv({ cls: "hl-player-answer" });
 			renderQuizText(
@@ -427,8 +444,16 @@ export class QuizPlayerPage extends PlayerPage {
 	// Scheduling state is untouched; the card re-renders on save.
 	private openEditor(): void {
 		const quiz = this.current();
-		const event = quiz && this.eventOf(quiz);
-		if (!quiz || !event) return;
+		if (!quiz) return;
+		// A map quiz is edited on its map: the frames are the cards.
+		if (quiz.kind === "map" && quiz.sourceMapId) {
+			void this.plugin.openMapViewer(quiz.sourceMapId, () =>
+				void this.reloadCurrent(quiz.id)
+			);
+			return;
+		}
+		const event = this.eventOf(quiz);
+		if (!event) return;
 		this.editing = true;
 		new QuizEditorModal(this.plugin.app, this.plugin, {
 			event,

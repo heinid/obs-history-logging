@@ -40,7 +40,7 @@ import {
 	RecitationView,
 } from "./recitation-view";
 import { QuizManagerModal, QuizPracticeModal } from "./quiz-modal";
-import { MapOcclusionViewer } from "./map-viewer";
+import { MapOcclusionEditor } from "./map-viewer";
 import { QuizEntry } from "./quiz";
 import { quizSchedule } from "./quiz-display";
 import { ModalStash } from "./modal-stash";
@@ -419,7 +419,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 	async openMapViewer(id: string, onChanged?: () => void): Promise<void> {
 		const map = (await this.store.readMaps()).get(id);
 		if (!map) return;
-		new MapOcclusionViewer(this.app, this, map, onChanged).open();
+		new MapOcclusionEditor(this.app, this, map, onChanged).open();
 	}
 
 	// ⌛ menu: open (or focus) a timeline and scroll to this event's card.
