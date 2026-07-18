@@ -236,7 +236,7 @@ export function openDbLangMenu(
 				if (others.length)
 					el.createSpan({
 						cls: "hl-db-aliases",
-						text: ` ⸱ ${others.join(" ⸱ ")}`,
+						text: `／${others.join("／")}`,
 					});
 				el.removeClass("hl-db-mask");
 				el.setAttr("aria-label", "点击遮住");

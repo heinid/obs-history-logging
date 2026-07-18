@@ -1359,6 +1359,12 @@ input.hl-tag-chip-input:focus-visible {
 	color: var(--text-normal);
 	margin: 2px 0;
 }
+/* Secondary same-language spellings under the primary one. */
+.hl-page-lang-aliases {
+	font-size: var(--font-ui-small);
+	color: var(--text-faint);
+	margin: -1px 0 2px;
+}
 .hl-page-lang-reading {
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);

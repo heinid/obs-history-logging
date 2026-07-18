@@ -78,7 +78,7 @@ export async function renderEntityPage(
 	if (aliases.length)
 		hero.createDiv({
 			cls: "hl-page-aliases",
-			text: aliases.join(" · "),
+			text: aliases.join("／"),
 		});
 	if (entity.tags.length) {
 		const tags = hero.createDiv({ cls: "hl-page-tags" });
@@ -105,13 +105,21 @@ export async function renderEntityPage(
 				cls: "hl-lang-badge",
 				text: lang.toUpperCase(),
 			});
+			// Primary spelling on its own line; further same-language
+			// spellings go below in faint text — a separator inside the
+			// headline would collide with middle dots inside names.
 			const words = entity.labels
 				.filter((x) => x.lang === lang)
 				.map((x) => x.text);
 			if (words.length)
 				card.createDiv({
 					cls: "hl-page-lang-word",
-					text: words.join(" · "),
+					text: words[0],
+				});
+			if (words.length > 1)
+				card.createDiv({
+					cls: "hl-page-lang-aliases",
+					text: words.slice(1).join("／"),
 				});
 			const readings = entity.readings
 				.filter((x) => x.lang === lang)
@@ -119,7 +127,7 @@ export async function renderEntityPage(
 			if (readings.length)
 				card.createDiv({
 					cls: "hl-page-lang-reading",
-					text: readings.join(" · "),
+					text: readings.join("／"),
 				});
 			for (const a of entity.audios.filter((x) => x.lang === lang)) {
 				const play = card.createEl("button", {

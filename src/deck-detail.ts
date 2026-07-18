@@ -279,7 +279,7 @@ export function renderReciteDeckDetail(
 		const variants = entity.labels
 			.filter((l) => l.text.trim() && l.lang !== deck.from)
 			.map((l) => l.text)
-			.join(" · ");
+			.join("／");
 		if (variants)
 			text.createDiv({ cls: "hl-detail-row-meta", text: variants });
 		row.addEventListener("click", () =>

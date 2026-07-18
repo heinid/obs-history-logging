@@ -187,7 +187,7 @@ function openPicker(
 				.map((l) => l.text)
 				.filter((t) => t !== displayName(ent))
 				.slice(0, 3)
-				.join(" · ");
+				.join("／");
 			if (others)
 				row.createSpan({ cls: "hl-le-suggest-meta", text: others });
 			row.addEventListener("mousedown", (ev) => {

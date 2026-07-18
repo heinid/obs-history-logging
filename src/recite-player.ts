@@ -169,7 +169,7 @@ export class RecitePlayerPage extends PlayerPage {
 			if (others.length)
 				row.createSpan({
 					cls: "hl-recite-aliases",
-					text: others.join(" ⸱ "),
+					text: others.join("／"),
 				});
 			const reading = this.reading(entity, lang);
 			if (reading)

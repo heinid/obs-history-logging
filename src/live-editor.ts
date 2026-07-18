@@ -84,7 +84,7 @@ export function entityHint(ent: EntityEntry, shown: string): string {
 		.map((l) => l.text)
 		.filter((t) => t && t !== shown)
 		.slice(0, 3);
-	if (others.length) return others.join(" · ");
+	if (others.length) return others.join("／");
 	if (ent.tags.length) return ent.tags.slice(0, 3).join(" · ");
 	const line = ent.body.split("\n").find((l) => l.trim());
 	if (line) return line.trim().slice(0, 24);
@@ -898,7 +898,7 @@ export class LiveEditor {
 					.map((l) => l.text)
 					.filter((t) => t !== displayName(ent))
 					.slice(0, 3)
-					.join(" · ");
+					.join("／");
 				if (others)
 					row.createSpan({ cls: "hl-le-suggest-meta", text: others });
 				row.addEventListener("mousedown", (ev) => {
