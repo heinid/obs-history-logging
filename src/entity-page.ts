@@ -71,15 +71,6 @@ export async function renderEntityPage(
 			ctx.refresh()
 		).open();
 	});
-	const head = displayName(entity);
-	const aliases = [
-		...new Set(entity.labels.map((x) => x.text).filter((t) => t !== head)),
-	];
-	if (aliases.length)
-		hero.createDiv({
-			cls: "hl-page-aliases",
-			text: aliases.join("／"),
-		});
 	if (entity.tags.length) {
 		const tags = hero.createDiv({ cls: "hl-page-tags" });
 		for (const t of entity.tags)

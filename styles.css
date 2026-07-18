@@ -1333,12 +1333,6 @@ input.hl-tag-chip-input:focus-visible {
 .hl-page-edit {
 	margin-left: auto;
 }
-/* Other spellings / aliases under the headword. */
-.hl-page-aliases {
-	margin-top: 4px;
-	color: var(--text-muted);
-	font-size: 0.95em;
-}
 .hl-page-tags {
 	display: flex;
 	flex-wrap: wrap;
