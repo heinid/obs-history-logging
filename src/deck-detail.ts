@@ -41,6 +41,7 @@ const KIND_LABEL: Record<QuizKind, string> = {
 	year: "年份",
 	cloze: "填空",
 	qa: "问答",
+	map: "地图",
 };
 
 function header(root: HTMLElement, ctx: DeckDetailCtx): void {

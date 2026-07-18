@@ -1,4 +1,4 @@
-export type QuizKind = "year" | "cloze" | "qa";
+export type QuizKind = "year" | "cloze" | "qa" | "map";
 export type QuizStatus = "active" | "mastered";
 export type QuizResult = "remembered" | "fuzzy" | "forgot";
 
@@ -18,6 +18,10 @@ export interface MasteryCycle {
 export interface QuizEntry {
 	id: string;
 	sourceEvId: string;
+	// For kind "map": the maps.md entry and the occlusion frame this quiz
+	// scores. One quiz per frame; the answer mirrors the frame's markdown.
+	sourceMapId?: string;
+	occlusionId?: string;
 	kind: QuizKind;
 	status: QuizStatus;
 	progress: number;

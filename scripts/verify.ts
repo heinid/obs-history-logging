@@ -277,6 +277,25 @@ const quizMap = new Map([[quiz.id, quiz]]);
 const serializedQuiz = serializeQuizzesFile(quizMap);
 const quizRound = parseQuizzesFile(serializedQuiz);
 eq("quiz roundtrip", quizRound.get(quiz.id), quiz);
+// map-kind quiz keeps its frame binding through the file
+{
+	const mapQuiz: QuizEntry = {
+		...quiz,
+		id: "z9y8x7w6",
+		sourceEvId: "",
+		sourceMapId: "m1a2b3c4",
+		occlusionId: "o1f8k2c1",
+		kind: "map",
+		question: "🗺 拜占庭帝国 · 遮罩 1",
+		answer: "君士坦丁堡",
+		hint: "",
+	};
+	const round = parseQuizzesFile(
+		serializeQuizzesFile(new Map([[mapQuiz.id, mapQuiz]]))
+	).get(mapQuiz.id);
+	eq("map quiz roundtrip", round, mapQuiz);
+	eq("map quiz kind", round?.kind, "map");
+}
 eq(
 	"legacy paused quiz migrates to learning",
 	parseQuizzesFile(serializedQuiz.replace("status: active", "status: paused")).get(
@@ -981,6 +1000,50 @@ eq(
 	eq("maps parse tags", m?.tags.join(","), "希腊史,战役图");
 	eq("maps parse body", m?.body, "自由注记");
 	eq("maps round trip", serializeMapsFile(parseMapsFile(serializeMapsFile(maps))), serializeMapsFile(maps));
+}
+
+// maps.md occlusion frames: parse, body separation, round trip
+{
+	const src = [
+		"# History Logging — maps",
+		"",
+		"## m1a2b3c4",
+		"title: 拜占庭帝国",
+		"image: maps/byz.png",
+		"",
+		"自由注记",
+		"",
+		"### occlusions",
+		"- o1f8k2c1 | 0.4200,0.3100,0.1200,0.0800",
+		"  君士坦丁堡，{db a1b2c3d4} 的首都",
+		"  第二行",
+		"- o2f8k2c2 | 0.6100,0.5500,0.1000,0.0600",
+		"  黑海",
+		"",
+	].join("\n");
+	const maps = parseMapsFile(src);
+	const m = maps.get("m1a2b3c4");
+	eq("occ body kept clean", m?.body, "自由注记");
+	eq("occ count", m?.occlusions.length, 2);
+	eq("occ id", m?.occlusions[0]?.id, "o1f8k2c1");
+	eq("occ coords", m?.occlusions[0]?.x, 0.42);
+	eq("occ coords h", m?.occlusions[1]?.h, 0.06);
+	eq(
+		"occ multiline answer",
+		m?.occlusions[0]?.answer,
+		"君士坦丁堡，{db a1b2c3d4} 的首都\n第二行"
+	);
+	eq("occ answer 2", m?.occlusions[1]?.answer, "黑海");
+	eq(
+		"occ round trip",
+		serializeMapsFile(parseMapsFile(serializeMapsFile(maps))),
+		serializeMapsFile(maps)
+	);
+	// A map without the section parses to no occlusions and serializes none.
+	const plain = parseMapsFile(
+		"# History Logging — maps\n\n## m9z8y7x6\ntitle: t\nimage: i.png\n"
+	).get("m9z8y7x6");
+	eq("occ absent", plain?.occlusions.length, 0);
 }
 
 // image embeds + resize suffix rewrite

@@ -1,0 +1,135 @@
+// Map occlusion quizzes: one quiz entry (kind "map") per occlusion frame,
+// scored by the same mastery loop as every other quiz. The map entry is the
+// source of truth for geometry and answer text; syncMapQuizzes keeps the
+// quizzes.md rows mirroring it (create for new frames, refresh text, drop
+// rows whose frame is gone — their attempt history goes with them).
+
+import { TFile } from "obsidian";
+import type HistoryLoggingPlugin from "./main";
+import { MapEntry, MapOcclusion } from "./maps-format";
+import { QuizEntry } from "./quiz";
+import { generateId } from "./id";
+import { DbColors, renderQuizText } from "./quiz-render";
+
+export function mapQuizQuestion(map: MapEntry, index: number): string {
+	return `🗺 ${map.title || map.image} · 遮罩 ${index + 1}`;
+}
+
+// Mirror a map's occlusion frames into quizzes.md. Returns occlusionId →
+// quiz for the frames that now have one.
+export async function syncMapQuizzes(
+	plugin: HistoryLoggingPlugin,
+	map: MapEntry
+): Promise<Map<string, QuizEntry>> {
+	const all = await plugin.store.readQuizzes();
+	const byOcc = new Map<string, QuizEntry>();
+	for (const quiz of all.values())
+		if (quiz.kind === "map" && quiz.sourceMapId === map.id && quiz.occlusionId)
+			byOcc.set(quiz.occlusionId, quiz);
+
+	const now = new Date().toISOString();
+	const alive = new Set(map.occlusions.map((o) => o.id));
+	let dirty = false;
+
+	for (const [occId, quiz] of byOcc)
+		if (!alive.has(occId)) {
+			all.delete(quiz.id);
+			byOcc.delete(occId);
+			dirty = true;
+		}
+
+	map.occlusions.forEach((occ, i) => {
+		const question = mapQuizQuestion(map, i);
+		const existing = byOcc.get(occ.id);
+		if (existing) {
+			if (existing.question !== question || existing.answer !== occ.answer) {
+				const updated = { ...existing, question, answer: occ.answer, updated: now };
+				all.set(updated.id, updated);
+				byOcc.set(occ.id, updated);
+				dirty = true;
+			}
+			return;
+		}
+		const quiz: QuizEntry = {
+			id: generateId((id) => all.has(id)),
+			sourceEvId: "",
+			sourceMapId: map.id,
+			occlusionId: occ.id,
+			kind: "map",
+			status: "active",
+			progress: 0,
+			created: now,
+			updated: now,
+			question,
+			answer: occ.answer,
+			hint: "",
+			attempts: [],
+			cycles: [{ startedAt: now }],
+		};
+		all.set(quiz.id, quiz);
+		byOcc.set(occ.id, quiz);
+		dirty = true;
+	});
+
+	if (dirty) {
+		await plugin.store.writeQuizzes(all);
+		await plugin.refreshTimelines();
+	}
+	return byOcc;
+}
+
+// Question / answer surface of a map quiz outside the viewer (practice
+// modal, reminder, player): the map with every frame covered; the asked
+// frame is accented, and turns transparent on reveal. The answer text
+// renders separately through the caller's normal answer slot.
+export async function renderMapQuizSurface(
+	plugin: HistoryLoggingPlugin,
+	quiz: QuizEntry,
+	host: HTMLElement,
+	colors: DbColors,
+	revealed: boolean
+): Promise<{ openViewer: () => void } | null> {
+	const maps = await plugin.store.readMaps();
+	const map = quiz.sourceMapId ? maps.get(quiz.sourceMapId) : undefined;
+	if (!map) {
+		host.createDiv({ cls: "hl-empty", text: "来源地图已不存在。" });
+		return null;
+	}
+	const file = plugin.app.metadataCache.getFirstLinkpathDest(map.image, "");
+	if (!(file instanceof TFile)) {
+		host.createDiv({ cls: "hl-empty", text: `找不到图片：${map.image}` });
+		return null;
+	}
+	const stage = host.createDiv({ cls: "hl-mq-stage" });
+	const img = stage.createEl("img", { cls: "hl-mq-img" });
+	img.src = plugin.app.vault.getResourcePath(file);
+	for (const occ of map.occlusions) {
+		const box = stage.createDiv({ cls: "hl-occ-box" });
+		positionBox(box, occ);
+		if (occ.id === quiz.occlusionId) {
+			box.addClass("is-asked");
+			if (revealed) box.addClass("is-revealed");
+		}
+	}
+	return {
+		openViewer: () => plugin.openMapViewer(map.id),
+	};
+}
+
+export function positionBox(box: HTMLElement, occ: MapOcclusion): void {
+	box.style.left = `${occ.x * 100}%`;
+	box.style.top = `${occ.y * 100}%`;
+	box.style.width = `${occ.w * 100}%`;
+	box.style.height = `${occ.h * 100}%`;
+}
+
+// The rendered answer of a map frame, with full inline entity behaviour.
+export function renderOcclusionAnswer(
+	plugin: HistoryLoggingPlugin,
+	answer: string,
+	host: HTMLElement,
+	colors: DbColors
+): void {
+	if (answer.trim()) renderQuizText(plugin, answer, host, colors);
+	else host.createSpan({ cls: "hl-occ-answer-empty", text: "（未填写答案）" });
+}

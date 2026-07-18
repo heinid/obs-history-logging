@@ -22,7 +22,7 @@ import {
 } from "./quiz-backstage";
 import { EventEntry } from "./types";
 import { MapEntry } from "./maps-format";
-import { MapModal, MapViewerModal, newMapEntry } from "./map-modal";
+import { MapModal, newMapEntry } from "./map-modal";
 import { openEvMenu } from "./ev-menu";
 
 export const ENTITY_BROWSER_VIEW_TYPE = "history-logging-entity-browser";
@@ -374,7 +374,8 @@ export class EntityBrowserView extends ItemView {
 				this.events,
 				this.dbColors,
 				cur,
-				() => this.reload()
+				() => this.reload(),
+				new Map(this.maps.map((m) => [m.id, m]))
 			);
 			const scroller = this.quizScrollEl();
 			if (scroller) this.restoreBodyScroll(scroller, cur.scroll);
@@ -1192,6 +1193,11 @@ export class EntityBrowserView extends ItemView {
 		});
 		for (const t of m.tags)
 			top.createSpan({ cls: "hl-tag-chip hl-eb-map-tag", text: t });
+		if (m.occlusions.length)
+			top.createSpan({
+				cls: "hl-eb-map-occ",
+				text: `遮罩 ${m.occlusions.length}`,
+			});
 		const edit = top.createEl("button", {
 			cls: "hl-eb-map-edit",
 			text: "编辑",
@@ -1238,11 +1244,9 @@ export class EntityBrowserView extends ItemView {
 
 		row.addEventListener("click", () => {
 			if (file instanceof TFile)
-				new MapViewerModal(
-					this.app,
-					file,
-					m.title || file.basename
-				).open();
+				void this.plugin.openMapViewer(m.id, () =>
+					void this.reload()
+				);
 			else
 				new MapModal(this.app, this.plugin, m, false, () =>
 					void this.reload()

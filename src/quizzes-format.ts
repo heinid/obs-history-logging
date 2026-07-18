@@ -10,7 +10,7 @@ import {
 
 export const QUIZZES_HEADER = "# History Logging — quizzes";
 
-const KINDS = new Set<QuizKind>(["year", "cloze", "qa"]);
+const KINDS = new Set<QuizKind>(["year", "cloze", "qa", "map"]);
 const STATUSES = new Set<QuizStatus>(["active", "mastered"]);
 const LEGACY_STATUSES = new Set(["paused", "retired"]);
 const RESULTS = new Set<QuizResult>(["remembered", "fuzzy", "forgot"]);
@@ -63,6 +63,10 @@ function parseQuizBlock(id: string, block: string): QuizEntry {
 		if (!field) continue;
 		const [, key, value] = field;
 		if (key === "sourceEvId") quiz.sourceEvId = value.trim();
+		else if (key === "sourceMapId" && value.trim())
+			quiz.sourceMapId = value.trim();
+		else if (key === "occlusionId" && value.trim())
+			quiz.occlusionId = value.trim();
 		else if (key === "kind" && KINDS.has(value.trim() as QuizKind))
 			quiz.kind = value.trim() as QuizKind;
 		else if (
@@ -161,6 +165,8 @@ export function serializeQuizzesFile(
 		if (!quiz) continue;
 		parts.push(`## ${id}`);
 		parts.push(`sourceEvId: ${quiz.sourceEvId}`);
+		if (quiz.sourceMapId) parts.push(`sourceMapId: ${quiz.sourceMapId}`);
+		if (quiz.occlusionId) parts.push(`occlusionId: ${quiz.occlusionId}`);
 		parts.push(`kind: ${quiz.kind}`);
 		parts.push(`status: ${quiz.status}`);
 		parts.push(`progress: ${quiz.progress}`);

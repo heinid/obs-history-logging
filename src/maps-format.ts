@@ -11,8 +11,25 @@
 //   updated: 2026-07-17
 //
 //   自由注记（markdown）
+//
+//   ### occlusions
+//   - o3f8k2c1 | 0.4200,0.3100,0.1200,0.0800
+//     君士坦丁堡，{db a1b2c3d4} 的首都
 
 export const MAPS_HEADER = "# History Logging — maps";
+
+// One occlusion frame on a map: a rectangle in image-relative fractions
+// (0–1, so zoom / resolution never desyncs it) plus a free-markdown answer
+// (`{db …}` markers welcome). The id is stable across edits so per-frame
+// quiz progress survives adding / removing other frames.
+export interface MapOcclusion {
+	id: string;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+	answer: string;
+}
 
 export interface MapEntry {
 	id: string;
@@ -28,6 +45,8 @@ export interface MapEntry {
 	updated?: string;
 	// Free markdown annotation.
 	body: string;
+	// Occlusion-quiz frames drawn over the image.
+	occlusions: MapOcclusion[];
 }
 
 const listOf = (val: string): string[] =>
@@ -69,6 +88,7 @@ function parseMapBlock(id: string, block: string): MapEntry {
 		entities: [],
 		tags: [],
 		body: "",
+		occlusions: [],
 	};
 	let i = 0;
 	for (; i < lines.length; i++) {
@@ -106,9 +126,62 @@ function parseMapBlock(id: string, block: string): MapEntry {
 				break;
 		}
 	}
-	entry.body = lines.slice(i).join("\n").trim();
+	const rest = lines.slice(i).join("\n");
+	const at = rest.search(/^###\s+occlusions\s*$/im);
+	if (at < 0) {
+		entry.body = rest.trim();
+		return entry;
+	}
+	const after = rest.slice(at).replace(/^###\s+occlusions\s*\n?/i, "");
+	const nextSection = after.search(/^###\s+/m);
+	const occBlock = nextSection >= 0 ? after.slice(0, nextSection) : after;
+	const tail = nextSection >= 0 ? after.slice(nextSection) : "";
+	entry.body = (rest.slice(0, at) + tail).trim();
+	entry.occlusions = parseOcclusions(occBlock);
 	return entry;
 }
+
+function parseOcclusions(block: string): MapOcclusion[] {
+	const occlusions: MapOcclusion[] = [];
+	let current: MapOcclusion | null = null;
+	const answerLines: string[] = [];
+	const flush = (): void => {
+		if (!current) return;
+		current.answer = answerLines.join("\n").trim();
+		occlusions.push(current);
+		current = null;
+		answerLines.length = 0;
+	};
+	for (const line of block.split("\n")) {
+		const head =
+			/^-\s+([0-9a-z]{8})\s*\|\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*$/.exec(
+				line
+			);
+		if (head) {
+			flush();
+			const nums = head.slice(2, 6).map(Number);
+			if (nums.some((n) => !Number.isFinite(n))) continue;
+			current = {
+				id: head[1],
+				x: clamp01(nums[0]),
+				y: clamp01(nums[1]),
+				w: clamp01(nums[2]),
+				h: clamp01(nums[3]),
+				answer: "",
+			};
+			continue;
+		}
+		if (current) answerLines.push(line.replace(/^ {2}|^\t/, ""));
+	}
+	flush();
+	return occlusions;
+}
+
+function clamp01(n: number): number {
+	return Math.min(1, Math.max(0, n));
+}
+
+const frac = (n: number): string => n.toFixed(4);
 
 export function serializeMapsFile(entries: Map<string, MapEntry>): string {
 	const parts: string[] = [MAPS_HEADER, ""];
@@ -127,6 +200,19 @@ export function serializeMapsFile(entries: Map<string, MapEntry>): string {
 		parts.push("");
 		if (e.body.trim()) {
 			parts.push(e.body.trim());
+			parts.push("");
+		}
+		if (e.occlusions.length) {
+			parts.push("### occlusions");
+			for (const o of e.occlusions) {
+				parts.push(
+					`- ${o.id} | ${frac(o.x)},${frac(o.y)},${frac(o.w)},${frac(
+						o.h
+					)}`
+				);
+				for (const line of o.answer.trim().split("\n"))
+					if (line.trim() || o.answer.trim()) parts.push(`  ${line}`);
+			}
 			parts.push("");
 		}
 	}

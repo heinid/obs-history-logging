@@ -1,6 +1,7 @@
 import { FuzzySuggestModal, Notice, setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { EventEntry } from "./types";
+import { MapEntry } from "./maps-format";
 import {
 	QuizEntry,
 	QuizStatus,
@@ -30,7 +31,8 @@ export function renderQuizBackstage(
 	events: Map<string, EventEntry>,
 	dbColors: DbColors,
 	state: QuizBackstageState,
-	onChanged: () => Promise<void>
+	onChanged: () => Promise<void>,
+	maps: Map<string, MapEntry> = new Map()
 ): void {
 	const bar = host.createDiv({ cls: "hl-eb-bar hl-quiz-backstage-bar" });
 	const search = bar.createEl("input", {
@@ -58,9 +60,12 @@ export function renderQuizBackstage(
 			if (state.status !== "all" && quiz.status !== state.status) return false;
 			if (!query) return true;
 			const event = events.get(quiz.sourceEvId);
+			const map = quiz.sourceMapId
+				? maps.get(quiz.sourceMapId)
+				: undefined;
 			return `${quiz.question} ${quiz.answer} ${quiz.hint} ${
 				event?.summary ?? ""
-			} ${event?.tag ?? ""}`
+			} ${event?.tag ?? ""} ${map?.title ?? ""}`
 				.toLowerCase()
 				.includes(query);
 		});
@@ -73,9 +78,13 @@ export function renderQuizBackstage(
 
 		const groups = new Map<string, QuizEntry[]>();
 		for (const quiz of filtered) {
-			const group = groups.get(quiz.sourceEvId) ?? [];
+			const key =
+				quiz.kind === "map" && quiz.sourceMapId
+					? `map:${quiz.sourceMapId}`
+					: quiz.sourceEvId;
+			const group = groups.get(key) ?? [];
 			group.push(quiz);
-			groups.set(quiz.sourceEvId, group);
+			groups.set(key, group);
 		}
 		if (!groups.size) {
 			list.createDiv({
@@ -87,6 +96,19 @@ export function renderQuizBackstage(
 			return;
 		}
 		for (const [evId, group] of groups) {
+			if (evId.startsWith("map:")) {
+				renderMapGroup(
+					list,
+					plugin,
+					evId.slice(4),
+					group,
+					maps,
+					events,
+					dbColors,
+					onChanged
+				);
+				continue;
+			}
 			const event = events.get(evId);
 			const section = list.createDiv({ cls: "hl-quiz-event-group" });
 			const head = section.createDiv({ cls: "hl-quiz-event-head" });
@@ -147,6 +169,55 @@ export function renderQuizBackstage(
 	paint();
 }
 
+// A map's occlusion quizzes as one section: 🗺 title in the head opens the
+// viewer, and rows lose the rebind action (the frame is the binding).
+function renderMapGroup(
+	list: HTMLElement,
+	plugin: HistoryLoggingPlugin,
+	mapId: string,
+	group: QuizEntry[],
+	maps: Map<string, MapEntry>,
+	events: Map<string, EventEntry>,
+	dbColors: DbColors,
+	onChanged: () => Promise<void>
+): void {
+	const map = maps.get(mapId);
+	const section = list.createDiv({ cls: "hl-quiz-event-group" });
+	const head = section.createDiv({ cls: "hl-quiz-event-head" });
+	head.createSpan({
+		cls: "hl-quiz-event-year",
+		text: "🗺",
+	});
+	const title = head.createDiv({ cls: "hl-quiz-event-summary" });
+	title.setText(map ? map.title || map.image : "来源地图已不存在");
+	if (map) {
+		const open = head.createEl("button", {
+			cls: "hl-icon-btn hl-quiz-event-open",
+		});
+		setIcon(open, "map");
+		open.setAttr("aria-label", "打开地图查看器");
+		open.addEventListener("click", () =>
+			void plugin.openMapViewer(map.id, () => void onChanged())
+		);
+	}
+	if (group.some((quiz) => quiz.status === "mastered")) {
+		const revive = head.createEl("button", { text: "重新学习已掌握题" });
+		revive.addEventListener("click", () =>
+			void (async () => {
+				const all = await plugin.store.readQuizzes();
+				for (const quiz of group)
+					if (quiz.status === "mastered")
+						all.set(quiz.id, reviveQuiz(quiz));
+				await plugin.store.writeQuizzes(all);
+				await plugin.refreshTimelines();
+				await onChanged();
+			})()
+		);
+	}
+	for (const quiz of group)
+		renderQuizRow(section, plugin, quiz, undefined, events, dbColors, onChanged, !!map);
+}
+
 function renderQuizRow(
 	host: HTMLElement,
 	plugin: HistoryLoggingPlugin,
@@ -154,7 +225,8 @@ function renderQuizRow(
 	event: EventEntry | undefined,
 	events: Map<string, EventEntry>,
 	dbColors: DbColors,
-	onChanged: () => Promise<void>
+	onChanged: () => Promise<void>,
+	mapBound = false
 ): void {
 	const row = host.createDiv({ cls: "hl-quiz-backstage-row" });
 	const content = row.createDiv({ cls: "hl-quiz-backstage-content" });
@@ -195,7 +267,7 @@ function renderQuizRow(
 				quiz.id
 			)
 		);
-	} else {
+	} else if (!mapBound && quiz.kind !== "map") {
 		const rebind = actions.createEl("button", { text: "重新绑定" });
 		rebind.addEventListener("click", () =>
 			new RebindQuizModal(plugin, quiz, events, onChanged).open()
@@ -277,5 +349,6 @@ class RebindQuizModal extends FuzzySuggestModal<EventEntry> {
 function quizKindLabel(quiz: QuizEntry): string {
 	if (quiz.kind === "year") return "Year";
 	if (quiz.kind === "cloze") return "Cloze";
+	if (quiz.kind === "map") return "地图";
 	return "Q&A";
 }

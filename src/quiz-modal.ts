@@ -31,6 +31,7 @@ import { describeYear, parseYearTag } from "./year-tag";
 import { makeClozeMarked, stripDbMarkers } from "./db-marker";
 import { DbColors, loadDbColors, renderQuizText } from "./quiz-render";
 import { attachAnnotateMenu } from "./textarea-annotate";
+import { renderMapQuizSurface } from "./map-occlusion";
 
 export class QuizManagerModal extends Modal {
 	private event?: EventEntry;
@@ -615,12 +616,18 @@ export class QuizPracticeModal extends Modal {
 
 		const surface = host.createDiv({ cls: "hl-quiz-practice-surface" });
 		const context = surface.createDiv({ cls: "hl-quiz-practice-context" });
-		const decoded = this.event?.tag ? parseYearTag(this.event.tag) : null;
-		context.createSpan({
-			text: decoded
-				? describeYear(decoded)
-				: this.event?.tag ?? "来源事件已不存在",
-		});
+		if (quiz.kind === "map") {
+			context.createSpan({ text: quiz.question });
+		} else {
+			const decoded = this.event?.tag
+				? parseYearTag(this.event.tag)
+				: null;
+			context.createSpan({
+				text: decoded
+					? describeYear(decoded)
+					: this.event?.tag ?? "来源事件已不存在",
+			});
+		}
 
 		const questionPanel = surface.createDiv({
 			cls: `hl-quiz-practice-panel hl-quiz-practice-question-panel${
@@ -634,12 +641,31 @@ export class QuizPracticeModal extends Modal {
 		const question = questionPanel.createDiv({
 			cls: "hl-quiz-practice-question",
 		});
-		renderQuizText(
-			this.plugin,
-			quizQuestion(quiz, this.event, this.revealed),
-			question,
-			this.dbColors
-		);
+		if (quiz.kind === "map")
+			void renderMapQuizSurface(
+				this.plugin,
+				quiz,
+				question,
+				this.dbColors,
+				this.revealed
+			).then((surface) => {
+				if (!surface) return;
+				const open = question.createEl("button", {
+					cls: "hl-mq-open",
+					text: "在地图查看器中打开",
+				});
+				open.addEventListener("click", () => {
+					this.close();
+					surface.openViewer();
+				});
+			});
+		else
+			renderQuizText(
+				this.plugin,
+				quizQuestion(quiz, this.event, this.revealed),
+				question,
+				this.dbColors
+			);
 
 		if (this.hintShown && quiz.hint) {
 			const hint = questionPanel.createDiv({ cls: "hl-quiz-practice-hint" });
@@ -782,6 +808,7 @@ function emptyQuiz(sourceEvId: string): QuizEntry {
 function quizKindLabel(kind: QuizKind): string {
 	if (kind === "year") return "Year";
 	if (kind === "cloze") return "Cloze";
+	if (kind === "map") return "地图";
 	return "Q&A";
 }
 

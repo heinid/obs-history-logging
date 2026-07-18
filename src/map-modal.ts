@@ -38,6 +38,7 @@ export class MapModal extends Modal {
 		super(app);
 		this.entry = JSON.parse(JSON.stringify(entry)) as MapEntry;
 		this.entry.tags ??= [];
+		this.entry.occlusions ??= [];
 	}
 
 	async onOpen(): Promise<void> {
@@ -468,6 +469,7 @@ export function newMapEntry(
 		entities: [],
 		tags: [],
 		body: "",
+		occlusions: [],
 		...partial,
 	};
 }
@@ -495,28 +497,4 @@ export class ImageSuggestModal extends FuzzySuggestModal<TFile> {
 	}
 }
 
-// Bare full-size image viewer: click a map row to look at the map; Esc or
-// a click anywhere closes.
-export class MapViewerModal extends Modal {
-	constructor(app: App, private file: TFile, private title: string) {
-		super(app);
-	}
 
-	onOpen(): void {
-		this.modalEl.addClass("hl-map-viewer-window");
-		const { contentEl } = this;
-		contentEl.addClass("hl-map-viewer");
-		const img = contentEl.createEl("img");
-		img.src = this.app.vault.getResourcePath(this.file);
-		if (this.title)
-			contentEl.createDiv({
-				cls: "hl-map-viewer-title",
-				text: this.title,
-			});
-		contentEl.addEventListener("click", () => this.close());
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
-}

@@ -12,6 +12,7 @@ import {
 } from "./deck-stats";
 import { EntityEntry, orderLangs } from "./db-format";
 import { ReciteDeck, reciteDeckCandidates } from "./recite-format";
+import { MapEntry } from "./maps-format";
 import { ReciteDeckModal } from "./recite-deck-modal";
 import { langDisplayName } from "./quiz-render";
 import { QuizPlayerPage } from "./quiz-player";
@@ -23,6 +24,11 @@ import {
 } from "./deck-detail";
 
 export const RECITATION_VIEW_TYPE = "history-logging-recitation";
+
+interface MapDeck {
+	map: MapEntry;
+	stats: DeckStats;
+}
 
 interface EventDeck {
 	profile: Profile;
@@ -46,6 +52,7 @@ type Page =
 // alarm modal.
 export class RecitationView extends ItemView {
 	private eventDecks: EventDeck[] = [];
+	private mapDecks: MapDeck[] = [];
 	private reciteDecks: ReciteDeck[] = [];
 	private entities = new Map<string, EntityEntry>();
 	private quizzes = new Map<string, QuizEntry>();
@@ -125,7 +132,7 @@ export class RecitationView extends ItemView {
 		if (this.loading) return;
 		this.loading = true;
 		try {
-			const [entries, profiles, quizzes, reciteDecks, entities] =
+			const [entries, profiles, quizzes, reciteDecks, entities, maps] =
 				await Promise.all([
 					scanVault(
 						this.app,
@@ -136,6 +143,7 @@ export class RecitationView extends ItemView {
 					this.plugin.store.readQuizzes(),
 					this.plugin.store.readReciteDecks(),
 					this.plugin.store.readEntities(),
+					this.plugin.store.readMaps(),
 				]);
 			this.reciteDecks = reciteDecks;
 			this.entities = entities;
@@ -173,6 +181,22 @@ export class RecitationView extends ItemView {
 					allIds: deckQuizzes.map((q) => q.id),
 				};
 			});
+
+			// Each map with occlusion frames is its own small deck; review
+			// happens on the map itself, so the card opens the viewer.
+			const byMap = new Map<string, QuizEntry[]>();
+			for (const q of quizzes.values())
+				if (q.kind === "map" && q.sourceMapId) {
+					const list = byMap.get(q.sourceMapId) ?? [];
+					list.push(q);
+					byMap.set(q.sourceMapId, list);
+				}
+			this.mapDecks = [...maps.values()]
+				.filter((m) => byMap.has(m.id))
+				.map((m) => ({
+					map: m,
+					stats: quizDeckStats(byMap.get(m.id) ?? [], now, schedule),
+				}));
 		} finally {
 			this.loading = false;
 		}
@@ -338,6 +362,7 @@ export class RecitationView extends ItemView {
 
 		this.renderOverview(root);
 		this.renderEventDecks(root);
+		this.renderMapDecks(root);
 		this.renderReciteDecks(root);
 	}
 
@@ -396,6 +421,46 @@ export class RecitationView extends ItemView {
 				)
 			);
 		else start.disabled = true;
+	}
+
+	private renderMapDecks(root: HTMLElement): void {
+		if (!this.mapDecks.length) return;
+		const section = root.createDiv({ cls: "hl-recite-section" });
+		section.createEl("h3", { text: "地图遮罩" });
+		const wall = section.createDiv({ cls: this.wallCls() });
+		for (const deck of this.mapDecks) {
+			const total = deck.stats.active + deck.stats.mastered;
+			const card = wall.createDiv({
+				cls: "hl-deck-card hl-deck-clickable",
+			});
+			const head = card.createDiv({ cls: "hl-deck-head" });
+			head.createDiv({
+				cls: "hl-deck-name",
+				text: `🗺 ${deck.map.title || deck.map.image}`,
+			});
+			if (deck.stats.due > 0)
+				head.createSpan({
+					cls: "hl-deck-badge",
+					text: String(deck.stats.due),
+				});
+			else if (total && !deck.stats.waiting)
+				head.createSpan({ cls: "hl-deck-check", text: "✓" });
+			if (deck.stats.waiting > 0)
+				head.createSpan({
+					cls: "hl-deck-badge hl-deck-badge-wait",
+					text: `⏰ ${deck.stats.waiting}`,
+				});
+			renderMasteryBar(card, deck.stats);
+			card.createDiv({
+				cls: "hl-deck-meta",
+				text: `在学 ${deck.stats.active} · 学过 ${deck.stats.mastered}`,
+			});
+			card.addEventListener("click", () =>
+				void this.plugin.openMapViewer(deck.map.id, () =>
+					this.queueReload()
+				)
+			);
+		}
 	}
 
 	private renderEventDecks(root: HTMLElement): void {
