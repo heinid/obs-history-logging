@@ -10,7 +10,7 @@ import {
 	quizSchedule,
 } from "./quiz-display";
 import { DbColors, loadDbColors, renderQuizText } from "./quiz-render";
-import { renderMapExamStage } from "./map-occlusion";
+import { renderMapExamHeader, renderMapExamStage } from "./map-occlusion";
 
 export class QuizSessionModal extends Modal {
 	private quizzes: QuizEntry[] = [];
@@ -82,6 +82,14 @@ export class QuizSessionModal extends Modal {
 
 		let main = host;
 		if (isMap) {
+			renderMapExamHeader(
+				this.plugin,
+				host,
+				quiz,
+				ready ? "" : nextReviewLabel(quiz, new Date(), schedule),
+				`第 ${this.index + 1}/${this.quizzes.length} 题`,
+				this.dbColors
+			);
 			const stageHost = host.createDiv({
 				cls: "hl-occ-stage-host hl-map-exam-stage",
 			});
@@ -92,24 +100,6 @@ export class QuizSessionModal extends Modal {
 				this.revealed,
 				!this.revealed
 			);
-			const top = stageHost.createDiv({ cls: "hl-map-exam-topbar" });
-			const question = top.createDiv({ cls: "hl-map-exam-question" });
-			renderQuizText(
-				this.plugin,
-				quizQuestion(quiz, event, this.revealed),
-				question,
-				this.dbColors
-			);
-			top.createDiv({
-				cls: "hl-map-exam-state",
-				text: `第 ${this.index + 1}/${this.quizzes.length} 题 · 掌握 ${
-					quiz.progress
-				}/${this.plugin.settings.quizMasterySteps}${
-					ready
-						? ""
-						: ` · ${nextReviewLabel(quiz, new Date(), schedule)}`
-				}`,
-			});
 			main = stageHost.createDiv({ cls: "hl-map-exam-bottombar" });
 		} else {
 			const head = host.createDiv({ cls: "hl-quiz-session-head" });
@@ -152,19 +142,15 @@ export class QuizSessionModal extends Modal {
 			return;
 		}
 
-		if (!clozeRevealsInline(quiz)) {
+		const answerText = quizAnswer(quiz, event);
+		if (!clozeRevealsInline(quiz) && (!isMap || answerText.trim())) {
 			const answerHost = isMap
 				? main.createDiv({ cls: "hl-map-exam-drawer" })
 				: main;
 			const answer = answerHost.createDiv({
 				cls: isMap ? "hl-map-exam-answer" : "hl-quiz-practice-answer",
 			});
-			renderQuizText(
-				this.plugin,
-				quizAnswer(quiz, event),
-				answer,
-				this.dbColors
-			);
+			renderQuizText(this.plugin, answerText, answer, this.dbColors);
 		}
 		const actions = main.createDiv({ cls: "hl-quiz-review-actions" });
 		if (!ready) {

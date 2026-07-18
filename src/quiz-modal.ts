@@ -32,7 +32,7 @@ import { describeYear, parseYearTag } from "./year-tag";
 import { makeClozeMarked, stripDbMarkers } from "./db-marker";
 import { DbColors, loadDbColors, renderQuizText } from "./quiz-render";
 import { attachAnnotateMenu } from "./textarea-annotate";
-import { renderMapExamStage } from "./map-occlusion";
+import { renderMapExamHeader, renderMapExamStage } from "./map-occlusion";
 
 export class QuizManagerModal extends Modal {
 	private event?: EventEntry;
@@ -702,15 +702,24 @@ export class QuizPracticeModal extends Modal {
 		this.renderPracticeFooter(host, quiz, ready, schedule, false);
 	}
 
-	// Immersive map exam: the map fills the window; the question floats in
-	// a bar over the top edge and the answer slides in as a bottom drawer
-	// with the actions. The view opens gently focused on the asked frame.
+	// Immersive map exam: a solid header bar (the "lintel") holds the
+	// question, the map fills the rest of the window, and the answer rises
+	// as a matching solid drawer above the action bar. The view opens
+	// gently focused on the asked frame.
 	private renderMapExam(
 		host: HTMLElement,
 		quiz: QuizEntry,
 		ready: boolean,
 		schedule: QuizSchedule
 	): void {
+		renderMapExamHeader(
+			this.plugin,
+			host,
+			quiz,
+			ready ? "" : nextReviewLabel(quiz, new Date(), schedule),
+			"",
+			this.dbColors
+		);
 		const stageHost = host.createDiv({
 			cls: "hl-occ-stage-host hl-map-exam-stage",
 		});
@@ -722,39 +731,18 @@ export class QuizPracticeModal extends Modal {
 			!this.revealed
 		);
 
-		const top = stageHost.createDiv({ cls: "hl-map-exam-topbar" });
-		const question = top.createDiv({ cls: "hl-map-exam-question" });
-		renderQuizText(
-			this.plugin,
-			quizQuestion(quiz, this.event, this.revealed),
-			question,
-			this.dbColors
-		);
-		top.createDiv({
-			cls: "hl-map-exam-state",
-			text: `${quiz.status === "mastered" ? "学过" : "在学"} · 掌握 ${
-				quiz.progress
-			}/${this.plugin.settings.quizMasterySteps}${
-				ready ? "" : ` · ${nextReviewLabel(quiz, new Date(), schedule)}`
-			}`,
-		});
+		const bottom = stageHost.createDiv({ cls: "hl-map-exam-bottombar" });
 		if (this.hintShown && quiz.hint) {
-			const hint = top.createDiv({ cls: "hl-map-exam-hint" });
+			const hint = bottom.createDiv({ cls: "hl-map-exam-hint" });
 			hint.createSpan({ text: "提示" });
 			const hintBody = hint.createDiv();
 			renderQuizText(this.plugin, quiz.hint, hintBody, this.dbColors);
 		}
-
-		const bottom = stageHost.createDiv({ cls: "hl-map-exam-bottombar" });
-		if (this.revealed) {
+		const answerText = this.revealed ? quizAnswer(quiz, this.event) : "";
+		if (answerText.trim()) {
 			const drawer = bottom.createDiv({ cls: "hl-map-exam-drawer" });
 			const answer = drawer.createDiv({ cls: "hl-map-exam-answer" });
-			renderQuizText(
-				this.plugin,
-				quizAnswer(quiz, this.event),
-				answer,
-				this.dbColors
-			);
+			renderQuizText(this.plugin, answerText, answer, this.dbColors);
 		}
 		this.renderPracticeFooter(bottom, quiz, ready, schedule, true);
 	}

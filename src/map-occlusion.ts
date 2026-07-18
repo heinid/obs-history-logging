@@ -9,7 +9,7 @@ import type HistoryLoggingPlugin from "./main";
 import { MapEntry, MapOcclusion } from "./maps-format";
 import { QuizEntry } from "./quiz";
 import { generateId } from "./id";
-import { DbColors } from "./quiz-render";
+import { DbColors, renderQuizText } from "./quiz-render";
 import { MapStage } from "./map-stage";
 
 export function mapQuizQuestion(
@@ -154,6 +154,41 @@ export async function renderMapQuizSurface(
 	stage.addEventListener("dblclick", () => {
 		new MapZoomModal(plugin.app, plugin, quiz, revealed).open();
 	});
+}
+
+// The "lintel" header of the immersive map exam: a solid bar across the
+// top of the window. Kicker line = source map / position / mastery dots;
+// the main line only appears when the card has a custom question.
+export function renderMapExamHeader(
+	plugin: HistoryLoggingPlugin,
+	host: HTMLElement,
+	quiz: QuizEntry,
+	coolingLabel: string,
+	positionLabel: string,
+	colors: DbColors
+): void {
+	const header = host.createDiv({ cls: "hl-map-exam-header" });
+	const kicker = header.createDiv({ cls: "hl-map-exam-kicker" });
+	const q = quiz.question.trim();
+	const isDefault = q.startsWith("🗺");
+	kicker.createSpan({
+		cls: "hl-map-exam-source",
+		text: isDefault ? q.replace(/^🗺\s*/, "") : "地图题",
+	});
+	if (positionLabel) kicker.createSpan({ text: positionLabel });
+	const dots = kicker.createSpan({ cls: "hl-map-exam-dots" });
+	const steps = plugin.settings.quizMasterySteps;
+	for (let i = 0; i < steps; i++)
+		dots.createSpan({
+			cls: `hl-map-exam-dot${i < quiz.progress ? " is-on" : ""}`,
+		});
+	if (quiz.status === "mastered") kicker.createSpan({ text: "学过" });
+	if (coolingLabel)
+		kicker.createSpan({ cls: "hl-quiz-cooling", text: coolingLabel });
+	if (!isDefault) {
+		const question = header.createDiv({ cls: "hl-map-exam-question" });
+		renderQuizText(plugin, q, question, colors);
+	}
 }
 
 // Zoomable exam stage of a map quiz: same frame semantics as the inline
