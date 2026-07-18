@@ -4,12 +4,13 @@
 // quizzes.md rows mirroring it (create for new frames, refresh text, drop
 // rows whose frame is gone — their attempt history goes with them).
 
-import { TFile } from "obsidian";
+import { App, Modal, TFile } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { MapEntry, MapOcclusion } from "./maps-format";
 import { QuizEntry } from "./quiz";
 import { generateId } from "./id";
 import { DbColors } from "./quiz-render";
+import { MapStage } from "./map-stage";
 
 export function mapQuizQuestion(
 	map: MapEntry,
@@ -96,10 +97,44 @@ export async function syncMapQuizzes(
 	return byOcc;
 }
 
-// Question / answer surface of a map quiz outside the viewer (practice
-// modal, reminder, player): the map with every frame covered; the asked
-// frame is accented, and turns transparent on reveal. The answer text
-// renders separately through the caller's normal answer slot.
+function resolveMapImage(
+	plugin: HistoryLoggingPlugin,
+	quiz: QuizEntry,
+	map: MapEntry | undefined,
+	host: HTMLElement
+): TFile | null {
+	if (!map) {
+		host.createDiv({ cls: "hl-empty", text: "来源地图已不存在。" });
+		return null;
+	}
+	const file = plugin.app.metadataCache.getFirstLinkpathDest(map.image, "");
+	if (!(file instanceof TFile)) {
+		host.createDiv({ cls: "hl-empty", text: `找不到图片：${map.image}` });
+		return null;
+	}
+	return file;
+}
+
+function buildBoxes(
+	stage: HTMLElement,
+	map: MapEntry,
+	quiz: QuizEntry,
+	revealed: boolean
+): void {
+	for (const occ of map.occlusions) {
+		const box = stage.createDiv({ cls: "hl-occ-box" });
+		positionBox(box, occ);
+		if (occ.id === quiz.occlusionId) {
+			box.addClass("is-asked");
+			if (revealed) box.addClass("is-revealed");
+		}
+	}
+}
+
+// Inline question surface of a map quiz (deck player card): the map with
+// every frame covered; the asked frame is accented, and turns transparent
+// on reveal. Double-click opens the zoomable full-size view. The answer
+// text renders separately through the caller's normal answer slot.
 export async function renderMapQuizSurface(
 	plugin: HistoryLoggingPlugin,
 	quiz: QuizEntry,
@@ -109,25 +144,62 @@ export async function renderMapQuizSurface(
 ): Promise<void> {
 	const maps = await plugin.store.readMaps();
 	const map = quiz.sourceMapId ? maps.get(quiz.sourceMapId) : undefined;
-	if (!map) {
-		host.createDiv({ cls: "hl-empty", text: "来源地图已不存在。" });
-		return;
-	}
-	const file = plugin.app.metadataCache.getFirstLinkpathDest(map.image, "");
-	if (!(file instanceof TFile)) {
-		host.createDiv({ cls: "hl-empty", text: `找不到图片：${map.image}` });
-		return;
-	}
+	const file = resolveMapImage(plugin, quiz, map, host);
+	if (!map || !file) return;
 	const stage = host.createDiv({ cls: "hl-mq-stage" });
 	const img = stage.createEl("img", { cls: "hl-mq-img" });
 	img.src = plugin.app.vault.getResourcePath(file);
-	for (const occ of map.occlusions) {
-		const box = stage.createDiv({ cls: "hl-occ-box" });
-		positionBox(box, occ);
-		if (occ.id === quiz.occlusionId) {
-			box.addClass("is-asked");
-			if (revealed) box.addClass("is-revealed");
-		}
+	img.draggable = false;
+	buildBoxes(stage, map, quiz, revealed);
+	stage.setAttr("aria-label", "双击放大");
+	stage.addEventListener("dblclick", () => {
+		new MapZoomModal(plugin.app, plugin, quiz, revealed).open();
+	});
+}
+
+// Zoomable exam stage of a map quiz: same frame semantics as the inline
+// surface, on the shared pan/zoom picture stage. Used by the map exam
+// layout in the practice/reminder/session modals and by MapZoomModal.
+export async function renderMapExamStage(
+	plugin: HistoryLoggingPlugin,
+	quiz: QuizEntry,
+	host: HTMLElement,
+	revealed: boolean
+): Promise<void> {
+	const maps = await plugin.store.readMaps();
+	const map = quiz.sourceMapId ? maps.get(quiz.sourceMapId) : undefined;
+	const file = resolveMapImage(plugin, quiz, map, host);
+	if (!map || !file) return;
+	const stage = new MapStage(host, plugin.app.vault.getResourcePath(file));
+	stage.stage.addClass("hl-mq-exam-stage");
+	buildBoxes(stage.stage, map, quiz, revealed);
+	stage.wrap.createDiv({
+		cls: "hl-occ-nav-hint",
+		text: "拖拽平移 · 滚轮缩放 · 双击复位",
+	});
+}
+
+// Read-only full-size view of a map quiz, opened by double-clicking the
+// inline surface on a player card. The reveal state follows the card side.
+export class MapZoomModal extends Modal {
+	constructor(
+		app: App,
+		private plugin: HistoryLoggingPlugin,
+		private quiz: QuizEntry,
+		private revealed: boolean
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.modalEl.addClass("hl-map-zoom-window");
+		this.contentEl.addClass("hl-map-zoom");
+		const host = this.contentEl.createDiv({ cls: "hl-occ-stage-host" });
+		void renderMapExamStage(this.plugin, this.quiz, host, this.revealed);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
 	}
 }
 

@@ -2,16 +2,17 @@
 // surfaces (deck player, practice modal, reminder) — this window only looks
 // at the picture and edits the frames.
 //
-// Drag on the picture to add a frame; drag a frame to move it, its corner
-// handle to resize, × to delete. Selecting a frame (click on the picture or
-// in the list) opens its card fields in the side panel: an optional front
-// question, the answer, and an optional hint — question and answer through
-// the same live markdown editor as event summaries ({db} entity completion,
-// right-click annotation). Geometry is stored in image fractions, so frames
-// follow the picture through any zoom.
+// Dragging pans the picture, the wheel zooms around the cursor and
+// double-click resets to fit. Frames are created explicitly: the "+ 新遮罩"
+// button arms a one-shot crosshair, the next drag draws the frame. Dragging
+// a frame moves it, its corner handle resizes, × deletes. Selecting a frame
+// opens its card fields in the side panel: an optional front question, the
+// answer, and an optional hint — question and answer through the same live
+// markdown editor as event summaries ({db} entity completion, right-click
+// annotation). Geometry is stored in image fractions, so frames follow the
+// picture through any zoom.
 //
-// Wheel zooms around the cursor (out past fit as well), drag with the
-// middle button or Ctrl pans, double-click resets to fit.
+// Nothing touches maps.md until 保存 — closing with unsaved edits asks.
 
 import { App, EventRef, Modal, TFile, setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
@@ -21,29 +22,27 @@ import { DbType, EntityEntry } from "./db-format";
 import { EntityModal } from "./entity-modal";
 import { LiveEditor, registerEscapeFirst } from "./live-editor";
 import { positionBox, syncMapQuizzes } from "./map-occlusion";
+import { MapStage, trackDrag } from "./map-stage";
 
-const MIN_SCALE = 0.3;
-const MAX_SCALE = 12;
 // Frames smaller than this fraction on either axis are accidental clicks.
 const MIN_FRAC = 0.005;
 
 export class MapOcclusionEditor extends Modal {
 	private map: MapEntry;
-	private scale = 1;
-	private tx = 0;
-	private ty = 0;
 	private selected = "";
+	private drawMode = false;
 	private entities: EntityEntry[] = [];
 	private types: DbType[] = [];
 	private editors: LiveEditor[] = [];
-	private saveTimer: number | null = null;
 	private dirty = false;
+	private closing = false;
 	private entitiesWatch?: EventRef;
 
-	private stageWrap!: HTMLElement;
-	private stage!: HTMLElement;
-	private fitW = 0;
+	private mapStage?: MapStage;
 	private side!: HTMLElement;
+	private drawBtn!: HTMLElement;
+	private saveBtn!: HTMLButtonElement;
+	private footNote!: HTMLElement;
 	private boxEls = new Map<string, HTMLElement>();
 	private rowEls = new Map<string, HTMLElement>();
 
@@ -64,9 +63,14 @@ export class MapOcclusionEditor extends Modal {
 
 	async onOpen(): Promise<void> {
 		this.modalEl.addClass("hl-occ-viewer-window");
-		registerEscapeFirst(this.scope, () =>
-			this.editors.some((e) => e.closeSuggestIfOpen())
-		);
+		registerEscapeFirst(this.scope, () => {
+			if (this.editors.some((e) => e.closeSuggestIfOpen())) return true;
+			if (this.drawMode) {
+				this.setDrawMode(false);
+				return true;
+			}
+			return false;
+		});
 		this.entities = [...(await this.plugin.store.readEntities()).values()];
 		this.types = await this.plugin.store.readDbTypes();
 		this.entitiesWatch = this.app.vault.on("modify", (f) => {
@@ -115,70 +119,69 @@ export class MapOcclusionEditor extends Modal {
 			cls: "hl-occ-count",
 			text: this.map.occlusions.length
 				? `${this.map.occlusions.length} 个遮罩`
-				: "在图上拖拽框选遮罩",
+				: "",
 		});
+		const headSpacer = head.createSpan({ cls: "hl-occ-head-spacer" });
+		void headSpacer;
+		this.drawBtn = head.createEl("button", { cls: "hl-occ-draw-btn" });
+		setIcon(this.drawBtn, "plus");
+		this.drawBtn.createSpan({ text: "新遮罩" });
+		this.drawBtn.addEventListener("click", () =>
+			this.setDrawMode(!this.drawMode)
+		);
 
 		const body = contentEl.createDiv({ cls: "hl-occ-body" });
-		this.stageWrap = body.createDiv({ cls: "hl-occ-stage-wrap" });
+		const stageHost = body.createDiv({ cls: "hl-occ-stage-host" });
 		this.side = body.createDiv({ cls: "hl-occ-side" });
 
 		const file = this.imageFile();
 		if (!file) {
-			this.stageWrap.createDiv({
+			stageHost.createDiv({
 				cls: "hl-empty",
 				text: `找不到图片：${this.map.image}`,
 			});
 			return;
 		}
-		this.stage = this.stageWrap.createDiv({ cls: "hl-occ-stage" });
-		const img = this.stage.createEl("img", { cls: "hl-occ-img" });
-		img.src = this.app.vault.getResourcePath(file);
-		img.draggable = false;
-		const settle = (): void => {
-			if (this.fitW) {
-				img.style.width = `${this.fitW}px`;
-				this.applyTransform();
-			} else this.fitToWrap();
-		};
-		if (img.complete) window.setTimeout(settle, 0);
-		else img.addEventListener("load", settle, { once: true });
-		this.applyTransform();
-
-		this.stageWrap.createDiv({
+		this.mapStage = new MapStage(
+			stageHost,
+			this.app.vault.getResourcePath(file),
+			(e) => this.onStagePress(e)
+		);
+		this.mapStage.wrap.createDiv({
 			cls: "hl-occ-nav-hint",
-			text: "滚轮缩放 · 拖拽平移 · 双击复位",
+			text: "拖拽平移 · 滚轮缩放 · 双击复位",
 		});
+		this.paintDrawMode();
 
 		this.boxEls.clear();
 		for (const occ of this.map.occlusions) this.buildBox(occ);
-		this.wireStage();
 		this.paintSide();
+
+		const foot = contentEl.createDiv({ cls: "hl-occ-foot" });
+		this.footNote = foot.createSpan({ cls: "hl-occ-foot-note" });
+		const footSpacer = foot.createSpan({ cls: "hl-modal-foot-spacer" });
+		void footSpacer;
+		this.saveBtn = foot.createEl("button", {
+			cls: "mod-cta",
+			text: "保存",
+		});
+		this.saveBtn.addEventListener("click", () => void this.save());
+		this.paintFoot();
 	}
 
-	private fitToWrap(): void {
-		const img = this.stage?.querySelector("img");
-		if (!img || !img.naturalWidth || !img.naturalHeight) return;
-		const wrap = this.stageWrap.getBoundingClientRect();
-		if (!wrap.width || !wrap.height) return;
-		const fit = Math.min(
-			wrap.width / img.naturalWidth,
-			wrap.height / img.naturalHeight
-		);
-		this.fitW = img.naturalWidth * fit;
-		img.style.width = `${this.fitW}px`;
-		this.scale = 1;
-		this.tx = (wrap.width - this.fitW) / 2;
-		this.ty = (wrap.height - img.naturalHeight * fit) / 2;
-		this.applyTransform();
+	private setDrawMode(on: boolean): void {
+		this.drawMode = on;
+		this.paintDrawMode();
 	}
 
-	private applyTransform(): void {
-		if (!this.stage) return;
-		this.stage.style.transform = `translate(${this.tx}px, ${this.ty}px) scale(${this.scale})`;
+	private paintDrawMode(): void {
+		this.drawBtn?.toggleClass("is-active", this.drawMode);
+		this.mapStage?.wrap.toggleClass("is-drawing", this.drawMode);
 	}
 
 	private buildBox(occ: MapOcclusion): void {
-		const box = this.stage.createDiv({ cls: "hl-occ-box is-edit" });
+		if (!this.mapStage) return;
+		const box = this.mapStage.stage.createDiv({ cls: "hl-occ-box is-edit" });
 		positionBox(box, occ);
 		this.boxEls.set(occ.id, box);
 		this.paintBox(occ.id);
@@ -212,7 +215,7 @@ export class MapOcclusionEditor extends Modal {
 		if (!this.map.occlusions.length) {
 			this.side.createDiv({
 				cls: "hl-occ-side-empty",
-				text: "还没有遮罩。在图上拖拽框选一个区域，它就会成为一张卡片。",
+				text: "还没有遮罩。点「+ 新遮罩」，再在图上拖拽框选一个区域。",
 			});
 			return;
 		}
@@ -254,7 +257,7 @@ export class MapOcclusionEditor extends Modal {
 		this.editors.push(
 			this.makeEditor(qEl, occ.question, "默认：地图名 · 遮罩序号", (v) => {
 				occ.question = v.replace(/\n+/g, " ");
-				this.scheduleSave();
+				this.markDirty();
 			})
 		);
 
@@ -263,7 +266,7 @@ export class MapOcclusionEditor extends Modal {
 		this.editors.push(
 			this.makeEditor(aEl, occ.answer, "揭开遮罩后显示的内容…", (v) => {
 				occ.answer = v;
-				this.scheduleSave();
+				this.markDirty();
 			})
 		);
 
@@ -272,7 +275,7 @@ export class MapOcclusionEditor extends Modal {
 		this.editors.push(
 			this.makeEditor(hEl, occ.hint, "", (v) => {
 				occ.hint = v.replace(/\n+/g, " ");
-				this.scheduleSave();
+				this.markDirty();
 			})
 		);
 
@@ -326,7 +329,7 @@ export class MapOcclusionEditor extends Modal {
 		this.boxEls.get(id)?.remove();
 		this.boxEls.delete(id);
 		if (this.selected === id) this.selected = "";
-		this.scheduleSave();
+		this.markDirty();
 		this.render();
 	}
 
@@ -345,76 +348,68 @@ export class MapOcclusionEditor extends Modal {
 		};
 		this.map.occlusions.push(occ);
 		this.selected = occ.id;
-		this.scheduleSave();
+		this.markDirty();
 		this.render();
 	}
 
-	private scheduleSave(): void {
+	// ------------------------------------------------------------------ save
+
+	private markDirty(): void {
 		this.dirty = true;
-		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
-		this.saveTimer = window.setTimeout(() => void this.save(), 600);
+		this.paintFoot();
+	}
+
+	private paintFoot(): void {
+		if (!this.saveBtn) return;
+		this.saveBtn.disabled = !this.dirty;
+		this.footNote.setText(this.dirty ? "有未保存的更改" : "");
 	}
 
 	private async save(): Promise<void> {
 		if (!this.dirty) return;
 		this.dirty = false;
+		this.paintFoot();
 		await this.plugin.store.upsertMap(this.map);
 		await syncMapQuizzes(this.plugin, this.map);
 		this.onChanged?.();
 	}
 
-	// ------------------------------------------------------------- zoom/pan
-
-	// Pointer position → image fractions, valid under any zoom because the
-	// image rect itself carries the transform.
-	private toFrac(e: MouseEvent): { x: number; y: number } | null {
-		const img = this.stage.querySelector("img");
-		if (!img) return null;
-		const rect = img.getBoundingClientRect();
-		if (!rect.width || !rect.height) return null;
-		return {
-			x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)),
-			y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)),
-		};
+	// Closing with unsaved edits asks; nothing is written until 保存.
+	close(): void {
+		if (this.dirty && !this.closing) {
+			new UnsavedFramesModal(
+				this.app,
+				() =>
+					void this.save().then(() => {
+						this.closing = true;
+						super.close();
+					}),
+				() => {
+					this.closing = true;
+					super.close();
+				}
+			).open();
+			return;
+		}
+		super.close();
 	}
 
-	private wireStage(): void {
-		const wrap = this.stageWrap;
-		wrap.addEventListener(
-			"wheel",
-			(e) => {
-				e.preventDefault();
-				const rect = wrap.getBoundingClientRect();
-				const px = e.clientX - rect.left;
-				const py = e.clientY - rect.top;
-				const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
-				const next = Math.min(
-					MAX_SCALE,
-					Math.max(MIN_SCALE, this.scale * factor)
-				);
-				if (next === this.scale) return;
-				// Keep the point under the cursor fixed.
-				this.tx = px - ((px - this.tx) / this.scale) * next;
-				this.ty = py - ((py - this.ty) / this.scale) * next;
-				this.scale = next;
-				this.applyTransform();
-			},
-			{ passive: false }
-		);
-		wrap.addEventListener("dblclick", () => this.fitToWrap());
-		wrap.addEventListener("mousedown", (e) => {
-			if (e.button === 1 || e.ctrlKey) {
-				this.startPan(e);
-				return;
-			}
-			if (e.button !== 0) return;
-			const target = e.target as HTMLElement;
-			const boxId = this.boxIdAt(target);
-			if (boxId && target.hasClass("hl-occ-handle"))
-				this.startResize(e, boxId);
-			else if (boxId) this.startMove(e, boxId);
-			else this.startDraw(e);
-		});
+	// ------------------------------------------------------------- zoom/pan
+
+	// Primary press on the stage: draw when armed, drag frames otherwise;
+	// empty picture space falls through to the stage's pan.
+	private onStagePress(e: MouseEvent): boolean {
+		if (e.ctrlKey) return false;
+		if (this.drawMode) {
+			this.startDraw(e);
+			return true;
+		}
+		const target = e.target as HTMLElement;
+		const boxId = this.boxIdAt(target);
+		if (!boxId) return false;
+		if (target.hasClass("hl-occ-handle")) this.startResize(e, boxId);
+		else this.startMove(e, boxId);
+		return true;
 	}
 
 	private boxIdAt(el: HTMLElement): string {
@@ -423,25 +418,13 @@ export class MapOcclusionEditor extends Modal {
 		return "";
 	}
 
-	private startPan(e: MouseEvent): void {
-		e.preventDefault();
-		const sx = e.clientX - this.tx;
-		const sy = e.clientY - this.ty;
-		this.trackDrag(
-			(ev) => {
-				this.tx = ev.clientX - sx;
-				this.ty = ev.clientY - sy;
-				this.applyTransform();
-			},
-			() => undefined
-		);
-	}
-
 	private startDraw(e: MouseEvent): void {
-		const start = this.toFrac(e);
+		const stage = this.mapStage;
+		if (!stage) return;
+		const start = stage.toFrac(e);
 		if (!start) return;
 		e.preventDefault();
-		const ghost = this.stage.createDiv({
+		const ghost = stage.stage.createDiv({
 			cls: "hl-occ-box is-edit is-ghost",
 		});
 		const place = (
@@ -460,21 +443,19 @@ export class MapOcclusionEditor extends Modal {
 			});
 		place(start, start);
 		let last = start;
-		this.trackDrag(
+		trackDrag(
 			(ev) => {
-				const cur = this.toFrac(ev);
+				const cur = stage.toFrac(ev);
 				if (!cur) return;
 				last = cur;
 				place(start, cur);
 			},
 			() => {
 				ghost.remove();
+				this.setDrawMode(false);
 				const w = Math.abs(start.x - last.x);
 				const h = Math.abs(start.y - last.y);
-				if (w < MIN_FRAC || h < MIN_FRAC) {
-					this.select("");
-					return;
-				}
+				if (w < MIN_FRAC || h < MIN_FRAC) return;
 				this.addOcclusion(
 					Math.min(start.x, last.x),
 					Math.min(start.y, last.y),
@@ -486,17 +467,18 @@ export class MapOcclusionEditor extends Modal {
 	}
 
 	private startMove(e: MouseEvent, id: string): void {
+		const stage = this.mapStage;
 		const occ = this.occOf(id);
-		const start = this.toFrac(e);
-		if (!occ || !start) return;
+		const start = stage?.toFrac(e);
+		if (!stage || !occ || !start) return;
 		e.preventDefault();
 		if (this.selected !== id) this.select(id);
 		const ox = occ.x;
 		const oy = occ.y;
 		let moved = false;
-		this.trackDrag(
+		trackDrag(
 			(ev) => {
-				const cur = this.toFrac(ev);
+				const cur = stage.toFrac(ev);
 				if (!cur) return;
 				moved = true;
 				occ.x = Math.min(1 - occ.w, Math.max(0, ox + cur.x - start.x));
@@ -505,41 +487,32 @@ export class MapOcclusionEditor extends Modal {
 				if (box) positionBox(box, occ);
 			},
 			() => {
-				if (moved) this.scheduleSave();
+				if (moved) this.markDirty();
 			}
 		);
 	}
 
 	private startResize(e: MouseEvent, id: string): void {
+		const stage = this.mapStage;
 		const occ = this.occOf(id);
-		if (!occ) return;
+		if (!stage || !occ) return;
 		e.preventDefault();
 		e.stopPropagation();
-		this.trackDrag(
+		this.trackResize(stage, occ, id);
+	}
+
+	private trackResize(stage: MapStage, occ: MapOcclusion, id: string): void {
+		trackDrag(
 			(ev) => {
-				const cur = this.toFrac(ev);
+				const cur = stage.toFrac(ev);
 				if (!cur) return;
 				occ.w = Math.min(1 - occ.x, Math.max(MIN_FRAC, cur.x - occ.x));
 				occ.h = Math.min(1 - occ.y, Math.max(MIN_FRAC, cur.y - occ.y));
 				const box = this.boxEls.get(id);
 				if (box) positionBox(box, occ);
 			},
-			() => this.scheduleSave()
+			() => this.markDirty()
 		);
-	}
-
-	private trackDrag(
-		onMove: (e: MouseEvent) => void,
-		onUp: (e: MouseEvent) => void
-	): void {
-		const move = (e: MouseEvent): void => onMove(e);
-		const up = (e: MouseEvent): void => {
-			window.removeEventListener("mousemove", move);
-			window.removeEventListener("mouseup", up);
-			onUp(e);
-		};
-		window.addEventListener("mousemove", move);
-		window.addEventListener("mouseup", up);
 	}
 
 	// -------------------------------------------------------------- entities
@@ -581,9 +554,46 @@ export class MapOcclusionEditor extends Modal {
 
 	onClose(): void {
 		if (this.entitiesWatch) this.app.vault.offref(this.entitiesWatch);
-		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
-		void this.save();
 		for (const e of this.editors) e.destroy();
+		this.contentEl.empty();
+	}
+}
+
+// Three-way prompt shown when the editor is closed with unsaved edits.
+class UnsavedFramesModal extends Modal {
+	constructor(
+		app: App,
+		private onSave: () => void,
+		private onDiscard: () => void
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.createEl("h3", { text: "未保存的更改" });
+		contentEl.createEl("p", {
+			text: "这张地图的遮罩有未保存的更改。",
+		});
+		const foot = contentEl.createDiv({ cls: "hl-modal-foot" });
+		const stay = foot.createEl("button", { text: "继续编辑" });
+		stay.addEventListener("click", () => this.close());
+		const discard = foot.createEl("button", { text: "放弃更改" });
+		discard.addEventListener("click", () => {
+			this.close();
+			this.onDiscard();
+		});
+		const save = foot.createEl("button", {
+			cls: "mod-cta",
+			text: "保存并关闭",
+		});
+		save.addEventListener("click", () => {
+			this.close();
+			this.onSave();
+		});
+	}
+
+	onClose(): void {
 		this.contentEl.empty();
 	}
 }

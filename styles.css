@@ -3581,9 +3581,55 @@ input.hl-tag-chip-input:focus-visible {
 
 /* Full-size viewer with the occlusion workflow. */
 .hl-occ-viewer-window {
-	width: min(1040px, 92vw);
-	max-width: 92vw;
-	height: min(720px, 84vh);
+	width: min(920px, 90vw);
+	max-width: 90vw;
+	height: min(620px, 80vh);
+}
+.hl-occ-head-spacer {
+	flex: 1 1 auto;
+}
+.hl-occ-draw-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 0.82em;
+	padding: 3px 12px;
+	border-radius: 12px;
+}
+.hl-occ-draw-btn svg {
+	width: 13px;
+	height: 13px;
+}
+.hl-occ-draw-btn.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+.hl-occ-foot {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+.hl-occ-foot-note {
+	color: var(--text-muted);
+	font-size: 0.82em;
+}
+.hl-occ-stage-host {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	position: relative;
+}
+.hl-occ-stage-host .hl-occ-stage-wrap {
+	flex: 1 1 auto;
+}
+.hl-occ-stage-wrap.is-drawing {
+	cursor: crosshair;
+}
+.hl-occ-stage-wrap.is-drawing .hl-occ-box {
+	pointer-events: none;
 }
 .hl-occ-viewer {
 	display: flex;
@@ -3821,6 +3867,7 @@ input.hl-tag-chip-input:focus-visible {
 	position: relative;
 	display: inline-block;
 	max-width: 100%;
+	cursor: zoom-in;
 }
 .hl-mq-img {
 	display: block;
@@ -3847,6 +3894,62 @@ input.hl-tag-chip-input:focus-visible {
 }
 .hl-player-map .hl-mq-img {
 	max-height: 42vh;
+}
+
+/* Map exam layout: the zoomable map fills the modal, the card side sits
+   in a panel on the right. Shared by the practice/reminder/session modals. */
+.hl-map-exam-window {
+	width: min(1100px, 94vw);
+	max-width: 94vw;
+	height: min(700px, 85vh);
+}
+.hl-map-exam {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	gap: 10px;
+}
+.hl-map-exam-body {
+	display: flex;
+	gap: 12px;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+.hl-map-exam-side {
+	flex: 0 0 300px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-height: 0;
+	overflow-y: auto;
+}
+.hl-map-exam-side .hl-quiz-practice-surface {
+	flex: 1 1 auto;
+}
+.hl-map-exam-side .hl-quiz-practice-footer {
+	margin-top: auto;
+}
+.hl-mq-exam-stage .hl-occ-box {
+	cursor: default;
+}
+.hl-mq-exam-stage .hl-occ-box.is-asked {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 1.5px var(--interactive-accent);
+}
+.hl-mq-exam-stage .hl-occ-box.is-asked.is-revealed {
+	background: transparent;
+	border-style: dashed;
+}
+
+/* Read-only full-size map view (double-click on a player card's map). */
+.hl-map-zoom-window {
+	width: min(1100px, 94vw);
+	max-width: 94vw;
+	height: min(700px, 85vh);
+}
+.hl-map-zoom {
+	display: flex;
+	height: 100%;
 }
 .hl-eb-map-practice {
 	font-size: 0.78em;

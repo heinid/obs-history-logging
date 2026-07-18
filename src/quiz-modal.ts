@@ -31,7 +31,7 @@ import { describeYear, parseYearTag } from "./year-tag";
 import { makeClozeMarked, stripDbMarkers } from "./db-marker";
 import { DbColors, loadDbColors, renderQuizText } from "./quiz-render";
 import { attachAnnotateMenu } from "./textarea-annotate";
-import { renderMapQuizSurface } from "./map-occlusion";
+import { renderMapExamStage } from "./map-occlusion";
 
 export class QuizManagerModal extends Modal {
 	private event?: EventEntry;
@@ -590,14 +590,26 @@ export class QuizPracticeModal extends Modal {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-quiz-practice");
-		this.renderBanner(host);
 		const quiz = this.quiz;
+		// Map quizzes get the exam layout: the zoomable map fills the window
+		// and the card side (question, answer, actions) sits in a side panel.
+		const isMap = quiz?.kind === "map";
+		this.modalEl.toggleClass("hl-map-exam-window", isMap);
+		host.toggleClass("hl-map-exam", isMap);
+		this.renderBanner(host);
 		if (!quiz) {
 			host.createDiv({ cls: "hl-empty", text: "找不到这个 Quiz。" });
 			return;
 		}
+		let main = host;
+		if (isMap) {
+			const body = host.createDiv({ cls: "hl-map-exam-body" });
+			const stageHost = body.createDiv({ cls: "hl-occ-stage-host" });
+			void renderMapExamStage(this.plugin, quiz, stageHost, this.revealed);
+			main = body.createDiv({ cls: "hl-map-exam-side" });
+		}
 
-		const head = host.createDiv({ cls: "hl-quiz-practice-head" });
+		const head = main.createDiv({ cls: "hl-quiz-practice-head" });
 		head.createSpan({ cls: "hl-quiz-practice-title", text: "Quiz" });
 		const state = head.createDiv({ cls: "hl-quiz-practice-state" });
 		state.createSpan({
@@ -614,11 +626,11 @@ export class QuizPracticeModal extends Modal {
 				text: nextReviewLabel(quiz, new Date(), schedule),
 			});
 
-		const surface = host.createDiv({ cls: "hl-quiz-practice-surface" });
-		const context = surface.createDiv({ cls: "hl-quiz-practice-context" });
-		if (quiz.kind === "map") {
-			context.createSpan({ text: quiz.question });
-		} else {
+		const surface = main.createDiv({ cls: "hl-quiz-practice-surface" });
+		if (!isMap) {
+			const context = surface.createDiv({
+				cls: "hl-quiz-practice-context",
+			});
 			const decoded = this.event?.tag
 				? parseYearTag(this.event.tag)
 				: null;
@@ -647,14 +659,6 @@ export class QuizPracticeModal extends Modal {
 			question,
 			this.dbColors
 		);
-		if (quiz.kind === "map")
-			void renderMapQuizSurface(
-				this.plugin,
-				quiz,
-				question.createDiv({ cls: "hl-mq-host" }),
-				this.dbColors,
-				this.revealed
-			);
 
 		if (this.hintShown && quiz.hint) {
 			const hint = questionPanel.createDiv({ cls: "hl-quiz-practice-hint" });
@@ -673,12 +677,13 @@ export class QuizPracticeModal extends Modal {
 			text: "答案",
 		});
 		if (!this.revealed) {
-			answerPanel.createDiv({
-				cls: "hl-quiz-practice-placeholder",
-				text: clozeRevealsInline(quiz)
-					? "先在心里补全空缺，再显示答案"
-					: "先在心里回答，再显示答案",
-			});
+			if (!isMap)
+				answerPanel.createDiv({
+					cls: "hl-quiz-practice-placeholder",
+					text: clozeRevealsInline(quiz)
+						? "先在心里补全空缺，再显示答案"
+						: "先在心里回答，再显示答案",
+				});
 		} else if (clozeRevealsInline(quiz)) {
 			answerPanel.createDiv({
 				cls: "hl-quiz-practice-inline-note",
@@ -696,10 +701,21 @@ export class QuizPracticeModal extends Modal {
 			);
 		}
 
-		const footer = host.createDiv({ cls: "hl-quiz-practice-footer" });
+		const footer = main.createDiv({ cls: "hl-quiz-practice-footer" });
 		const auxiliary = footer.createDiv({
 			cls: "hl-quiz-practice-auxiliary",
 		});
+		const sourceMapId = quiz.sourceMapId;
+		if (isMap && sourceMapId) {
+			const edit = auxiliary.createEl("button", { cls: "hl-icon-btn" });
+			setIcon(edit, "pencil");
+			edit.setAttr("aria-label", "在地图上编辑");
+			edit.addEventListener("click", () =>
+				void this.plugin.openMapViewer(sourceMapId, () =>
+					void this.onStashRestore()
+				)
+			);
+		}
 		if (quiz.hint && !this.hintShown) {
 			const hint = auxiliary.createEl("button", { text: "提示" });
 			hint.addEventListener("click", () => {

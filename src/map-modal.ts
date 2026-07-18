@@ -27,6 +27,9 @@ export class MapModal extends Modal {
 	private entry: MapEntry;
 	private knownTags: string[] = [];
 	private timeline: TimelineEntry[] | null = null;
+	private pasteCapture = (e: ClipboardEvent): void => {
+		void this.handleImageTransfer(e.clipboardData, e);
+	};
 
 	constructor(
 		app: App,
@@ -43,9 +46,9 @@ export class MapModal extends Modal {
 
 	async onOpen(): Promise<void> {
 		this.modalEl.addClass("hl-map-modal-window");
-		this.contentEl.addEventListener("paste", (e) => {
-			void this.handleImageTransfer(e.clipboardData, e);
-		});
+		// Capture paste on the whole document while the modal is open, so
+		// Ctrl+V works no matter where the focus sits.
+		document.addEventListener("paste", this.pasteCapture, true);
 		this.contentEl.addEventListener("dragover", (e) =>
 			e.preventDefault()
 		);
@@ -453,6 +456,7 @@ export class MapModal extends Modal {
 	}
 
 	onClose(): void {
+		document.removeEventListener("paste", this.pasteCapture, true);
 		this.contentEl.empty();
 	}
 }
