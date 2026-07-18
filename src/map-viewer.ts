@@ -58,6 +58,7 @@ export class MapOcclusionViewer extends Modal {
 
 	private stageWrap!: HTMLElement;
 	private stage!: HTMLElement;
+	private fitW = 0;
 	private side!: HTMLElement;
 	private boxEls = new Map<string, HTMLElement>();
 	private rowEls = new Map<string, HTMLElement>();
@@ -173,12 +174,39 @@ export class MapOcclusionViewer extends Modal {
 		const img = this.stage.createEl("img", { cls: "hl-occ-img" });
 		img.src = this.app.vault.getResourcePath(file);
 		img.draggable = false;
+		// The picture opens fully visible, centered inside the fixed window;
+		// zooming starts from there. Re-renders keep the current view.
+		const settle = (): void => {
+			if (this.fitW) {
+				img.style.width = `${this.fitW}px`;
+				this.applyTransform();
+			} else this.fitToWrap();
+		};
+		if (img.complete) window.setTimeout(settle, 0);
+		else img.addEventListener("load", settle, { once: true });
 		this.applyTransform();
 
 		this.boxEls.clear();
 		for (const occ of this.map.occlusions) this.buildBox(occ);
 		this.wireStage();
 		this.paintSide();
+	}
+
+	private fitToWrap(): void {
+		const img = this.stage?.querySelector("img");
+		if (!img || !img.naturalWidth || !img.naturalHeight) return;
+		const wrap = this.stageWrap.getBoundingClientRect();
+		if (!wrap.width || !wrap.height) return;
+		const fit = Math.min(
+			wrap.width / img.naturalWidth,
+			wrap.height / img.naturalHeight
+		);
+		this.fitW = img.naturalWidth * fit;
+		img.style.width = `${this.fitW}px`;
+		this.scale = 1;
+		this.tx = (wrap.width - this.fitW) / 2;
+		this.ty = (wrap.height - img.naturalHeight * fit) / 2;
+		this.applyTransform();
 	}
 
 	private applyTransform(): void {
@@ -335,7 +363,9 @@ export class MapOcclusionViewer extends Modal {
 			cls: "hl-occ-side-label",
 			text: `遮罩 ${this.indexOf(occ.id) + 1} 的答案`,
 		});
-		const editorEl = this.side.createDiv({ cls: "hl-occ-editor" });
+		const editorEl = this.side.createDiv({
+			cls: "hl-occ-editor hl-summary-editor",
+		});
 		this.editor?.destroy();
 		this.editor = new LiveEditor(editorEl, {
 			value: occ.answer,
@@ -508,19 +538,14 @@ export class MapOcclusionViewer extends Modal {
 				this.ty = py - ((py - this.ty) / this.scale) * next;
 				this.scale = next;
 				if (this.scale === MIN_SCALE) {
-					this.tx = 0;
-					this.ty = 0;
+					this.fitToWrap();
+					return;
 				}
 				this.applyTransform();
 			},
 			{ passive: false }
 		);
-		wrap.addEventListener("dblclick", () => {
-			this.scale = 1;
-			this.tx = 0;
-			this.ty = 0;
-			this.applyTransform();
-		});
+		wrap.addEventListener("dblclick", () => this.fitToWrap());
 		wrap.addEventListener("mousedown", (e) => {
 			if (e.button === 1 || (this.mode === "edit" && e.ctrlKey)) {
 				this.startPan(e);

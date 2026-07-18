@@ -3581,9 +3581,9 @@ input.hl-tag-chip-input:focus-visible {
 
 /* Full-size viewer with the occlusion workflow. */
 .hl-occ-viewer-window {
-	width: 94vw;
-	max-width: 94vw;
-	height: 90vh;
+	width: min(1040px, 92vw);
+	max-width: 92vw;
+	height: min(720px, 84vh);
 }
 .hl-occ-viewer {
 	display: flex;
@@ -3595,9 +3595,12 @@ input.hl-tag-chip-input:focus-visible {
 	display: flex;
 	align-items: center;
 	gap: 10px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
 }
 .hl-occ-title {
 	font-weight: 600;
+	font-size: 1.05em;
 }
 .hl-occ-count {
 	color: var(--text-muted);
@@ -3609,6 +3612,11 @@ input.hl-tag-chip-input:focus-visible {
 .hl-occ-zoom-hint {
 	color: var(--text-faint);
 	font-size: 0.78em;
+}
+.hl-occ-mode-btn {
+	border-radius: 15px;
+	padding: 3px 14px;
+	font-size: 0.85em;
 }
 .hl-occ-mode-btn.is-active {
 	background: var(--interactive-accent);
@@ -3625,19 +3633,22 @@ input.hl-tag-chip-input:focus-visible {
 	min-width: 0;
 	overflow: hidden;
 	position: relative;
-	border-radius: 6px;
+	border-radius: 8px;
 	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: inset 0 1px 4px rgb(0 0 0 / 6%);
 }
 .hl-occ-stage {
-	position: relative;
+	position: absolute;
+	left: 0;
+	top: 0;
 	transform-origin: 0 0;
-	width: 100%;
 }
 .hl-occ-img {
 	display: block;
-	width: 100%;
 	height: auto;
 	max-height: none;
+	max-width: none;
 	user-select: none;
 }
 .hl-occ-box {
@@ -3699,7 +3710,7 @@ input.hl-tag-chip-input:focus-visible {
 	color: var(--text-error);
 }
 .hl-occ-side {
-	flex: 0 0 280px;
+	flex: 0 0 300px;
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
@@ -3783,11 +3794,21 @@ input.hl-tag-chip-input:focus-visible {
 }
 .hl-occ-editor {
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 6px;
-	min-height: 90px;
+	border-radius: 8px;
+	padding: 4px 10px;
+	background: var(--background-primary);
+	transition: border-color 0.1s ease;
 }
-.hl-occ-editor .cm-editor {
-	min-height: 90px;
+.hl-occ-editor:focus-within {
+	border-color: var(--interactive-accent);
+}
+.hl-occ-editor.hl-summary-editor .cm-editor {
+	min-height: 7em;
+	max-height: 34vh;
+}
+.hl-occ-editor.hl-summary-editor .cm-editor .cm-scroller {
+	max-height: 34vh;
+	font-size: var(--font-ui-medium);
 }
 .hl-occ-delete {
 	align-self: flex-start;
