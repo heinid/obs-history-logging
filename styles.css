@@ -1366,9 +1366,11 @@ input.hl-tag-chip-input:focus-visible {
 	margin: -1px 0 2px;
 }
 .hl-page-lang-reading {
+	margin-left: 6px;
 	font-size: var(--font-ui-small);
+	font-style: italic;
+	font-weight: normal;
 	color: var(--text-muted);
-	margin-bottom: 6px;
 }
 .hl-page-notes {
 	border: 1px solid var(--background-modifier-border);

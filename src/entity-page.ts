@@ -111,23 +111,24 @@ export async function renderEntityPage(
 			const words = entity.labels
 				.filter((x) => x.lang === lang)
 				.map((x) => x.text);
-			if (words.length)
-				card.createDiv({
-					cls: "hl-page-lang-word",
-					text: words[0],
-				});
+			const readings = entity.readings
+				.filter((x) => x.lang === lang)
+				.map((x) => x.text);
+			if (words.length) {
+				const line = card.createDiv({ cls: "hl-page-lang-word" });
+				line.createSpan({ text: words[0] });
+				// Reading trails the primary spelling in parentheses, in a
+				// style distinct from both the name and the aliases below.
+				if (readings.length)
+					line.createSpan({
+						cls: "hl-page-lang-reading",
+						text: `（${readings.join("／")}）`,
+					});
+			}
 			if (words.length > 1)
 				card.createDiv({
 					cls: "hl-page-lang-aliases",
 					text: words.slice(1).join("／"),
-				});
-			const readings = entity.readings
-				.filter((x) => x.lang === lang)
-				.map((x) => x.text);
-			if (readings.length)
-				card.createDiv({
-					cls: "hl-page-lang-reading",
-					text: readings.join("／"),
 				});
 			for (const a of entity.audios.filter((x) => x.lang === lang)) {
 				const play = card.createEl("button", {
