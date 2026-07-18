@@ -223,6 +223,21 @@ export function openDbLangMenu(
 				ev.preventDefault();
 				close();
 				el.setText(label.text);
+				// Remaining same-language spellings trail in faint text, so
+				// a correct recall of an alias is not mistaken for an error.
+				const others = entity.labels
+					.filter(
+						(x) =>
+							x.lang === lang &&
+							x.text &&
+							x.text !== label.text
+					)
+					.map((x) => x.text);
+				if (others.length)
+					el.createSpan({
+						cls: "hl-db-aliases",
+						text: ` ⸱ ${others.join(" ⸱ ")}`,
+					});
 				el.removeClass("hl-db-mask");
 				el.setAttr("aria-label", "点击遮住");
 				if (audio) playEntityAudio(plugin, audio.link);

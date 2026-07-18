@@ -59,6 +59,17 @@ export class RecitePlayerPage extends PlayerPage {
 		return e.labels.find((l) => l.lang === lang && l.text.trim())?.text;
 	}
 
+	// Same-language spellings beyond the primary one.
+	private aliases(e: EntityEntry, lang: string): string[] {
+		const first = this.label(e, lang);
+		return e.labels
+			.filter(
+				(l) =>
+					l.lang === lang && l.text.trim() && l.text !== first
+			)
+			.map((l) => l.text);
+	}
+
 	private reading(e: EntityEntry, lang: string): string | undefined {
 		return e.readings.find((r) => r.lang === lang && r.text.trim())?.text;
 	}
@@ -154,6 +165,12 @@ export class RecitePlayerPage extends PlayerPage {
 				text: langDisplayName(lang),
 			});
 			row.createSpan({ cls: "hl-recite-word", text });
+			const others = this.aliases(entity, lang);
+			if (others.length)
+				row.createSpan({
+					cls: "hl-recite-aliases",
+					text: others.join(" ⸱ "),
+				});
 			const reading = this.reading(entity, lang);
 			if (reading)
 				row.createSpan({ cls: "hl-recite-reading", text: reading });

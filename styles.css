@@ -2712,6 +2712,11 @@ input.hl-tag-chip-input:focus-visible {
 	font-size: 1.2em;
 	font-weight: 600;
 }
+/* Same-language alternate spellings on the answer face. */
+.hl-recite-aliases {
+	color: var(--text-faint);
+	font-size: 0.9em;
+}
 .hl-recite-reading {
 	color: var(--text-muted);
 	font-size: 0.9em;
@@ -3428,6 +3433,12 @@ input.hl-tag-chip-input:focus-visible {
 }
 .hl-map-ev-src {
 	color: var(--text-faint);
+}
+/* Same-language aliases trailing a revealed masked reference. */
+.hl-db-aliases {
+	color: var(--text-faint);
+	font-size: 0.88em;
+	font-weight: normal;
 }
 .hl-map-ev-btn {
 	flex: 0 0 auto;
