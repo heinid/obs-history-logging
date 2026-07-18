@@ -1366,7 +1366,7 @@ input.hl-tag-chip-input:focus-visible {
 	margin: -1px 0 2px;
 }
 .hl-page-lang-reading {
-	margin-left: 6px;
+	margin-left: 1px;
 	font-size: var(--font-ui-small);
 	font-style: italic;
 	font-weight: normal;
