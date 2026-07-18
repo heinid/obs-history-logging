@@ -13,6 +13,7 @@ import {
 	QuizEntry,
 	QuizKind,
 	QuizResult,
+	QuizSchedule,
 	isQuizReady,
 	reviewQuiz,
 	reviveQuiz,
@@ -591,8 +592,8 @@ export class QuizPracticeModal extends Modal {
 		host.empty();
 		host.addClass("hl-quiz-practice");
 		const quiz = this.quiz;
-		// Map quizzes get the exam layout: the zoomable map fills the window
-		// and the card side (question, answer, actions) sits in a side panel.
+		// Map quizzes keep the same top-down card layout; the inline map is
+		// simply replaced by the large zoomable exam stage in a taller window.
 		const isMap = quiz?.kind === "map";
 		this.modalEl.toggleClass("hl-map-exam-window", isMap);
 		host.toggleClass("hl-map-exam", isMap);
@@ -601,15 +602,8 @@ export class QuizPracticeModal extends Modal {
 			host.createDiv({ cls: "hl-empty", text: "找不到这个 Quiz。" });
 			return;
 		}
-		let main = host;
-		if (isMap) {
-			const body = host.createDiv({ cls: "hl-map-exam-body" });
-			const stageHost = body.createDiv({ cls: "hl-occ-stage-host" });
-			void renderMapExamStage(this.plugin, quiz, stageHost, this.revealed);
-			main = body.createDiv({ cls: "hl-map-exam-side" });
-		}
 
-		const head = main.createDiv({ cls: "hl-quiz-practice-head" });
+		const head = host.createDiv({ cls: "hl-quiz-practice-head" });
 		head.createSpan({ cls: "hl-quiz-practice-title", text: "Quiz" });
 		const state = head.createDiv({ cls: "hl-quiz-practice-state" });
 		state.createSpan({
@@ -626,7 +620,7 @@ export class QuizPracticeModal extends Modal {
 				text: nextReviewLabel(quiz, new Date(), schedule),
 			});
 
-		const surface = main.createDiv({ cls: "hl-quiz-practice-surface" });
+		const surface = host.createDiv({ cls: "hl-quiz-practice-surface" });
 		if (!isMap) {
 			const context = surface.createDiv({
 				cls: "hl-quiz-practice-context",
@@ -659,6 +653,13 @@ export class QuizPracticeModal extends Modal {
 			question,
 			this.dbColors
 		);
+		if (isMap)
+			void renderMapExamStage(
+				this.plugin,
+				quiz,
+				surface.createDiv({ cls: "hl-occ-stage-host hl-mq-exam-host" }),
+				this.revealed
+			);
 
 		if (this.hintShown && quiz.hint) {
 			const hint = questionPanel.createDiv({ cls: "hl-quiz-practice-hint" });
@@ -667,6 +668,11 @@ export class QuizPracticeModal extends Modal {
 			renderQuizText(this.plugin, quiz.hint, hintBody, this.dbColors);
 		}
 
+		// Before reveal, a map card is just the covered map — no answer panel.
+		if (isMap && !this.revealed) {
+			this.renderPracticeFooter(host, quiz, ready, schedule, isMap);
+			return;
+		}
 		const answerPanel = surface.createDiv({
 			cls: `hl-quiz-practice-panel hl-quiz-practice-answer-panel${
 				this.revealed ? " is-revealed" : ""
@@ -677,13 +683,12 @@ export class QuizPracticeModal extends Modal {
 			text: "答案",
 		});
 		if (!this.revealed) {
-			if (!isMap)
-				answerPanel.createDiv({
-					cls: "hl-quiz-practice-placeholder",
-					text: clozeRevealsInline(quiz)
-						? "先在心里补全空缺，再显示答案"
-						: "先在心里回答，再显示答案",
-				});
+			answerPanel.createDiv({
+				cls: "hl-quiz-practice-placeholder",
+				text: clozeRevealsInline(quiz)
+					? "先在心里补全空缺，再显示答案"
+					: "先在心里回答，再显示答案",
+			});
 		} else if (clozeRevealsInline(quiz)) {
 			answerPanel.createDiv({
 				cls: "hl-quiz-practice-inline-note",
@@ -701,7 +706,17 @@ export class QuizPracticeModal extends Modal {
 			);
 		}
 
-		const footer = main.createDiv({ cls: "hl-quiz-practice-footer" });
+		this.renderPracticeFooter(host, quiz, ready, schedule, isMap);
+	}
+
+	private renderPracticeFooter(
+		host: HTMLElement,
+		quiz: QuizEntry,
+		ready: boolean,
+		schedule: QuizSchedule,
+		isMap: boolean
+	): void {
+		const footer = host.createDiv({ cls: "hl-quiz-practice-footer" });
 		const auxiliary = footer.createDiv({
 			cls: "hl-quiz-practice-auxiliary",
 		});

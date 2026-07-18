@@ -151,7 +151,6 @@ export async function renderMapQuizSurface(
 	img.src = plugin.app.vault.getResourcePath(file);
 	img.draggable = false;
 	buildBoxes(stage, map, quiz, revealed);
-	stage.setAttr("aria-label", "双击放大");
 	stage.addEventListener("dblclick", () => {
 		new MapZoomModal(plugin.app, plugin, quiz, revealed).open();
 	});

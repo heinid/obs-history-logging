@@ -73,8 +73,8 @@ export class QuizSessionModal extends Modal {
 		const event = this.events.get(quiz.sourceEvId);
 		const schedule = quizSchedule(this.plugin.settings);
 		const ready = isQuizReady(quiz, new Date(), schedule);
-		// Map quizzes get the exam layout: the zoomable map fills the window
-		// and the card side (question, answer, actions) sits in a side panel.
+		// Map quizzes keep the same top-down card layout; the inline map is
+		// simply replaced by the large zoomable exam stage in a taller window.
 		const isMap = quiz.kind === "map";
 		this.modalEl.toggleClass("hl-map-exam-window", isMap);
 		host.toggleClass("hl-map-exam", isMap);
@@ -84,22 +84,21 @@ export class QuizSessionModal extends Modal {
 			text: `第 ${this.index + 1} 题，共 ${this.quizzes.length} 题`,
 		});
 
-		let main = host;
-		if (isMap) {
-			const body = host.createDiv({ cls: "hl-map-exam-body" });
-			const stageHost = body.createDiv({ cls: "hl-occ-stage-host" });
-			void renderMapExamStage(this.plugin, quiz, stageHost, this.revealed);
-			main = body.createDiv({ cls: "hl-map-exam-side" });
-		}
-
-		const question = main.createDiv({ cls: "hl-quiz-practice-question" });
+		const question = host.createDiv({ cls: "hl-quiz-practice-question" });
 		renderQuizText(
 			this.plugin,
 			quizQuestion(quiz, event, this.revealed),
 			question,
 			this.dbColors
 		);
-		main.createDiv({
+		if (isMap)
+			void renderMapExamStage(
+				this.plugin,
+				quiz,
+				host.createDiv({ cls: "hl-occ-stage-host hl-mq-exam-host" }),
+				this.revealed
+			);
+		host.createDiv({
 			cls: "hl-quiz-session-mastery",
 			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}${
 				ready ? "" : ` · ${nextReviewLabel(quiz, new Date(), schedule)}`
@@ -107,12 +106,12 @@ export class QuizSessionModal extends Modal {
 		});
 		if (!this.revealed) {
 			if (quiz.hint) {
-				const details = main.createEl("details", { cls: "hl-quiz-hint" });
+				const details = host.createEl("details", { cls: "hl-quiz-hint" });
 				details.createEl("summary", { text: "提示" });
 				const hint = details.createDiv();
 				renderQuizText(this.plugin, quiz.hint, hint, this.dbColors);
 			}
-			const show = main.createEl("button", {
+			const show = host.createEl("button", {
 				cls: "mod-cta hl-quiz-show-answer",
 				text: "显示答案",
 			});
@@ -124,7 +123,7 @@ export class QuizSessionModal extends Modal {
 		}
 
 		if (!clozeRevealsInline(quiz)) {
-			const answer = main.createDiv({ cls: "hl-quiz-practice-answer" });
+			const answer = host.createDiv({ cls: "hl-quiz-practice-answer" });
 			renderQuizText(
 				this.plugin,
 				quizAnswer(quiz, event),
@@ -132,7 +131,7 @@ export class QuizSessionModal extends Modal {
 				this.dbColors
 			);
 		}
-		const actions = main.createDiv({ cls: "hl-quiz-review-actions" });
+		const actions = host.createDiv({ cls: "hl-quiz-review-actions" });
 		if (!ready) {
 			actions.createSpan({
 				cls: "hl-quiz-wait-note",

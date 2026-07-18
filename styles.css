@@ -3896,12 +3896,13 @@ input.hl-tag-chip-input:focus-visible {
 	max-height: 42vh;
 }
 
-/* Map exam layout: the zoomable map fills the modal, the card side sits
-   in a panel on the right. Shared by the practice/reminder/session modals. */
+/* Map exam layout: the usual top-down card layout in a taller window, with
+   the inline map replaced by the zoomable exam stage. Shared by the
+   practice/reminder/session modals. */
 .hl-map-exam-window {
-	width: min(1100px, 94vw);
-	max-width: 94vw;
-	height: min(700px, 85vh);
+	width: min(960px, 92vw);
+	max-width: 92vw;
+	height: min(660px, 84vh);
 }
 .hl-map-exam {
 	display: flex;
@@ -3909,25 +3910,15 @@ input.hl-tag-chip-input:focus-visible {
 	height: 100%;
 	gap: 10px;
 }
-.hl-map-exam-body {
-	display: flex;
-	gap: 12px;
-	flex: 1 1 auto;
-	min-height: 0;
-}
-.hl-map-exam-side {
-	flex: 0 0 300px;
+.hl-map-exam .hl-quiz-practice-surface {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
-	min-height: 0;
-	overflow-y: auto;
-}
-.hl-map-exam-side .hl-quiz-practice-surface {
 	flex: 1 1 auto;
+	min-height: 0;
 }
-.hl-map-exam-side .hl-quiz-practice-footer {
-	margin-top: auto;
+.hl-mq-exam-host {
+	flex: 1 1 auto;
+	min-height: 180px;
 }
 .hl-mq-exam-stage .hl-occ-box {
 	cursor: default;
@@ -3943,9 +3934,9 @@ input.hl-tag-chip-input:focus-visible {
 
 /* Read-only full-size map view (double-click on a player card's map). */
 .hl-map-zoom-window {
-	width: min(1100px, 94vw);
-	max-width: 94vw;
-	height: min(700px, 85vh);
+	width: min(920px, 90vw);
+	max-width: 90vw;
+	height: min(620px, 80vh);
 }
 .hl-map-zoom {
 	display: flex;
