@@ -58,12 +58,31 @@ function fromCards(e: EntityEntry, cards: LangCard[]): void {
 			.split(/[,，]/)
 			.map((x) => x.trim())
 			.filter((x) => x.length > 0);
+	// Spellings: besides commas, a parenthesised part (half- or full-width)
+	// becomes its own alias — "拜占庭帝国（东罗马帝国）" yields both names.
+	const splitLabels = (s: string): string[] => {
+		const out: string[] = [];
+		for (const part of split(s)) {
+			const inner: string[] = [];
+			const outer = part
+				.replace(/[(（]([^)）]*)[)）]/g, (_, g: string) => {
+					if (g.trim()) inner.push(g.trim());
+					return " ";
+				})
+				.replace(/\s{2,}/g, " ")
+				.trim();
+			if (outer) out.push(outer);
+			out.push(...inner);
+		}
+		return out;
+	};
 	e.labels = [];
 	e.readings = [];
 	e.audios = [];
 	for (const c of cards) {
 		if (!c.lang) continue;
-		for (const t of split(c.labels)) e.labels.push({ lang: c.lang, text: t });
+		for (const t of splitLabels(c.labels))
+			e.labels.push({ lang: c.lang, text: t });
 		for (const t of split(c.reading))
 			e.readings.push({ lang: c.lang, text: t });
 		for (const t of split(c.audio)) e.audios.push({ lang: c.lang, link: t });

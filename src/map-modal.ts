@@ -7,6 +7,7 @@
 import {
 	App,
 	FuzzySuggestModal,
+	MarkdownRenderer,
 	Modal,
 	Notice,
 	TFile,
@@ -184,11 +185,13 @@ export class MapModal extends Modal {
 			if (tag) evRow.createSpan({ cls: "hl-map-ev-tag", text: tag });
 			const prev = evRow.createSpan({ cls: "hl-map-ev-preview" });
 			void eventPreview(this.plugin, evId).then((p) => {
-				prev.setText(
-					p.text
-						? (p.fromSource ? "§ " : "") + p.text
-						: "（无内容）"
-				);
+				if (!p.text) {
+					prev.setText("（无内容）");
+					return;
+				}
+				if (p.fromSource)
+					prev.createSpan({ cls: "hl-map-ev-src", text: "§ " });
+				this.renderPreview(prev, p.text);
 			});
 			const hour = evRow.createEl("button", {
 				cls: "hl-map-ev-btn",
@@ -426,15 +429,18 @@ export class MapModal extends Modal {
 				cls: "hl-map-ev-year",
 				text: decoded ? describeYear(decoded) : e.tag,
 			});
-			item.createSpan({
-				cls: "hl-map-ev-preview",
-				text: (e.summary ?? "").trim() || e.snippet,
-			});
+			const prev = item.createSpan({ cls: "hl-map-ev-preview" });
+			this.renderPreview(prev, (e.summary ?? "").trim() || e.snippet);
 			item.addEventListener("click", () => {
 				if (e.evId) this.entry.events.push(e.evId);
 				void this.render();
 			});
 		}
+	}
+
+	// One-line markdown preview (bold, italics…) inside an ellipsized span.
+	private renderPreview(host: HTMLElement, text: string): void {
+		void MarkdownRenderer.render(this.app, text, host, "", this.plugin);
 	}
 
 	private pickFromVault(): void {

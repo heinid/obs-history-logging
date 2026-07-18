@@ -1333,6 +1333,12 @@ input.hl-tag-chip-input:focus-visible {
 .hl-page-edit {
 	margin-left: auto;
 }
+/* Other spellings / aliases under the headword. */
+.hl-page-aliases {
+	margin-top: 4px;
+	color: var(--text-muted);
+	font-size: 0.95em;
+}
 .hl-page-tags {
 	display: flex;
 	flex-wrap: wrap;
@@ -3400,6 +3406,28 @@ input.hl-tag-chip-input:focus-visible {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	min-width: 0;
+}
+/* Rendered markdown inside the one-line preview stays inline. */
+.hl-map-ev-preview p,
+.hl-map-ev-preview ul,
+.hl-map-ev-preview ol,
+.hl-map-ev-preview h1,
+.hl-map-ev-preview h2,
+.hl-map-ev-preview h3 {
+	display: inline;
+	margin: 0;
+	padding: 0;
+	font-size: inherit;
+	font-weight: inherit;
+	color: inherit;
+	line-height: inherit;
+}
+.hl-map-ev-preview img,
+.hl-map-ev-preview br {
+	display: none;
+}
+.hl-map-ev-src {
+	color: var(--text-faint);
 }
 .hl-map-ev-btn {
 	flex: 0 0 auto;
