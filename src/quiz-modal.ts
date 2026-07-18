@@ -712,14 +712,13 @@ export class QuizPracticeModal extends Modal {
 		ready: boolean,
 		schedule: QuizSchedule
 	): void {
-		renderMapExamHeader(
-			this.plugin,
-			host,
-			quiz,
-			ready ? "" : nextReviewLabel(quiz, new Date(), schedule),
-			"",
-			this.dbColors
-		);
+		renderMapExamHeader(this.plugin, host, quiz, {
+			showSource: true,
+			coolingLabel: ready
+				? ""
+				: nextReviewLabel(quiz, new Date(), schedule),
+			colors: this.dbColors,
+		});
 		const stageHost = host.createDiv({
 			cls: "hl-occ-stage-host hl-map-exam-stage",
 		});
@@ -760,9 +759,11 @@ export class QuizPracticeModal extends Modal {
 		});
 		const sourceMapId = quiz.sourceMapId;
 		if (isMap && sourceMapId) {
-			const edit = auxiliary.createEl("button", { cls: "hl-icon-btn" });
+			const edit = auxiliary.createEl("button", {
+				cls: "hl-map-exam-editbtn",
+			});
 			setIcon(edit, "pencil");
-			edit.setAttr("aria-label", "在地图上编辑");
+			edit.createSpan({ text: "编辑地图" });
 			edit.addEventListener("click", () =>
 				void this.plugin.openMapViewer(sourceMapId, () =>
 					void this.onStashRestore()

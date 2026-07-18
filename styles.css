@@ -3918,21 +3918,22 @@ input.hl-tag-chip-input:focus-visible {
 }
 .hl-map-exam-header {
 	flex: 0 0 auto;
-	padding: 14px 48px 12px 18px;
+	min-height: 20px;
+	padding: 14px 48px 13px 20px;
 	background: var(--background-primary);
-	border-bottom: 1px solid var(--background-modifier-border);
-	box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+	box-shadow: 0 2px 12px rgb(0 0 0 / 8%);
 	z-index: 4;
 }
 .hl-map-exam-kicker {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: 12px;
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
+	letter-spacing: 0.01em;
 }
 .hl-map-exam-source {
-	font-weight: 600;
+	font-weight: 650;
 	color: var(--text-normal);
 }
 .hl-map-exam-dots {
@@ -3944,16 +3945,18 @@ input.hl-tag-chip-input:focus-visible {
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
-	background: var(--background-modifier-border);
+	background: var(--background-modifier-border-hover);
 }
 .hl-map-exam-dot.is-on {
 	background: var(--interactive-accent);
 }
 .hl-map-exam-question {
-	margin-top: 6px;
-	font-size: 1.05em;
+	margin-top: 7px;
+	padding-left: 10px;
+	border-left: 3px solid var(--interactive-accent);
+	font-size: 1.08em;
 	font-weight: 600;
-	line-height: 1.5;
+	line-height: 1.45;
 }
 .hl-map-exam-question p {
 	margin: 0;
@@ -3990,18 +3993,28 @@ input.hl-tag-chip-input:focus-visible {
 	z-index: 3;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	padding: 10px 18px 12px;
+	gap: 10px;
+	padding: 12px 20px 13px;
 	background: var(--background-primary);
-	border-top: 1px solid var(--background-modifier-border);
-	box-shadow: 0 -1px 3px rgb(0 0 0 / 6%);
+	box-shadow: 0 -2px 12px rgb(0 0 0 / 8%);
 }
+/* The answer is a full-bleed accent-tinted strip riding on top of the
+   action bar, echoing the question's accent rule in the header. */
 .hl-map-exam-drawer {
-	max-height: 28vh;
+	margin: -12px -20px 0;
+	padding: 12px 20px 12px 17px;
+	border-left: 3px solid var(--interactive-accent);
+	background: color-mix(
+		in srgb,
+		var(--interactive-accent) 5%,
+		var(--background-primary)
+	);
+	max-height: 26vh;
 	overflow-y: auto;
-	padding: 2px 0 6px;
-	border-bottom: 1px solid var(--background-modifier-border);
 	animation: hl-drawer-in 0.18s ease-out;
+}
+.hl-map-exam-drawer:not(:first-child) {
+	margin-top: 0;
 }
 @keyframes hl-drawer-in {
 	from {
@@ -4037,6 +4050,34 @@ input.hl-tag-chip-input:focus-visible {
 .hl-map-exam-bottombar .hl-quiz-review-actions {
 	justify-content: flex-end;
 }
+.hl-map-exam-editbtn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: var(--input-height);
+	padding: 0 14px;
+	border-radius: var(--button-radius, 8px);
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: none;
+}
+.hl-map-exam-editbtn:hover {
+	color: var(--text-normal);
+	border-color: var(--background-modifier-border-hover);
+}
+.hl-map-exam-editbtn .svg-icon {
+	width: 14px;
+	height: 14px;
+}
+/* Session bottom bar has no footer row: pin the edit button to the
+   bottom-left corner, opposite the right-aligned actions. */
+.hl-map-exam-editbtn-float {
+	position: absolute;
+	left: 20px;
+	bottom: 13px;
+}
 .hl-map-exam-stage .hl-occ-nav-hint {
 	display: none;
 }
@@ -4045,7 +4086,10 @@ input.hl-tag-chip-input:focus-visible {
 }
 .hl-mq-exam-stage .hl-occ-box.is-asked {
 	border-color: var(--interactive-accent);
-	box-shadow: 0 0 0 1.5px var(--interactive-accent);
+	box-shadow:
+		0 0 0 2px var(--interactive-accent),
+		0 0 16px
+			color-mix(in srgb, var(--interactive-accent) 55%, transparent);
 }
 .hl-mq-exam-stage .hl-occ-box.is-asked.is-revealed {
 	background: transparent;

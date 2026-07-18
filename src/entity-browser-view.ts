@@ -1218,7 +1218,8 @@ export class EntityBrowserView extends ItemView {
 					new QuizSessionModal(
 						this.app,
 						this.plugin,
-						due.map((q) => q.id)
+						due.map((q) => q.id),
+						true
 					).open();
 				});
 			}

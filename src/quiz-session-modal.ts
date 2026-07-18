@@ -1,4 +1,4 @@
-import { App, Modal } from "obsidian";
+import { App, Modal, setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { EventEntry } from "./types";
 import { QuizEntry, QuizResult, isQuizReady, reviewQuiz } from "./quiz";
@@ -28,7 +28,10 @@ export class QuizSessionModal extends Modal {
 	constructor(
 		app: App,
 		private plugin: HistoryLoggingPlugin,
-		private quizIds: string[]
+		private quizIds: string[],
+		// The map-list entry opens the session inside that map's context, so
+		// the exam header hides the map name there.
+		private hideMapSource = false
 	) {
 		super(app);
 	}
@@ -82,14 +85,14 @@ export class QuizSessionModal extends Modal {
 
 		let main = host;
 		if (isMap) {
-			renderMapExamHeader(
-				this.plugin,
-				host,
-				quiz,
-				ready ? "" : nextReviewLabel(quiz, new Date(), schedule),
-				`第 ${this.index + 1}/${this.quizzes.length} 题`,
-				this.dbColors
-			);
+			renderMapExamHeader(this.plugin, host, quiz, {
+				showSource: !this.hideMapSource,
+				positionLabel: `第 ${this.index + 1}/${this.quizzes.length} 题`,
+				coolingLabel: ready
+					? ""
+					: nextReviewLabel(quiz, new Date(), schedule),
+				colors: this.dbColors,
+			});
 			const stageHost = host.createDiv({
 				cls: "hl-occ-stage-host hl-map-exam-stage",
 			});
@@ -101,6 +104,19 @@ export class QuizSessionModal extends Modal {
 				!this.revealed
 			);
 			main = stageHost.createDiv({ cls: "hl-map-exam-bottombar" });
+			const sourceMapId = quiz.sourceMapId;
+			if (!this.hideMapSource && sourceMapId) {
+				const edit = main.createEl("button", {
+					cls: "hl-map-exam-editbtn hl-map-exam-editbtn-float",
+				});
+				setIcon(edit, "pencil");
+				edit.createSpan({ text: "编辑地图" });
+				edit.addEventListener("click", () =>
+					void this.plugin.openMapViewer(sourceMapId, () =>
+						void this.onStashRestore()
+					)
+				);
+			}
 		} else {
 			const head = host.createDiv({ cls: "hl-quiz-session-head" });
 			head.createSpan({
