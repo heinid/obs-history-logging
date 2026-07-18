@@ -3423,6 +3423,29 @@ input.hl-tag-chip-input:focus-visible {
 .hl-map-ev-search {
 	position: relative;
 }
+.hl-map-ev-search input[type="search"] {
+	width: 100%;
+	height: auto;
+	padding: 3px 10px;
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 6px;
+	background: transparent;
+	box-shadow: none;
+	font-size: 0.86em;
+	color: var(--text-normal);
+}
+.hl-map-ev-search input[type="search"]::placeholder {
+	color: var(--text-faint);
+}
+.hl-map-ev-search input[type="search"]:hover {
+	border-color: var(--interactive-accent);
+}
+.hl-map-ev-search input[type="search"]:focus,
+.hl-map-ev-search input[type="search"]:focus-visible {
+	border-style: solid;
+	border-color: var(--interactive-accent);
+	box-shadow: none;
+}
 .hl-map-ev-results {
 	display: flex;
 	flex-direction: column;
@@ -3451,22 +3474,27 @@ input.hl-tag-chip-input:focus-visible {
 	padding: 3px 8px;
 }
 
-/* Entity chips + tag chips share the compact row. */
+/* Entity chips + tag chips share the compact row. The cell also carries
+   hl-map-grid-content (a column flex), so the row direction must be
+   restated here or chips end up stacked and centered. */
 .hl-map-links {
 	display: flex;
+	flex-direction: row;
 	flex-wrap: wrap;
+	justify-content: flex-start;
 	align-items: center;
 	gap: 5px;
-	min-height: 28px;
+	min-height: 30px;
 }
 .hl-map-chip {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
-	padding: 1px 8px;
-	border-radius: 10px;
+	gap: 5px;
+	padding: 1px 10px;
+	border-radius: 1em;
 	background: var(--background-modifier-hover);
-	font-size: 0.84em;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
 }
 .hl-map-chip-link > span:first-child {
 	cursor: pointer;
@@ -3482,9 +3510,11 @@ input.hl-tag-chip-input:focus-visible {
 	color: var(--text-error);
 }
 .hl-map-chip-add {
-	padding: 0 8px;
-	border-radius: 10px;
-	font-size: 0.84em;
+	height: auto;
+	padding: 1px 10px;
+	border-radius: 1em;
+	font-size: var(--font-ui-small);
+	line-height: inherit;
 	background: transparent;
 	border: 1px dashed var(--background-modifier-border);
 	box-shadow: none;

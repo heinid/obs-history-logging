@@ -238,7 +238,7 @@ export class MapModal extends Modal {
 		}
 		const add = entCell.createEl("button", {
 			cls: "hl-map-chip-add",
-			text: "＋",
+			text: "＋ 词条",
 		});
 		add.setAttr("aria-label", "关联词条");
 		add.addEventListener("click", () => {
@@ -322,7 +322,7 @@ export class MapModal extends Modal {
 				type: "text",
 				cls: "hl-tag-chip-input",
 			});
-			input.placeholder = this.entry.tags.length ? "" : "＋ tag";
+			input.placeholder = this.entry.tags.length ? "" : "＋ 标签";
 			const commit = (): void => {
 				const v = input.value.trim().replace(/[,，]$/, "").trim();
 				if (v && !this.entry.tags.includes(v)) {
