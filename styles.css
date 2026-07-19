@@ -3190,10 +3190,31 @@ input.hl-tag-chip-input:focus-visible {
 	font-size: 0.78em;
 	color: var(--text-muted);
 }
+.hl-detail-row-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
 .hl-detail-row-actions button {
 	font-size: 0.85em;
 	padding: 3px 10px;
 	height: auto;
+}
+.hl-detail-row-actions .hl-icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border-radius: var(--button-radius, 6px);
+	color: var(--text-muted);
+	background: transparent;
+	box-shadow: none;
+}
+.hl-detail-row-actions .hl-icon-btn:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
 }
 .hl-player-meta {
 	display: flex;

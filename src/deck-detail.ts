@@ -13,9 +13,10 @@ import {
 	reviveQuiz,
 } from "./quiz";
 import { nextReviewLabel, quizSchedule } from "./quiz-display";
-import { QuizPracticeModal } from "./quiz-modal";
+import { QuizEditorModal, QuizPracticeModal } from "./quiz-modal";
 import { loadDbColors, renderQuizText } from "./quiz-render";
 import { EntityEntry, displayName } from "./db-format";
+import { EventEntry } from "./types";
 import { ReciteDeck } from "./recite-format";
 import { langDisplayName } from "./quiz-render";
 import { DeckStats } from "./deck-stats";
@@ -164,7 +165,7 @@ export async function renderEventDeckDetail(
 function renderQuizRow(
 	list: HTMLElement,
 	quiz: QuizEntry,
-	events: Map<string, { tag?: string }>,
+	events: Map<string, EventEntry>,
 	colors: Map<string, string>,
 	schedule: ReturnType<typeof quizSchedule>,
 	now: Date,
@@ -195,36 +196,68 @@ function renderQuizRow(
 		text: metaBits.join(" · "),
 	});
 	const actions = row.createDiv({ cls: "hl-detail-row-actions" });
-	const tag = events.get(quiz.sourceEvId)?.tag;
-	if (tag) {
-		const reveal = actions.createEl("button", { cls: "hl-icon-btn" });
-		setIcon(reveal, "gantt-chart");
-		reveal.setAttr("aria-label", "在时间线上显示");
-		reveal.addEventListener("click", (ev) => {
+	const event = events.get(quiz.sourceEvId);
+	const openPractice = (): void =>
+		new QuizPracticeModal(ctx.plugin.app, ctx.plugin, quiz.id, () =>
+			ctx.onChanged()
+		).open();
+	const iconBtn = (icon: string, label: string, run: () => void): void => {
+		const btn = actions.createEl("button", { cls: "hl-icon-btn" });
+		setIcon(btn, icon);
+		btn.setAttr("aria-label", label);
+		btn.addEventListener("click", (ev) => {
 			ev.stopPropagation();
+			run();
+		});
+	};
+
+	const tag = event?.tag;
+	if (tag)
+		iconBtn("gantt-chart", "在时间线上显示", () =>
 			void ctx.plugin.revealOnTimelineForProfile(
 				profileName,
 				quiz.sourceEvId,
 				tag
-			);
-		});
+			)
+		);
+
+	iconBtn("play", "学习", openPractice);
+
+	if (quiz.kind === "map" && quiz.sourceMapId) {
+		const mapId = quiz.sourceMapId;
+		iconBtn("pencil", "编辑地图遮罩", () =>
+			void ctx.plugin.openMapViewer(
+				mapId,
+				() => ctx.onChanged(),
+				quiz.occlusionId
+			)
+		);
+	} else if (event) {
+		iconBtn("pencil", "编辑", () =>
+			new QuizEditorModal(ctx.plugin.app, ctx.plugin, {
+				event,
+				tag: event.tag ?? "",
+				quizIds: new Set([quiz.id]),
+				existing: quiz,
+				initialKind: quiz.kind,
+				clozeAnswer: "",
+				ensure: async () => true,
+				onSaved: () => ctx.onChanged(),
+				onClosed: () => undefined,
+			}).open()
+		);
 	}
-	if (quiz.status === "mastered") {
-		const revive = actions.createEl("button", { text: "重新学习" });
-		revive.addEventListener("click", (ev) => {
-			ev.stopPropagation();
+
+	if (quiz.status === "mastered")
+		iconBtn("rotate-ccw", "重新学习", () =>
 			void (async () => {
 				await ctx.plugin.store.upsertQuiz(reviveQuiz(quiz));
 				await ctx.plugin.refreshTimelines();
 				ctx.onChanged();
-			})();
-		});
-	}
-	row.addEventListener("click", () =>
-		new QuizPracticeModal(ctx.plugin.app, ctx.plugin, quiz.id, () =>
-			ctx.onChanged()
-		).open()
-	);
+			})()
+		);
+
+	row.addEventListener("click", openPractice);
 }
 
 // Direction deck: candidate entities with their per-language spellings.
