@@ -19,12 +19,19 @@ import { EntityEntry, displayName } from "./db-format";
 import { EventEntry } from "./types";
 import { ReciteDeck } from "./recite-format";
 import { langDisplayName } from "./quiz-render";
-import { DeckStats } from "./deck-stats";
+import { DeckStats, quizDeckStats } from "./deck-stats";
 
 export interface DeckDetailCtx {
 	plugin: HistoryLoggingPlugin;
 	onBack(): void;
 	onChanged(): void;
+	// Marks a fragment as wall-clock dependent so the hosting view can
+	// refill just that fragment when a wait expires or a countdown ticks.
+	registerDynamic?(
+		el: HTMLElement,
+		signature: () => string,
+		update: (el: HTMLElement) => void
+	): void;
 }
 
 export interface EventDeckDetailData {
@@ -84,56 +91,69 @@ export async function renderEventDeckDetail(
 		ctx.plugin.store.readEvents(),
 		loadDbColors(ctx.plugin),
 	]);
+	const schedule = quizSchedule(ctx.plugin.settings);
+
+	// Due/waiting counts drift with the wall clock; recompute per fill.
+	const summaryModel = (
+		now: Date
+	): { stats: DeckStats; dueIds: string[] } => ({
+		stats: quizDeckStats(data.quizzes, now, schedule),
+		dueIds: data.quizzes
+			.filter(
+				(q) =>
+					q.status === "active" && isQuizReady(q, now, schedule)
+			)
+			.map((q) => q.id),
+	});
 
 	const summary = page.createDiv({ cls: "hl-detail-summary" });
-	const headRow = summary.createDiv({ cls: "hl-deck-head" });
-	headRow.createDiv({ cls: "hl-deck-name", text: data.name });
-	if (data.stats.due > 0)
-		headRow.createSpan({
-			cls: "hl-deck-badge",
-			text: String(data.stats.due),
+	const fillSummary = (el: HTMLElement): void => {
+		const { stats, dueIds } = summaryModel(new Date());
+		const headRow = el.createDiv({ cls: "hl-deck-head" });
+		headRow.createDiv({ cls: "hl-deck-name", text: data.name });
+		if (stats.due > 0)
+			headRow.createSpan({
+				cls: "hl-deck-badge",
+				text: String(stats.due),
+			});
+		if (data.match)
+			el.createDiv({ cls: "hl-deck-match", text: data.match });
+		renderMasteryBar(el, stats);
+		el.createDiv({
+			cls: "hl-deck-meta",
+			text: `到期 ${stats.due} · 短等待 ${stats.waiting} · 在学 ${stats.active} · 学过 ${stats.mastered}`,
 		});
-	if (data.match)
-		summary.createDiv({ cls: "hl-deck-match", text: data.match });
-	renderMasteryBar(summary, data.stats);
-	summary.createDiv({
-		cls: "hl-deck-meta",
-		text: `到期 ${data.stats.due} · 短等待 ${data.stats.waiting} · 在学 ${data.stats.active} · 学过 ${data.stats.mastered}`,
-	});
-	const actions = summary.createDiv({ cls: "hl-deck-actions" });
-	const start = actions.createEl("button", {
-		cls: "mod-cta",
-		text: data.stats.due > 0 ? `背诵到期 ${data.stats.due}` : "无到期",
-	});
-	if (data.stats.due > 0)
-		start.addEventListener("click", () =>
-			data.onStart(data.name, data.dueIds)
-		);
-	else start.disabled = true;
-	if (data.activeIds.length) {
-		const all = actions.createEl("button", {
-			text: `全部在学 ${data.activeIds.length}`,
+		const actions = el.createDiv({ cls: "hl-deck-actions" });
+		const start = actions.createEl("button", {
+			cls: "mod-cta",
+			text: stats.due > 0 ? `背诵到期 ${stats.due}` : "无到期",
 		});
-		all.addEventListener("click", () =>
-			data.onStart(data.name, data.activeIds)
-		);
-	}
+		if (stats.due > 0)
+			start.addEventListener("click", () =>
+				data.onStart(data.name, dueIds)
+			);
+		else start.disabled = true;
+		if (data.activeIds.length) {
+			const all = actions.createEl("button", {
+				text: `全部在学 ${data.activeIds.length}`,
+			});
+			all.addEventListener("click", () =>
+				data.onStart(data.name, data.activeIds)
+			);
+		}
+	};
+	fillSummary(summary);
+	ctx.registerDynamic?.(
+		summary,
+		() => {
+			const { stats } = summaryModel(new Date());
+			return [stats.due, stats.waiting, stats.active, stats.mastered].join(
+				"|"
+			);
+		},
+		fillSummary
+	);
 
-	const schedule = quizSchedule(ctx.plugin.settings);
-	const now = new Date();
-	const groups: { label: string; items: QuizEntry[] }[] = [
-		{ label: "到期", items: [] },
-		{ label: "短等待", items: [] },
-		{ label: "在学", items: [] },
-		{ label: "学过", items: [] },
-	];
-	for (const quiz of data.quizzes) {
-		if (quiz.status === "mastered") groups[3].items.push(quiz);
-		else if (isQuizReady(quiz, now, schedule)) groups[0].items.push(quiz);
-		else if (isQuizWaiting(quiz, now, schedule))
-			groups[1].items.push(quiz);
-		else groups[2].items.push(quiz);
-	}
 	if (!data.quizzes.length) {
 		page.createDiv({
 			cls: "hl-deck-empty",
@@ -141,25 +161,60 @@ export async function renderEventDeckDetail(
 		});
 		return;
 	}
-	for (const group of groups) {
-		if (!group.items.length) continue;
-		page.createDiv({
-			cls: "hl-overline hl-detail-group-head",
-			text: `${group.label} · ${group.items.length}`,
-		});
-		const list = page.createDiv({ cls: "hl-detail-list" });
-		for (const quiz of group.items)
-			renderQuizRow(
-				list,
-				quiz,
-				events,
-				colors,
-				schedule,
-				now,
-				data.profileName,
-				ctx
-			);
-	}
+
+	const grouped = (
+		now: Date
+	): { label: string; items: QuizEntry[] }[] => {
+		const groups: { label: string; items: QuizEntry[] }[] = [
+			{ label: "到期", items: [] },
+			{ label: "短等待", items: [] },
+			{ label: "在学", items: [] },
+			{ label: "学过", items: [] },
+		];
+		for (const quiz of data.quizzes) {
+			if (quiz.status === "mastered") groups[3].items.push(quiz);
+			else if (isQuizReady(quiz, now, schedule))
+				groups[0].items.push(quiz);
+			else if (isQuizWaiting(quiz, now, schedule))
+				groups[1].items.push(quiz);
+			else groups[2].items.push(quiz);
+		}
+		return groups;
+	};
+
+	// A quiz coming off its wait moves between groups; refill just the
+	// group block (rows carry their own countdown fragments).
+	const groupsEl = page.createDiv();
+	const fillGroups = (el: HTMLElement): void => {
+		const now = new Date();
+		for (const group of grouped(now)) {
+			if (!group.items.length) continue;
+			el.createDiv({
+				cls: "hl-overline hl-detail-group-head",
+				text: `${group.label} · ${group.items.length}`,
+			});
+			const list = el.createDiv({ cls: "hl-detail-list" });
+			for (const quiz of group.items)
+				renderQuizRow(
+					list,
+					quiz,
+					events,
+					colors,
+					schedule,
+					data.profileName,
+					ctx
+				);
+		}
+	};
+	fillGroups(groupsEl);
+	ctx.registerDynamic?.(
+		groupsEl,
+		() =>
+			grouped(new Date())
+				.map((g) => g.items.map((q) => q.id).join(","))
+				.join("|"),
+		fillGroups
+	);
 }
 
 function renderQuizRow(
@@ -168,7 +223,6 @@ function renderQuizRow(
 	events: Map<string, EventEntry>,
 	colors: Map<string, string>,
 	schedule: ReturnType<typeof quizSchedule>,
-	now: Date,
 	profileName: string,
 	ctx: DeckDetailCtx
 ): void {
@@ -185,16 +239,26 @@ function renderQuizRow(
 		title,
 		colors
 	);
-	const metaBits: string[] = [
-		`掌握 ${quiz.progress}/${schedule.masterySteps}`,
-	];
-	if (quiz.cycles.length > 1) metaBits.push(`第 ${quiz.cycles.length} 轮`);
-	const wait = nextReviewLabel(quiz, now, schedule);
-	if (quiz.status === "active" && wait) metaBits.push(wait);
-	text.createDiv({
+	const metaText = (now: Date): string => {
+		const metaBits: string[] = [
+			`掌握 ${quiz.progress}/${schedule.masterySteps}`,
+		];
+		if (quiz.cycles.length > 1)
+			metaBits.push(`第 ${quiz.cycles.length} 轮`);
+		const wait = nextReviewLabel(quiz, now, schedule);
+		if (quiz.status === "active" && wait) metaBits.push(wait);
+		return metaBits.join(" · ");
+	};
+	const meta = text.createDiv({
 		cls: "hl-detail-row-meta",
-		text: metaBits.join(" · "),
+		text: metaText(new Date()),
 	});
+	// The countdown in the meta line ticks; update just this text node.
+	ctx.registerDynamic?.(
+		meta,
+		() => metaText(new Date()),
+		(el) => el.setText(metaText(new Date()))
+	);
 	const actions = row.createDiv({ cls: "hl-detail-row-actions" });
 	const event = events.get(quiz.sourceEvId);
 	const openPractice = (): void =>

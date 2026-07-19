@@ -107,6 +107,35 @@ export function shortWaitLabel(
 		: `⏰ 重试 · ${label}`;
 }
 
+// Milliseconds until the wall clock next changes what the recitation pages
+// show: the nearest wait deadline, a countdown label ticking down (minute
+// steps under an hour, hour steps under a day), or the day rollover for
+// "上次 X 天前" lines. At most one timer per day (the midnight rollover).
+export function nextClockDelay(
+	quizzes: Iterable<QuizEntry>,
+	schedule = DEFAULT_QUIZ_SCHEDULE,
+	now = new Date()
+): number | null {
+	let next = Infinity;
+	for (const quiz of quizzes) {
+		if (quiz.status !== "active" || !quiz.nextReview) continue;
+		const due = Date.parse(quiz.nextReview);
+		if (Number.isNaN(due)) continue;
+		const left = due - now.getTime();
+		if (left <= 0) continue;
+		if (isQuizReady(quiz, now, schedule)) continue;
+		next = Math.min(next, left);
+		if (left < 60 * 60_000) next = Math.min(next, 60_000);
+		else if (left < 24 * 60 * 60_000)
+			next = Math.min(next, left % (60 * 60_000) || 60 * 60_000);
+	}
+	const midnight = new Date(now);
+	midnight.setHours(24, 0, 0, 0);
+	next = Math.min(next, midnight.getTime() - now.getTime());
+	if (!Number.isFinite(next)) return null;
+	return Math.max(1000, next);
+}
+
 // Feedback right after rating: make the "remembered → recheck pending"
 // outcome unmistakable instead of a bare progress line.
 export function rateNotice(

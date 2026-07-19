@@ -4,7 +4,7 @@ import { scanVault } from "./scan";
 import { eventIdsForQuery } from "./profile-events";
 import { Profile } from "./profiles";
 import { QuizEntry, isQuizReady, isQuizWaiting } from "./quiz";
-import { nextReviewLabel, quizSchedule } from "./quiz-display";
+import { nextClockDelay, nextReviewLabel, quizSchedule } from "./quiz-display";
 import {
 	DeckStats,
 	quizDeckStats,
@@ -32,6 +32,13 @@ interface EventDeck {
 	stats: DeckStats;
 }
 
+interface DynamicPart {
+	el: HTMLElement;
+	lastSig: string;
+	signature(): string;
+	update(el: HTMLElement): void;
+}
+
 type Page =
 	| { kind: "list" }
 	| { kind: "event-detail"; profile: string }
@@ -39,11 +46,12 @@ type Page =
 	| { kind: "player" };
 
 // The recitation hub: deck wall → deck detail → in-view player. State
-// refreshes on data-file changes (debounced) and a slow tick while visible,
-// so the manual reload button is gone. A quiz of the deck coming off its
-// short wait while the hub is the active view is consumed here (interjected
-// into the running session or badged on the wall) instead of raising the
-// alarm modal.
+// refreshes on data-file changes (debounced); wall-clock changes (a short
+// wait expiring, a countdown label ticking down) repaint only the affected
+// fragments via precisely scheduled timers, so nothing flashes. A quiz of
+// the deck coming off its short wait while the hub is the active view is
+// consumed here (interjected into the running session or badged on the
+// wall) instead of raising the alarm modal.
 export class RecitationView extends ItemView {
 	private eventDecks: EventDeck[] = [];
 	private reciteDecks: ReciteDeck[] = [];
@@ -54,6 +62,8 @@ export class RecitationView extends ItemView {
 	private player: QuizPlayerPage | RecitePlayerPage | null = null;
 	private loading = false;
 	private queueReload = debounce(() => void this.reload(), 1500, true);
+	private clockTimer: number | null = null;
+	private dynamicParts: DynamicPart[] = [];
 
 	constructor(leaf: WorkspaceLeaf, private plugin: HistoryLoggingPlugin) {
 		super(leaf);
@@ -82,12 +92,6 @@ export class RecitationView extends ItemView {
 		);
 		this.registerEvent(this.app.vault.on("delete", () => this.queueReload()));
 		this.registerEvent(this.app.vault.on("rename", () => this.queueReload()));
-		// Short waits expire without a file change; tick the wall clock.
-		this.registerInterval(
-			window.setInterval(() => {
-				if (this.page.kind !== "player") this.render();
-			}, 30_000)
-		);
 		// A session left in the background may have had cards answered
 		// elsewhere (alarm modal, timeline); revalidate on return.
 		this.registerEvent(
@@ -103,7 +107,50 @@ export class RecitationView extends ItemView {
 	}
 
 	onunload(): void {
+		if (this.clockTimer !== null) window.clearTimeout(this.clockTimer);
 		this.player?.unmount();
+	}
+
+	// A fragment of the page whose content depends on the wall clock. When a
+	// timer fires, only fragments whose signature changed are refilled; the
+	// rest of the DOM is untouched, so refreshes don't flash or move focus.
+	private registerDynamic(
+		el: HTMLElement,
+		signature: () => string,
+		update: (el: HTMLElement) => void
+	): void {
+		this.dynamicParts.push({ el, signature, update, lastSig: signature() });
+	}
+
+	private applyClockTick(): void {
+		if (this.page.kind !== "player") {
+			this.dynamicParts = this.dynamicParts.filter(
+				(p) => p.el.isConnected
+			);
+			for (const part of [...this.dynamicParts]) {
+				const sig = part.signature();
+				if (sig === part.lastSig) continue;
+				part.lastSig = sig;
+				part.el.empty();
+				part.update(part.el);
+			}
+		}
+		this.scheduleClockTick();
+	}
+
+	private scheduleClockTick(): void {
+		if (this.clockTimer !== null) window.clearTimeout(this.clockTimer);
+		this.clockTimer = null;
+		if (this.page.kind === "player") return;
+		const delay = nextClockDelay(
+			this.quizzes.values(),
+			quizSchedule(this.plugin.settings)
+		);
+		if (delay === null) return;
+		this.clockTimer = window.setTimeout(
+			() => this.applyClockTick(),
+			delay
+		);
 	}
 
 	// A short-wait quiz came due while this view is active. Returns true when
@@ -116,8 +163,9 @@ export class RecitationView extends ItemView {
 			if (this.player.handleDueQuiz(quiz)) return true;
 		}
 		// On the wall or detail pages the refreshed numbers and alarm badges
-		// are the notification; no popup while the user is already here.
-		this.queueReload();
+		// are the notification; no popup while the user is already here. No
+		// file changed, so patch the clock-dependent fragments in place.
+		this.applyClockTick();
 		return this.page.kind !== "player";
 	}
 
@@ -199,6 +247,7 @@ export class RecitationView extends ItemView {
 		if (this.page.kind === "player" && this.player) return;
 		const scroller = this.scrollEl();
 		const prevScroll = scroller?.scrollTop ?? 0;
+		this.dynamicParts = [];
 		root.empty();
 		root.addClass("hl-recitation-view");
 		if (this.page.kind === "event-detail") {
@@ -232,8 +281,13 @@ export class RecitationView extends ItemView {
 						plugin: this.plugin,
 						onBack: () => this.showList(),
 						onChanged: () => this.queueReload(),
+						registerDynamic: (el, signature, update) =>
+							this.registerDynamic(el, signature, update),
 					}
-				).then(() => this.restoreScroll(scroller, prevScroll));
+				).then(() => {
+					this.restoreScroll(scroller, prevScroll);
+					this.scheduleClockTick();
+				});
 				return;
 			}
 			this.page = { kind: "list" };
@@ -267,6 +321,7 @@ export class RecitationView extends ItemView {
 		}
 		this.renderList(root);
 		this.restoreScroll(scroller, prevScroll);
+		this.scheduleClockTick();
 	}
 
 	// The recitation view rebuilds its content wholesale on refresh; keep the
@@ -382,26 +437,20 @@ export class RecitationView extends ItemView {
 		this.renderReciteDecks(root);
 	}
 
-	private renderOverview(root: HTMLElement): void {
+	private overviewModel(now: Date): {
+		dueNow: number;
+		waiting: number;
+		waitLabel: string;
+		reviewedToday: number;
+		upcoming: number;
+		allDue: string[];
+	} {
 		const schedule = quizSchedule(this.plugin.settings);
-		const now = new Date();
 		const overview = quizOverviewStats(
 			[...this.quizzes.values()],
 			now,
 			schedule
 		);
-		const bar = root.createDiv({ cls: "hl-recite-overview" });
-		const item = (
-			num: string,
-			label: string,
-			cls = ""
-		): HTMLElement => {
-			const box = bar.createDiv({ cls: `hl-overview-item ${cls}` });
-			box.createDiv({ cls: "hl-overview-num", text: num });
-			box.createDiv({ cls: "hl-overview-label", text: label });
-			return box;
-		};
-		item(String(overview.dueNow), "现在可练", "is-due");
 		let waitLabel = "短等待中";
 		if (overview.nextWaitDue) {
 			const probe: QuizEntry = {
@@ -412,26 +461,69 @@ export class RecitationView extends ItemView {
 			const when = nextReviewLabel(probe, now, schedule);
 			if (when) waitLabel = `短等待 · 最近 ${when}`;
 		}
-		item(String(overview.waiting), waitLabel, "is-wait");
-		item(String(overview.reviewedToday), "今天已背");
-		item(String(overview.upcoming), "未来到期");
-		const spacer = bar.createDiv({ cls: "hl-overview-spacer" });
-		void spacer;
 		const allDue = [...this.quizzes.values()]
 			.filter(
 				(q) =>
 					q.status === "active" && isQuizReady(q, now, schedule)
 			)
 			.map((q) => q.id);
+		return {
+			dueNow: overview.dueNow,
+			waiting: overview.waiting,
+			waitLabel,
+			reviewedToday: overview.reviewedToday,
+			upcoming: overview.upcoming,
+			allDue,
+		};
+	}
+
+	private renderOverview(root: HTMLElement): void {
+		const bar = root.createDiv({ cls: "hl-recite-overview" });
+		const fill = (el: HTMLElement): void => this.fillOverview(el);
+		fill(bar);
+		this.registerDynamic(
+			bar,
+			() => {
+				const m = this.overviewModel(new Date());
+				return [
+					m.dueNow,
+					m.waiting,
+					m.waitLabel,
+					m.reviewedToday,
+					m.upcoming,
+					m.allDue.length,
+				].join("|");
+			},
+			fill
+		);
+	}
+
+	private fillOverview(bar: HTMLElement): void {
+		const m = this.overviewModel(new Date());
+		const item = (
+			num: string,
+			label: string,
+			cls = ""
+		): HTMLElement => {
+			const box = bar.createDiv({ cls: `hl-overview-item ${cls}` });
+			box.createDiv({ cls: "hl-overview-num", text: num });
+			box.createDiv({ cls: "hl-overview-label", text: label });
+			return box;
+		};
+		item(String(m.dueNow), "现在可练", "is-due");
+		item(String(m.waiting), m.waitLabel, "is-wait");
+		item(String(m.reviewedToday), "今天已背");
+		item(String(m.upcoming), "未来到期");
+		bar.createDiv({ cls: "hl-overview-spacer" });
 		const start = bar.createEl("button", {
 			cls: "mod-cta hl-overview-start",
-			text: `开始今日背诵 · ${allDue.length}`,
+			text: `开始今日背诵 · ${m.allDue.length}`,
 		});
-		if (allDue.length)
+		if (m.allDue.length)
 			start.addEventListener("click", () =>
 				this.startQuizSession(
 					"全部",
-					allDue,
+					m.allDue,
 					[...this.quizzes.keys()],
 					""
 				)
@@ -450,10 +542,59 @@ export class RecitationView extends ItemView {
 		for (const deck of this.eventDecks) this.renderEventDeck(wall, deck);
 	}
 
+	// The deck's due/waiting numbers drift with the wall clock; recompute
+	// them from the live quiz map so clock-tick refills stay accurate.
+	private deckNow(deck: EventDeck, now: Date): EventDeck {
+		const schedule = quizSchedule(this.plugin.settings);
+		const quizzes = deck.allIds
+			.map((id) => this.quizzes.get(id))
+			.filter((q): q is QuizEntry => !!q);
+		const active = quizzes.filter((q) => q.status === "active");
+		return {
+			profile: deck.profile,
+			stats: quizDeckStats(quizzes, now, schedule),
+			dueIds: active
+				.filter((q) => isQuizReady(q, now, schedule))
+				.map((q) => q.id),
+			activeIds: active.map((q) => q.id),
+			allIds: deck.allIds,
+		};
+	}
+
+	private deckSignature(deck: EventDeck): string {
+		return [
+			deck.stats.due,
+			deck.stats.waiting,
+			this.deckWaitingDue(deck),
+			deck.stats.active,
+			deck.stats.mastered,
+			deck.stats.lastReviewedAt
+				? relativeDay(deck.stats.lastReviewedAt)
+				: "",
+		].join("|");
+	}
+
 	private renderEventDeck(wall: HTMLElement, deck: EventDeck): void {
 		const total = deck.stats.active + deck.stats.mastered;
 		const card = wall.createDiv({ cls: "hl-deck-card hl-deck-clickable" });
 		if (!total) card.addClass("hl-deck-empty-card");
+		card.addEventListener("click", () => {
+			this.page = { kind: "event-detail", profile: deck.profile.name };
+			this.render();
+		});
+		const fill = (el: HTMLElement): void =>
+			this.fillEventDeck(el, this.deckNow(deck, new Date()));
+		fill(card);
+		if (total)
+			this.registerDynamic(
+				card,
+				() => this.deckSignature(this.deckNow(deck, new Date())),
+				fill
+			);
+	}
+
+	private fillEventDeck(card: HTMLElement, deck: EventDeck): void {
+		const total = deck.stats.active + deck.stats.mastered;
 		const head = card.createDiv({ cls: "hl-deck-head" });
 		head.createDiv({ cls: "hl-deck-name", text: deck.profile.name });
 		if (deck.stats.due > 0)
@@ -482,13 +623,6 @@ export class RecitationView extends ItemView {
 			card.createDiv({
 				cls: "hl-deck-meta",
 				text: "0 道 Quiz · 去 Timeline 创建",
-			});
-			card.addEventListener("click", () => {
-				this.page = {
-					kind: "event-detail",
-					profile: deck.profile.name,
-				};
-				this.render();
 			});
 			return;
 		}
@@ -540,10 +674,6 @@ export class RecitationView extends ItemView {
 				);
 			});
 		}
-		card.addEventListener("click", () => {
-			this.page = { kind: "event-detail", profile: deck.profile.name };
-			this.render();
-		});
 	}
 
 	// Whether some short-wait card of the deck is already past due (a missed

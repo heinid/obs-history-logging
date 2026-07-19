@@ -56,6 +56,7 @@ import {
 } from "../src/quiz";
 import {
 	maskSourceYear,
+	nextClockDelay,
 	nextReviewLabel,
 	quizQuestion,
 	rateNotice,
@@ -395,6 +396,37 @@ const invalidFuture = {
 };
 eq("invalid future quiz is ready", isQuizReady(invalidFuture, t0), true);
 eq("invalid future label hidden", nextReviewLabel(invalidFuture, t0), "");
+eq(
+	"clock delay hits an imminent deadline",
+	nextClockDelay(
+		[forgotSample(t0, 0.5)],
+		DEFAULT_QUIZ_SCHEDULE,
+		t0
+	),
+	30_000
+);
+eq(
+	"clock delay ticks minutes under an hour",
+	nextClockDelay(
+		[forgotSample(t0, 45)],
+		DEFAULT_QUIZ_SCHEDULE,
+		t0
+	),
+	60_000
+);
+eq(
+	"clock delay without waits is the day rollover",
+	nextClockDelay([], DEFAULT_QUIZ_SCHEDULE, t0),
+	new Date(t0).setHours(24, 0, 0, 0) - t0.getTime()
+);
+function forgotSample(now: Date, minutes: number) {
+	return {
+		...afterOne,
+		nextReview: new Date(
+			now.getTime() + minutes * 60_000
+		).toISOString(),
+	};
+}
 const early = reviewQuiz(
 	afterOne,
 	"remembered",
