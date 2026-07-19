@@ -447,8 +447,10 @@ export class QuizPlayerPage extends PlayerPage {
 		if (!quiz) return;
 		// A map quiz is edited on its map: the frames are the cards.
 		if (quiz.kind === "map" && quiz.sourceMapId) {
-			void this.plugin.openMapViewer(quiz.sourceMapId, () =>
-				void this.reloadCurrent(quiz.id)
+			void this.plugin.openMapViewer(
+				quiz.sourceMapId,
+				() => void this.reloadCurrent(quiz.id),
+				quiz.occlusionId
 			);
 			return;
 		}

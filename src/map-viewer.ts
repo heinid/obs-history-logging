@@ -46,11 +46,17 @@ export class MapOcclusionEditor extends Modal {
 	private boxEls = new Map<string, HTMLElement>();
 	private rowEls = new Map<string, HTMLElement>();
 
+	// When opened from a specific map quiz, that occlusion is pre-selected
+	// and the view focuses on it once the picture is ready.
+	private focusId: string;
+	private needsFocus: boolean;
+
 	constructor(
 		app: App,
 		private plugin: HistoryLoggingPlugin,
 		map: MapEntry,
-		private onChanged?: () => void
+		private onChanged?: () => void,
+		focusOcclusionId = ""
 	) {
 		super(app);
 		this.map = JSON.parse(JSON.stringify(map)) as MapEntry;
@@ -59,6 +65,12 @@ export class MapOcclusionEditor extends Modal {
 			occ.question ??= "";
 			occ.hint ??= "";
 		}
+		const hasFocus =
+			!!focusOcclusionId &&
+			this.map.occlusions.some((o) => o.id === focusOcclusionId);
+		this.focusId = hasFocus ? focusOcclusionId : "";
+		this.selected = this.focusId;
+		this.needsFocus = hasFocus;
 	}
 
 	async onOpen(): Promise<void> {
@@ -156,6 +168,11 @@ export class MapOcclusionEditor extends Modal {
 		this.boxEls.clear();
 		for (const occ of this.map.occlusions) this.buildBox(occ);
 		this.paintSide();
+		if (this.needsFocus) {
+			const occ = this.occOf(this.focusId);
+			if (occ) this.mapStage.focusOn(occ);
+			this.needsFocus = false;
+		}
 
 		const foot = contentEl.createDiv({ cls: "hl-occ-foot" });
 		this.footNote = foot.createSpan({ cls: "hl-occ-foot-note" });

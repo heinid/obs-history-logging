@@ -112,8 +112,10 @@ export class QuizSessionModal extends Modal {
 				setIcon(edit, "pencil");
 				edit.createSpan({ text: "编辑地图" });
 				edit.addEventListener("click", () =>
-					void this.plugin.openMapViewer(sourceMapId, () =>
-						void this.onStashRestore()
+					void this.plugin.openMapViewer(
+						sourceMapId,
+						() => void this.onStashRestore(),
+						quiz.occlusionId
 					)
 				);
 			}

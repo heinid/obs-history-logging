@@ -292,8 +292,10 @@ function renderQuizRow(
 		setIcon(edit, "pencil");
 		edit.setAttr("aria-label", "在地图上编辑这张卡");
 		edit.addEventListener("click", () =>
-			void plugin.openMapViewer(quiz.sourceMapId ?? "", () =>
-				void onChanged()
+			void plugin.openMapViewer(
+				quiz.sourceMapId ?? "",
+				() => void onChanged(),
+				quiz.occlusionId
 			)
 		);
 	} else if (!mapBound) {
