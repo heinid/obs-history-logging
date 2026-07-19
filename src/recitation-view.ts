@@ -64,6 +64,8 @@ export class RecitationView extends ItemView {
 	private queueReload = debounce(() => void this.reload(), 1500, true);
 	private clockTimer: number | null = null;
 	private dynamicParts: DynamicPart[] = [];
+	private dataSig = "";
+	private needsRender = true;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: HistoryLoggingPlugin) {
 		super(leaf);
@@ -239,6 +241,25 @@ export class RecitationView extends ItemView {
 		} finally {
 			this.loading = false;
 		}
+		// Any markdown edit anywhere in the vault lands here (debounced);
+		// rebuilding the page for edits that didn't move any number is what
+		// used to make the view flash. Skip the render when nothing changed.
+		const sig = JSON.stringify({
+			q: [...this.quizzes.entries()],
+			r: this.reciteDecks,
+			e: [...this.entities.entries()],
+			d: this.eventDecks.map((d) => [
+				d.profile.name,
+				d.profile.match,
+				d.allIds,
+			]),
+		});
+		if (!this.needsRender && sig === this.dataSig) {
+			this.applyClockTick();
+			return;
+		}
+		this.dataSig = sig;
+		this.needsRender = false;
 		this.render();
 	}
 
@@ -350,6 +371,7 @@ export class RecitationView extends ItemView {
 		this.player?.unmount();
 		this.player = null;
 		this.page = { kind: "list" };
+		this.needsRender = true;
 		void this.reload();
 	}
 

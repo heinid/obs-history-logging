@@ -14,6 +14,7 @@ import {
 } from "./quiz";
 import { nextReviewLabel, quizSchedule } from "./quiz-display";
 import { QuizEditorModal, QuizPracticeModal } from "./quiz-modal";
+import { ConfirmModal } from "./name-modal";
 import { loadDbColors, renderQuizText } from "./quiz-render";
 import { EntityEntry, displayName } from "./db-format";
 import { EventEntry } from "./types";
@@ -285,7 +286,24 @@ function renderQuizRow(
 			)
 		);
 
-	iconBtn("brain", "学习", openPractice);
+	// A mastered quiz is out of rotation: its slot holds "start over"
+	// (confirmed — it resets progress) instead of the study button.
+	if (quiz.status === "mastered")
+		iconBtn("rotate-ccw", "重新学习", () =>
+			new ConfirmModal(
+				ctx.plugin.app,
+				"重新学习",
+				"把这道学过的 Quiz 重新加入学习？掌握进度将从 0 开始新一轮。",
+				"重新学习",
+				() =>
+					void (async () => {
+						await ctx.plugin.store.upsertQuiz(reviveQuiz(quiz));
+						await ctx.plugin.refreshTimelines();
+						ctx.onChanged();
+					})()
+			).open()
+		);
+	else iconBtn("brain", "学习", openPractice);
 
 	if (quiz.kind === "map" && quiz.sourceMapId) {
 		const mapId = quiz.sourceMapId;
@@ -311,15 +329,6 @@ function renderQuizRow(
 			}).open()
 		);
 	}
-
-	if (quiz.status === "mastered")
-		iconBtn("rotate-ccw", "重新学习", () =>
-			void (async () => {
-				await ctx.plugin.store.upsertQuiz(reviveQuiz(quiz));
-				await ctx.plugin.refreshTimelines();
-				ctx.onChanged();
-			})()
-		);
 
 	row.addEventListener("click", openPractice);
 }
