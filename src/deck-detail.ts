@@ -221,7 +221,7 @@ function renderQuizRow(
 			)
 		);
 
-	iconBtn("play", "学习", openPractice);
+	iconBtn("brain", "学习", openPractice);
 
 	if (quiz.kind === "map" && quiz.sourceMapId) {
 		const mapId = quiz.sourceMapId;
