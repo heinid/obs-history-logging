@@ -197,6 +197,8 @@ export class RecitationView extends ItemView {
 	private render(): void {
 		const root = this.contentEl;
 		if (this.page.kind === "player" && this.player) return;
+		const scroller = this.scrollEl();
+		const prevScroll = scroller?.scrollTop ?? 0;
 		root.empty();
 		root.addClass("hl-recitation-view");
 		if (this.page.kind === "event-detail") {
@@ -231,7 +233,7 @@ export class RecitationView extends ItemView {
 						onBack: () => this.showList(),
 						onChanged: () => this.queueReload(),
 					}
-				);
+				).then(() => this.restoreScroll(scroller, prevScroll));
 				return;
 			}
 			this.page = { kind: "list" };
@@ -258,11 +260,35 @@ export class RecitationView extends ItemView {
 						onChanged: () => this.queueReload(),
 					}
 				);
+				this.restoreScroll(scroller, prevScroll);
 				return;
 			}
 			this.page = { kind: "list" };
 		}
 		this.renderList(root);
+		this.restoreScroll(scroller, prevScroll);
+	}
+
+	// The recitation view rebuilds its content wholesale on refresh; keep the
+	// user where they were instead of snapping back to the top.
+	private scrollEl(): HTMLElement | null {
+		let el: HTMLElement | null = this.contentEl;
+		while (el) {
+			if (el.scrollHeight > el.clientHeight + 1) {
+				const oy = getComputedStyle(el).overflowY;
+				if (oy === "auto" || oy === "scroll") return el;
+			}
+			el = el.parentElement;
+		}
+		return this.contentEl;
+	}
+
+	private restoreScroll(el: HTMLElement | null, top: number): void {
+		if (!el || top <= 0) return;
+		el.scrollTop = top;
+		window.requestAnimationFrame(() => {
+			el.scrollTop = top;
+		});
 	}
 
 	private showList(): void {
