@@ -234,6 +234,12 @@ export class LexiconView extends ItemView {
 			p: [...this.progress.entries()],
 			e: [...this.entities.entries()],
 		});
+		// The whole-library draft starts blank; give it the default
+		// direction so first open already shows the language rows.
+		if (!this.selected && !this.draft.from && !this.draft.to.length) {
+			this.draft.from = this.plugin.settings.entityLangs[0] ?? "";
+			this.draft.to = this.plugin.settings.entityLangs.slice(1);
+		}
 		if (sig !== this.dataSig) {
 			this.dataSig = sig;
 			this.contexts = null;
