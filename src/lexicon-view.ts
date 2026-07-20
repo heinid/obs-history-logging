@@ -1027,6 +1027,17 @@ export class LexiconView extends ItemView {
 		now: Date
 	): void {
 		const row = host.createDiv({ cls: "hl-lex-lrow" });
+		this.fillLangRow(row, e, lang, bound, schedule, now);
+	}
+
+	private fillLangRow(
+		row: HTMLElement,
+		e: EntityEntry,
+		lang: string,
+		bound: ReciteView | null,
+		schedule: QuizSchedule,
+		now: Date
+	): void {
 		row.createSpan({
 			cls: "hl-lex-lname",
 			text: langDisplayName(lang),
@@ -1070,12 +1081,14 @@ export class LexiconView extends ItemView {
 				text: `／${aliases.join("／")}`,
 			});
 		word.setAttr("aria-label", revealed ? "点击遮住" : "点击揭开");
+		// Rebuild the row on toggle so the revealed extras (reading, audio)
+		// come and go with the mask, and repeated clicks stay in sync.
 		word.addEventListener("click", (ev) => {
 			ev.stopPropagation();
-			if (revealed) this.revealed.delete(key);
+			if (this.revealed.has(key)) this.revealed.delete(key);
 			else this.revealed.add(key);
-			word.toggleClass("hl-db-mask", revealed);
-			word.setAttr("aria-label", revealed ? "点击揭开" : "点击遮住");
+			row.empty();
+			this.fillLangRow(row, e, lang, bound, schedule, new Date());
 		});
 		if (revealed) {
 			const reading = e.readings.find(
