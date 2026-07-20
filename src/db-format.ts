@@ -45,6 +45,7 @@ export interface EntityEntry {
 	readings: EntityReading[];
 	audios: EntityAudio[];
 	tags: string[];
+	created?: string;
 	updated?: string;
 	body: string;
 }
@@ -185,6 +186,9 @@ function parseEntityBlock(id: string, block: string): EntityEntry {
 					.map((t) => t.trim())
 					.filter((t) => t.length > 0);
 				break;
+			case "created":
+				if (val) entry.created = val;
+				break;
 			case "updated":
 				if (val) entry.updated = val;
 				break;
@@ -211,6 +215,7 @@ export function serializeEntitiesFile(
 		for (const r of e.readings) parts.push(`reading: ${r.lang} ${r.text}`);
 		for (const a of e.audios) parts.push(`audio: ${a.lang} ${a.link}`);
 		if (e.tags.length) parts.push(`tags: ${e.tags.join(", ")}`);
+		if (e.created) parts.push(`created: ${e.created}`);
 		if (e.updated) parts.push(`updated: ${e.updated}`);
 		parts.push("");
 		if (e.body.trim()) {

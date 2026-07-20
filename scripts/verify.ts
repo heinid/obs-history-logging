@@ -78,6 +78,22 @@ import { interject, pruneUpcoming } from "../src/session-queue";
 import { maskLabels } from "../src/db-occurrences";
 import { parseMapsFile, serializeMapsFile } from "../src/maps-format";
 import { imageEmbeds, resizeEmbedIn } from "../src/map-text";
+import {
+	parseReciteViewsFile,
+	serializeReciteViewsFile,
+	viewFromDeck,
+	studyMembers,
+	ReciteView,
+} from "../src/recite-views";
+import {
+	parseReciteProgressFile,
+	serializeReciteProgressFile,
+	newProgress,
+	reviewProgress,
+	isProgressDue,
+	progressKey,
+	keyOf,
+} from "../src/recite-progress";
 
 let failures = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -1104,6 +1120,103 @@ eq(
 		"resize picks nearest occurrence",
 		resizeEmbedIn("![[a.png]] pad ![[a.png]]", "a.png", 200, 20)?.text,
 		"![[a.png]] pad ![[a.png|200]]"
+	);
+}
+
+// ── recite views (browse desk) ──
+{
+	const view: ReciteView = {
+		name: "日语阅读积累",
+		from: "zh",
+		to: ["ja", "en"],
+		tags: ["日语"],
+		types: ["concept"],
+		requireFrom: true,
+		group: "date",
+		sort: "updated",
+		study: true,
+		follow: false,
+		members: ["aaa11111", "bbb22222"],
+	};
+	const roundtrip = parseReciteViewsFile(
+		serializeReciteViewsFile([view])
+	);
+	eq("recite view roundtrips", roundtrip, [view]);
+	eq(
+		"deck migrates to a view",
+		viewFromDeck({
+			name: "中→日",
+			from: "zh",
+			to: ["ja"],
+			tags: [],
+			types: [],
+		}).requireFrom,
+		true
+	);
+	const zh = (id: string, langs: string[]): Ent => ({
+		id,
+		type: "concept",
+		labels: langs.map((lang) => ({ lang, text: `${id}-${lang}` })),
+		readings: [],
+		audios: [],
+		tags: ["日语"],
+		body: "",
+	});
+	eq(
+		"fixed members require the front spelling",
+		studyMembers(
+			[zh("aaa11111", ["zh", "ja"]), zh("bbb22222", ["ja"])],
+			view
+		).map((e) => e.id),
+		["aaa11111"]
+	);
+	eq(
+		"following views auto-join matches",
+		studyMembers(
+			[zh("ccc33333", ["zh", "en"])],
+			{ ...view, follow: true, members: [] }
+		).map((e) => e.id),
+		["ccc33333"]
+	);
+}
+
+// ── recite progress (entity × language keys) ──
+{
+	const t0 = new Date("2026-07-19T12:00:00.000Z");
+	const fresh = newProgress("aaa11111", "zh", "ja", t0);
+	eq("progress key", keyOf(fresh), progressKey("aaa11111", "zh", "ja"));
+	eq("fresh direction is due", isProgressDue(undefined, t0, DEFAULT_QUIZ_SCHEDULE), true);
+	const learned = reviewProgress(fresh, "remembered", t0, DEFAULT_QUIZ_SCHEDULE);
+	eq("remembered advances progress", learned.progress, 1);
+	eq("remembered schedules a wait", !!learned.nextReview, true);
+	eq(
+		"waiting direction is not due",
+		isProgressDue(learned, t0, DEFAULT_QUIZ_SCHEDULE),
+		false
+	);
+	const forgot = reviewProgress(learned, "forgot", new Date(Date.parse(learned.nextReview!) + 1000), DEFAULT_QUIZ_SCHEDULE);
+	eq("forgot steps back", forgot.progress, 0);
+	let rec = fresh;
+	for (let i = 0; i < DEFAULT_QUIZ_SCHEDULE.masterySteps; i++) {
+		const at = rec.nextReview
+			? new Date(Date.parse(rec.nextReview) + 1000)
+			: t0;
+		rec = reviewProgress(rec, "remembered", at, DEFAULT_QUIZ_SCHEDULE);
+	}
+	eq("mastery graduates the direction", rec.status, "mastered");
+	const stored = new Map([
+		[keyOf(learned), learned],
+		[keyOf(rec), { ...rec, to: "en" }],
+	]);
+	eq(
+		"progress roundtrips",
+		parseReciteProgressFile(serializeReciteProgressFile(stored)),
+		new Map(
+			[...stored.entries()].map(([k, v]) => [
+				k,
+				{ ...v, pendingRecheck: undefined },
+			])
+		)
 	);
 }
 

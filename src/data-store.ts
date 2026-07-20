@@ -30,6 +30,18 @@ import {
 	serializeReciteDecksFile,
 } from "./recite-format";
 import { MapEntry, parseMapsFile, serializeMapsFile } from "./maps-format";
+import {
+	ReciteView,
+	parseReciteViewsFile,
+	serializeReciteViewsFile,
+	viewFromDeck,
+} from "./recite-views";
+import {
+	ReciteProgress,
+	keyOf,
+	parseReciteProgressFile,
+	serializeReciteProgressFile,
+} from "./recite-progress";
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
@@ -198,9 +210,14 @@ export class DataStore {
 
 	async upsertEntity(entry: EntityEntry): Promise<void> {
 		const entries = await this.readEntities();
+		const today = new Date().toISOString().slice(0, 10);
 		entries.set(entry.id, {
 			...entry,
-			updated: new Date().toISOString().slice(0, 10),
+			created:
+				entry.created ??
+				entries.get(entry.id)?.created ??
+				today,
+			updated: today,
 		});
 		await this.writeEntities(entries);
 	}
@@ -286,6 +303,64 @@ export class DataStore {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (file instanceof TFile) await this.app.vault.modify(file, content);
 		else await this.app.vault.create(path, content);
+	}
+
+	private reciteViewsPath(): string {
+		return normalizePath(`${this.getFolder()}/recite-views.md`);
+	}
+
+	// Views supersede the old direction decks; the first read migrates
+	// recite-decks.md entries when no views file exists yet.
+	async readReciteViews(): Promise<ReciteView[]> {
+		const file = this.app.vault.getAbstractFileByPath(
+			this.reciteViewsPath()
+		);
+		if (file instanceof TFile)
+			return parseReciteViewsFile(await this.app.vault.read(file));
+		const decks = await this.readReciteDecks();
+		if (!decks.length) return [];
+		const views = decks.map(viewFromDeck);
+		await this.writeReciteViews(views);
+		return views;
+	}
+
+	async writeReciteViews(views: ReciteView[]): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeReciteViewsFile(views);
+		const path = this.reciteViewsPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
+	}
+
+	private reciteProgressPath(): string {
+		return normalizePath(`${this.getFolder()}/recite-progress.md`);
+	}
+
+	async readReciteProgress(): Promise<Map<string, ReciteProgress>> {
+		const file = this.app.vault.getAbstractFileByPath(
+			this.reciteProgressPath()
+		);
+		if (!(file instanceof TFile)) return new Map();
+		return parseReciteProgressFile(await this.app.vault.read(file));
+	}
+
+	async writeReciteProgress(
+		records: Map<string, ReciteProgress>
+	): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeReciteProgressFile(records);
+		const path = this.reciteProgressPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
+	}
+
+	async upsertReciteProgress(records: ReciteProgress[]): Promise<void> {
+		if (!records.length) return;
+		const all = await this.readReciteProgress();
+		for (const rec of records) all.set(keyOf(rec), rec);
+		await this.writeReciteProgress(all);
 	}
 
 	async writeProfiles(profiles: Profile[]): Promise<void> {

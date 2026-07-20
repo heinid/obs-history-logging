@@ -11,15 +11,31 @@ import {
 	quizOverviewStats,
 } from "./deck-stats";
 import { EntityEntry, orderLangs } from "./db-format";
-import { ReciteDeck, reciteDeckCandidates } from "./recite-format";
 import { ReciteDeckModal } from "./recite-deck-modal";
 import { langDisplayName } from "./quiz-render";
 import { QuizPlayerPage } from "./quiz-player";
 import { RecitePlayerPage } from "./recite-player";
+import { StudyPlayerPage, StudyItem } from "./recite-study-player";
+import {
+	ReciteView,
+	entityMatchesView,
+	hasLang,
+	studyMembers,
+} from "./recite-views";
+import {
+	ReciteProgress,
+	isProgressDue,
+	progressKey,
+} from "./recite-progress";
+import {
+	BrowseState,
+	browseStateFromView,
+	renderBrowseDesk,
+	studyStats,
+} from "./recite-browse";
 import {
 	renderEventDeckDetail,
 	renderMasteryBar,
-	renderReciteDeckDetail,
 } from "./deck-detail";
 
 export const RECITATION_VIEW_TYPE = "history-logging-recitation";
@@ -42,7 +58,7 @@ interface DynamicPart {
 type Page =
 	| { kind: "list" }
 	| { kind: "event-detail"; profile: string }
-	| { kind: "recite-detail"; deck: string }
+	| { kind: "browse"; state: BrowseState }
 	| { kind: "player" };
 
 // The recitation hub: deck wall → deck detail → in-view player. State
@@ -54,12 +70,14 @@ type Page =
 // wall) instead of raising the alarm modal.
 export class RecitationView extends ItemView {
 	private eventDecks: EventDeck[] = [];
-	private reciteDecks: ReciteDeck[] = [];
+	private reciteViews: ReciteView[] = [];
+	private reciteProgress = new Map<string, ReciteProgress>();
 	private entities = new Map<string, EntityEntry>();
 	private quizzes = new Map<string, QuizEntry>();
 	private byEvent = new Map<string, QuizEntry[]>();
 	private page: Page = { kind: "list" };
-	private player: QuizPlayerPage | RecitePlayerPage | null = null;
+	private player: QuizPlayerPage | RecitePlayerPage | StudyPlayerPage | null =
+		null;
 	private loading = false;
 	private queueReload = debounce(() => void this.reload(), 1500, true);
 	private clockTimer: number | null = null;
@@ -175,20 +193,29 @@ export class RecitationView extends ItemView {
 		if (this.loading) return;
 		this.loading = true;
 		try {
-			const [entries, profiles, quizzes, reciteDecks, entities, maps] =
-				await Promise.all([
-					scanVault(
-						this.app,
-						this.plugin.store,
-						this.plugin.settings.dataFolder
-					),
-					this.plugin.store.readProfiles(),
-					this.plugin.store.readQuizzes(),
-					this.plugin.store.readReciteDecks(),
-					this.plugin.store.readEntities(),
-					this.plugin.store.readMaps(),
-				]);
-			this.reciteDecks = reciteDecks;
+			const [
+				entries,
+				profiles,
+				quizzes,
+				reciteViews,
+				reciteProgress,
+				entities,
+				maps,
+			] = await Promise.all([
+				scanVault(
+					this.app,
+					this.plugin.store,
+					this.plugin.settings.dataFolder
+				),
+				this.plugin.store.readProfiles(),
+				this.plugin.store.readQuizzes(),
+				this.plugin.store.readReciteViews(),
+				this.plugin.store.readReciteProgress(),
+				this.plugin.store.readEntities(),
+				this.plugin.store.readMaps(),
+			]);
+			this.reciteViews = reciteViews;
+			this.reciteProgress = reciteProgress;
 			this.entities = entities;
 			this.quizzes = quizzes;
 
@@ -246,7 +273,8 @@ export class RecitationView extends ItemView {
 		// used to make the view flash. Skip the render when nothing changed.
 		const sig = JSON.stringify({
 			q: [...this.quizzes.entries()],
-			r: this.reciteDecks,
+			r: this.reciteViews,
+			p: [...this.reciteProgress.entries()],
 			e: [...this.entities.entries()],
 			d: this.eventDecks.map((d) => [
 				d.profile.name,
@@ -313,32 +341,33 @@ export class RecitationView extends ItemView {
 			}
 			this.page = { kind: "list" };
 		}
-		if (this.page.kind === "recite-detail") {
-			const deck = this.reciteDecks.find(
-				(d) =>
-					this.page.kind === "recite-detail" &&
-					d.name === this.page.deck
+		if (this.page.kind === "browse") {
+			const state = this.page.state;
+			renderBrowseDesk(
+				root,
+				state,
+				[...this.entities.values()],
+				this.reciteViews,
+				this.reciteProgress,
+				quizSchedule(this.plugin.settings),
+				{
+					plugin: this.plugin,
+					onBack: () => this.showList(),
+					rerender: () => this.render(),
+					saveViews: async (views) => {
+						await this.plugin.store.writeReciteViews(views);
+						this.needsRender = true;
+						await this.reload();
+					},
+					startLoose: (view, candidates) =>
+						this.startReciteSession(view, candidates),
+					startStudy: (view, dueOnly) =>
+						this.startStudySession(view, dueOnly),
+				}
 			);
-			if (deck) {
-				const candidates = reciteDeckCandidates(
-					this.entities.values(),
-					deck
-				);
-				renderReciteDeckDetail(
-					root,
-					deck,
-					candidates,
-					() => this.startReciteSession(deck, candidates),
-					{
-						plugin: this.plugin,
-						onBack: () => this.showList(),
-						onChanged: () => this.queueReload(),
-					}
-				);
-				this.restoreScroll(scroller, prevScroll);
-				return;
-			}
-			this.page = { kind: "list" };
+			this.restoreScroll(scroller, prevScroll);
+			this.scheduleClockTick();
+			return;
 		}
 		this.renderList(root);
 		this.restoreScroll(scroller, prevScroll);
@@ -401,15 +430,63 @@ export class RecitationView extends ItemView {
 	}
 
 	private startReciteSession(
-		deck: ReciteDeck,
+		view: ReciteView,
 		candidates: EntityEntry[]
 	): void {
 		if (!candidates.length) return;
 		this.player?.unmount();
 		const player = new RecitePlayerPage(
 			this.plugin,
-			deck,
+			{
+				name: view.name || "临时筛选",
+				from: view.from,
+				to: view.to,
+				tags: view.tags,
+				types: view.types,
+			},
 			candidates,
+			() => this.showList()
+		);
+		this.player = player;
+		this.page = { kind: "player" };
+		const root = this.contentEl;
+		root.empty();
+		root.addClass("hl-recitation-view");
+		player.mount(root.createDiv());
+	}
+
+	// Study session over the view's member × language keys; each language
+	// row is rated on its own and lands on the shared progress record.
+	private startStudySession(view: ReciteView, dueOnly: boolean): void {
+		const schedule = quizSchedule(this.plugin.settings);
+		const now = new Date();
+		const items: StudyItem[] = [];
+		for (const entity of studyMembers(this.entities.values(), view)) {
+			const langs = view.to
+				.filter((lang) => hasLang(entity, lang))
+				.map((lang) => {
+					const rec = this.reciteProgress.get(
+						progressKey(entity.id, view.from, lang)
+					);
+					return {
+						lang,
+						due: dueOnly
+							? isProgressDue(rec, now, schedule)
+							: rec?.status !== "mastered",
+						progress: rec,
+					};
+				});
+			if (langs.some((l) => l.due)) items.push({ entity, langs });
+		}
+		if (!items.length) return;
+		this.player?.unmount();
+		const player = new StudyPlayerPage(
+			this.plugin,
+			view.name,
+			view.from,
+			items,
+			schedule,
+			(rec) => void this.plugin.store.upsertReciteProgress([rec]),
 			() => this.showList()
 		);
 		this.player = player;
@@ -717,56 +794,131 @@ export class RecitationView extends ItemView {
 
 	private renderReciteDecks(root: HTMLElement): void {
 		const section = root.createDiv({ cls: "hl-recite-section" });
-		section.createEl("h3", { text: "词条背诵" });
+		const head = section.createDiv({ cls: "hl-recite-section-head" });
+		head.createEl("h3", { text: "词条背诵" });
+		const browse = head.createEl("button", {
+			cls: "hl-browse-open",
+			text: "浏览全部词条",
+		});
+		browse.addEventListener("click", () => this.openBrowse(null));
 		const wall = section.createDiv({ cls: this.wallCls() });
-		for (const deck of this.reciteDecks)
-			this.renderReciteDeck(wall, deck);
+		for (const view of this.reciteViews)
+			this.renderReciteView(wall, view);
 
 		const add = wall.createDiv({ cls: "hl-deck-card hl-deck-add" });
 		add.createDiv({ cls: "hl-deck-add-plus", text: "＋" });
-		add.createDiv({ text: "新建方向" });
-		add.addEventListener("click", () => this.editDeck(null));
+		add.createDiv({ text: "新建视图" });
+		add.addEventListener("click", () => this.editView(null));
 	}
 
-	private renderReciteDeck(wall: HTMLElement, deck: ReciteDeck): void {
-		const candidates = reciteDeckCandidates(this.entities.values(), deck);
+	private openBrowse(view: ReciteView | null): void {
+		this.page = { kind: "browse", state: browseStateFromView(view) };
+		this.render();
+	}
+
+	private renderReciteView(wall: HTMLElement, view: ReciteView): void {
+		const schedule = quizSchedule(this.plugin.settings);
 		const card = wall.createDiv({ cls: "hl-deck-card hl-deck-clickable" });
-		card.createDiv({ cls: "hl-deck-name", text: deck.name });
-		card.createDiv({
-			cls: "hl-deck-match",
-			text: `${langDisplayName(deck.from)} → ${orderLangs(deck.to)
-				.map(langDisplayName)
-				.join(" / ")}`,
-		});
+		const fill = (el: HTMLElement): void => this.fillReciteView(el, view);
+		fill(card);
+		card.addEventListener("click", () => this.openBrowse(view));
+		if (view.study)
+			this.registerDynamic(
+				card,
+				() => {
+					const { stats } = studyStats(
+						view,
+						this.entities.values(),
+						this.reciteProgress,
+						schedule
+					);
+					return [
+						stats.due,
+						stats.waiting,
+						stats.active,
+						stats.mastered,
+					].join("|");
+				},
+				fill
+			);
+	}
+
+	private fillReciteView(card: HTMLElement, view: ReciteView): void {
+		const schedule = quizSchedule(this.plugin.settings);
+		const head = card.createDiv({ cls: "hl-deck-head" });
+		head.createDiv({ cls: "hl-deck-name", text: view.name });
+		const matched = [...this.entities.values()].filter(
+			(e) =>
+				entityMatchesView(e, view) &&
+				(!view.from || hasLang(e, view.from))
+		);
+		let stats = null;
+		if (view.study) {
+			stats = studyStats(
+				view,
+				this.entities.values(),
+				this.reciteProgress,
+				schedule
+			).stats;
+			if (stats.due > 0)
+				head.createSpan({
+					cls: "hl-deck-badge",
+					text: String(stats.due),
+				});
+			else if (!stats.waiting)
+				head.createSpan({ cls: "hl-deck-check", text: "✓" });
+		}
+		if (view.from && view.to.length)
+			card.createDiv({
+				cls: "hl-deck-match",
+				text: `${langDisplayName(view.from)} → ${orderLangs(view.to)
+					.map(langDisplayName)
+					.join(" / ")}`,
+			});
 		const scope: string[] = [];
-		if (deck.tags.length) scope.push(deck.tags.join(", "));
-		if (deck.types.length) scope.push(deck.types.join(", "));
+		if (view.tags.length) scope.push(view.tags.join(", "));
+		if (view.types.length) scope.push(view.types.join(", "));
 		if (scope.length)
 			card.createDiv({ cls: "hl-deck-scope", text: scope.join(" · ") });
-		card.createDiv({
-			cls: "hl-deck-meta",
-			text: `${candidates.length} 个词条`,
-		});
+
+		if (stats) {
+			renderMasteryBar(card, stats);
+			const meta = card.createDiv({ cls: "hl-deck-meta" });
+			meta.createSpan({
+				text: `在学 ${stats.active} · 学过 ${stats.mastered}`,
+			});
+		} else
+			card.createDiv({
+				cls: "hl-deck-meta",
+				text: `${matched.length} 个词条`,
+			});
 
 		const actions = card.createDiv({ cls: "hl-deck-actions" });
-		const start = actions.createEl("button", {
-			cls: "mod-cta",
-			text: "开始背诵",
-		});
-		if (candidates.length)
-			start.addEventListener("click", (ev) => {
-				ev.stopPropagation();
-				this.startReciteSession(deck, candidates);
+		if (stats) {
+			const start = actions.createEl("button", {
+				cls: "mod-cta",
+				text: stats.due > 0 ? `背到期 ${stats.due}` : "无到期",
 			});
-		else start.disabled = true;
+			if (stats.due > 0)
+				start.addEventListener("click", (ev) => {
+					ev.stopPropagation();
+					this.startStudySession(view, true);
+				});
+			else start.disabled = true;
+		} else {
+			const open = actions.createEl("button", {
+				cls: "mod-cta",
+				text: "打开",
+			});
+			open.addEventListener("click", (ev) => {
+				ev.stopPropagation();
+				this.openBrowse(view);
+			});
+		}
 		const edit = actions.createEl("button", { text: "编辑" });
 		edit.addEventListener("click", (ev) => {
 			ev.stopPropagation();
-			this.editDeck(deck);
-		});
-		card.addEventListener("click", () => {
-			this.page = { kind: "recite-detail", deck: deck.name };
-			this.render();
+			this.editView(view);
 		});
 	}
 
@@ -776,19 +928,34 @@ export class RecitationView extends ItemView {
 			: "hl-deck-wall";
 	}
 
-	private editDeck(existing: ReciteDeck | null): void {
+	// The modal edits the view's direction core (name / from / to / tags /
+	// types); browse-desk state (grouping, sorting…) is edited on the desk.
+	private editView(existing: ReciteView | null): void {
 		new ReciteDeckModal(
 			this.app,
 			this.plugin,
-			existing,
+			existing
+				? {
+						name: existing.name,
+						from: existing.from,
+						to: [...existing.to],
+						tags: [...existing.tags],
+						types: [...existing.types],
+				  }
+				: null,
 			async (saved, remove) => {
-				const decks = await this.plugin.store.readReciteDecks();
+				const views = await this.plugin.store.readReciteViews();
 				const next = existing
-					? decks.filter((d) => d.name !== existing.name)
-					: decks;
-				if (!remove) next.push(saved);
-				await this.plugin.store.writeReciteDecks(next);
-				new Notice(remove ? "已删除方向" : "已保存方向");
+					? views.filter((v) => v.name !== existing.name)
+					: views;
+				if (!remove)
+					next.push({
+						...(existing ?? browseStateFromView(null).draft),
+						...saved,
+					});
+				await this.plugin.store.writeReciteViews(next);
+				new Notice(remove ? "已删除视图" : "已保存视图");
+				this.needsRender = true;
 				await this.reload();
 			}
 		).open();
