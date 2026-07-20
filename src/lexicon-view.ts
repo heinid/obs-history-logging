@@ -179,9 +179,6 @@ export class LexiconView extends ItemView {
 	private colors: DbColors = new Map();
 	private selectMode = false;
 	private selectedIds = new Set<string>();
-	// Name of the view that last received members, the fallback «+» target
-	// when browsing outside any view.
-	private lastTarget: string | null = null;
 	private ctxLoading = false;
 	private player: StudyPlayerPage | null = null;
 	private playing = false;
@@ -1259,35 +1256,27 @@ export class LexiconView extends ItemView {
 			);
 		if (e.type) head.createSpan({ cls: "hl-lex-etype", text: e.type });
 		const acts = head.createDiv({ cls: "hl-lex-eacts" });
-		const target = this.plusTarget();
-		// Minted = at least one card atom in the target's direction.
-		const minted =
-			target != null &&
-			target.to.some(
-				(lang) =>
-					lang !== target.from &&
-					this.progress.has(progressKey(e.id, target.from, lang))
-			);
+		// Minted = at least one card atom in the direction being browsed.
+		const minted = this.draft.to.some(
+			(lang) =>
+				lang !== this.draft.from &&
+				this.progress.has(progressKey(e.id, this.draft.from, lang))
+		);
 		if (!minted) {
 			const add = acts.createSpan({ cls: "hl-lex-eact" });
 			setIcon(add, "plus");
-			add.setAttr(
-				"aria-label",
-				target
-					? `加入学习（${dirLabel(target) || target.name}）`
-					: "加入学习…"
-			);
+			add.setAttr("aria-label", "加入学习…");
 			add.addEventListener("click", (ev) => {
 				ev.stopPropagation();
 				this.addToStudy([e.id], ev);
 			});
-		} else if (target) {
+		} else {
 			const rm = acts.createSpan({ cls: "hl-lex-eact" });
 			setIcon(rm, "minus");
 			rm.setAttr("aria-label", "移出学习（该方向进度删除）");
 			rm.addEventListener("click", (ev) => {
 				ev.stopPropagation();
-				this.removeFromStudy(target, [e.id]);
+				this.removeFromStudy(this.directionView(), [e.id]);
 			});
 		}
 		const edit = acts.createSpan({ cls: "hl-lex-eact" });
@@ -1541,33 +1530,72 @@ export class LexiconView extends ItemView {
 
 	// ── study membership ──
 
-	// The deck a bare «+» lands in: the current view (even when its filters
-	// were tweaked afterwards), else the view that last received members.
-	private plusTarget(): ReciteView | null {
-		return (
-			this.boundView() ??
-			this.views.find((v) => v.name === this.lastTarget) ??
-			null
-		);
+	// The direction currently on the desk, as a synthetic target for
+	// minting/removing: the bound view's name (so its study flag follows)
+	// with the draft's possibly-tweaked direction.
+	private directionView(): ReciteView {
+		const bound = this.boundView();
+		return {
+			...(bound ?? emptyView("")),
+			from: this.draft.from,
+			to: [...this.draft.to],
+		};
 	}
 
+	// «+» always opens a chooser — the current direction leads, but every
+	// profile stays pickable.
 	private addToStudy(ids: string[], ev?: MouseEvent): void {
-		const target = this.plusTarget();
-		if (target) {
-			void this.mintCards(target, ids);
-			return;
-		}
 		const menu = new Menu();
-		// Views covering the direction being browsed come first; the rest
-		// stay selectable but carry a soft “方向不同” hint.
+		const bound = this.boundView();
+		const sameDir = (a: ReciteView, b: ReciteView): boolean =>
+			a.from === b.from &&
+			[...a.to].sort().join(",") === [...b.to].sort().join(",");
+		const cur = this.directionView();
+		menu.addItem((i) =>
+			i
+				.setTitle(
+					createFragment((f) => {
+						f.createSpan({ text: "按当前方向加入" });
+						const dir = dirLabel(cur);
+						if (dir)
+							f.createSpan({
+								cls: "hl-lex-menu-dir",
+								text: dir,
+							});
+					})
+				)
+				.setIcon("brain")
+				.onClick(() => void this.mintCards(cur, ids))
+		);
+		// The view's own saved direction, when the desk drifted from it.
+		if (bound && !sameDir(bound, cur))
+			menu.addItem((i) =>
+				i
+					.setTitle(
+						createFragment((f) => {
+							f.createSpan({ text: "按本视图方向加入" });
+							const dir = dirLabel(bound);
+							if (dir)
+								f.createSpan({
+									cls: "hl-lex-menu-dir",
+									text: dir,
+								});
+						})
+					)
+					.setIcon("brain")
+					.onClick(() => void this.mintCards(bound, ids))
+			);
+		menu.addSeparator();
+		// Other profiles: views covering the direction being browsed come
+		// first; the rest stay selectable but carry a soft “方向不同” hint.
 		const covers = (v: ReciteView): boolean =>
 			v.from === this.draft.from &&
 			this.draft.to.some(
 				(l) => l !== this.draft.from && v.to.includes(l)
 			);
-		const ordered = [...this.views].sort(
-			(a, b) => Number(covers(b)) - Number(covers(a))
-		);
+		const ordered = [...this.views]
+			.filter((v) => v.name !== bound?.name)
+			.sort((a, b) => Number(covers(b)) - Number(covers(a)));
 		for (const v of ordered)
 			menu.addItem((i) =>
 				i
@@ -1590,7 +1618,7 @@ export class LexiconView extends ItemView {
 					.setIcon(v.study ? "brain" : "bookmark")
 					.onClick(() => void this.mintCards(v, ids))
 			);
-		if (this.views.length) menu.addSeparator();
+		if (ordered.length) menu.addSeparator();
 		menu.addItem((i) =>
 			i
 				.setTitle("保存为新视图并加入…")
@@ -1627,7 +1655,6 @@ export class LexiconView extends ItemView {
 			new Notice("先在工具行选择出发语言和目标语言");
 			return;
 		}
-		this.lastTarget = view.name;
 		const now = new Date();
 		const recs: ReciteProgress[] = [];
 		let skipped = 0;
@@ -1649,7 +1676,7 @@ export class LexiconView extends ItemView {
 			return;
 		}
 		await this.plugin.store.upsertReciteProgress(recs);
-		if (!view.study)
+		if (!view.study && this.views.some((v) => v.name === view.name))
 			await this.plugin.store.writeReciteViews(
 				this.views.map((v) =>
 					v.name === view.name ? { ...v, study: true } : v
@@ -1828,8 +1855,8 @@ export class LexiconView extends ItemView {
 		act("加入学习", (ev) =>
 			this.addToStudy([...this.selectedIds], ev)
 		);
-		const target = this.plusTarget();
-		if (target?.study)
+		const target = this.directionView();
+		if (target.from && target.to.length)
 			act("移出学习", () =>
 				this.removeFromStudy(target, [...this.selectedIds])
 			);
