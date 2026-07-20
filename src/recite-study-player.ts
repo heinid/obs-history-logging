@@ -18,6 +18,7 @@ import { shuffle } from "./session-queue";
 import { ContextHint, renderContextMarkdown } from "./recite-context";
 import {
 	ReciteProgress,
+	isProgressDue,
 	newProgress,
 	reviewProgress,
 } from "./recite-progress";
@@ -40,6 +41,12 @@ export class StudyPlayerPage extends PlayerPage {
 	private index = 0;
 	private results = { remembered: 0, forgot: 0 };
 	private ctxIdx = new Map<string, number>();
+	// Cards with forgotten rows sitting out the short retry wait; they are
+	// interjected back into the queue once due — the session only ends when
+	// every row has been passed with “记得” (same promise as the event quiz).
+	private pending: StudyItem[] = [];
+	private waitMode = false;
+	private watchTimer = 0;
 
 	constructor(
 		plugin: HistoryLoggingPlugin,
@@ -57,6 +64,47 @@ export class StudyPlayerPage extends PlayerPage {
 		// The dictionary-style card masks answers in place, so there is no
 		// separate front / “show answer” step.
 		this.revealed = true;
+		this.watchTimer = window.setInterval(() => this.poll(), 5_000);
+	}
+
+	unmount(): void {
+		window.clearInterval(this.watchTimer);
+		super.unmount();
+	}
+
+	private retrySlots(item: StudyItem): StudyLang[] {
+		return item.langs.filter(
+			(l) => l.due && l.rated === "forgot"
+		);
+	}
+
+	// Move pending cards whose retry wait has elapsed back into the queue,
+	// right after the current card.
+	private poll(force = false): void {
+		if (!this.pending.length) return;
+		const now = new Date();
+		const ready = this.pending.filter(
+			(it) =>
+				force ||
+				this.retrySlots(it).every((l) =>
+					isProgressDue(l.progress, now, this.schedule)
+				)
+		);
+		if (!ready.length) return;
+		this.pending = this.pending.filter((it) => !ready.includes(it));
+		for (const it of ready) {
+			for (const l of this.retrySlots(it)) {
+				l.rated = undefined;
+				l.revealed = false;
+			}
+			this.items.splice(
+				Math.min(this.index + 1, this.items.length),
+				0,
+				it
+			);
+		}
+		this.waitMode = false;
+		this.render();
 	}
 
 	protected done(): number {
@@ -248,10 +296,15 @@ export class StudyPlayerPage extends PlayerPage {
 		const base =
 			slot.progress ??
 			newProgress(item.entity.id, this.from, slot.lang);
-		this.onRecord(
-			reviewProgress(base, result, new Date(), this.schedule)
-		);
-		if (item.langs.every((l) => !l.due || l.rated)) this.index++;
+		const rec = reviewProgress(base, result, new Date(), this.schedule);
+		slot.progress = rec;
+		this.onRecord(rec);
+		if (item.langs.every((l) => !l.due || l.rated)) {
+			if (this.retrySlots(item).length) this.pending.push(item);
+			this.index++;
+			if (this.finished() && this.pending.length)
+				this.waitMode = true;
+		}
 		this.render();
 	}
 
@@ -306,11 +359,27 @@ export class StudyPlayerPage extends PlayerPage {
 		});
 	}
 
+	// Soonest retry among pending rows, as a rough countdown.
+	private waitLabel(): string {
+		const times = this.pending
+			.flatMap((it) => this.retrySlots(it))
+			.map((l) => l.progress?.nextReview)
+			.filter((t): t is string => !!t)
+			.sort();
+		if (!times.length) return "";
+		const mins = Math.ceil(
+			(Date.parse(times[0]) - Date.now()) / 60_000
+		);
+		return mins <= 0 ? "马上" : `约 ${mins} 分钟后`;
+	}
+
 	protected renderSummary(host: HTMLElement): void {
 		const card = host.createDiv({
 			cls: "hl-player-card hl-player-summary",
 		});
-		card.createEl("h2", { text: "背诵完成" });
+		card.createEl("h2", {
+			text: this.waitMode ? "等待重试" : "背诵完成",
+		});
 		if (!this.items.length) {
 			card.createDiv({ text: "没有到期的方向。" });
 		} else {
@@ -339,8 +408,30 @@ export class StudyPlayerPage extends PlayerPage {
 			tally("is-ok", this.results.remembered, "记得");
 			tally("is-bad", this.results.forgot, "不记得");
 		}
-		const done = card.createEl("button", {
-			cls: "mod-cta",
+		if (this.pending.length) {
+			const note = card.createDiv({ cls: "hl-player-wait-note" });
+			const label = (): string =>
+				`⏰ ${this.pending.length} 张卡在重试等待中 · 最近 ${this.waitLabel()}，到点自动续上`;
+			note.setText(label());
+			const timer = window.setInterval(() => {
+				if (!note.isConnected) {
+					window.clearInterval(timer);
+					return;
+				}
+				note.setText(label());
+			}, 15_000);
+		}
+		const actions = card.createDiv({
+			cls: "hl-player-summary-actions",
+		});
+		if (this.pending.length) {
+			const retry = actions.createEl("button", {
+				text: `提前重测 ${this.pending.length}`,
+			});
+			retry.addEventListener("click", () => this.poll(true));
+		}
+		const done = actions.createEl("button", {
+			cls: this.pending.length ? "" : "mod-cta",
 			text: "返回",
 		});
 		done.addEventListener("click", () => this.onExit());

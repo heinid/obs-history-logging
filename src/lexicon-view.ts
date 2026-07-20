@@ -77,6 +77,17 @@ function agoLabel(stamp: string): string {
 	return `加入于 ${stamp.slice(0, 10)}`;
 }
 
+// Direction counts plus the merged per-word view: a word is due/waiting/
+// active when any of its directions is, mastered only when all are.
+export interface LexStats extends DeckStats {
+	words: {
+		due: number;
+		waiting: number;
+		active: number;
+		mastered: number;
+	};
+}
+
 // Study stats for a view over member × language keys; directions never
 // studied count as fresh active cards (due now).
 export function lexStudyStats(
@@ -85,22 +96,38 @@ export function lexStudyStats(
 	progress: Map<string, ReciteProgress>,
 	schedule: QuizSchedule,
 	now = new Date()
-): DeckStats {
+): LexStats {
 	const members = studyMembers(entities, view);
 	const shapes = [];
 	let fresh = 0;
-	for (const e of members)
+	const words = { due: 0, waiting: 0, active: 0, mastered: 0 };
+	for (const e of members) {
+		let due = false;
+		let waiting = false;
+		let active = false;
+		let dirs = 0;
 		for (const lang of view.to) {
 			if (!hasLang(e, lang)) continue;
+			dirs++;
 			const rec = progress.get(progressKey(e.id, view.from, lang));
 			if (rec) shapes.push(toQuizShape(rec));
 			else fresh++;
+			if (rec?.status === "mastered") continue;
+			active = true;
+			if (isProgressWaiting(rec, now, schedule)) waiting = true;
+			else if (isProgressDue(rec, now, schedule)) due = true;
 		}
+		if (!dirs) continue;
+		if (due) words.due++;
+		if (waiting) words.waiting++;
+		if (active) words.active++;
+		else words.mastered++;
+	}
 	const stats = quizDeckStats(shapes, now, schedule);
 	stats.active += fresh;
 	stats.due += fresh;
 	if (stats.progressDist.length) stats.progressDist[0] += fresh;
-	return stats;
+	return { ...stats, words };
 }
 
 export class LexiconView extends ItemView {
@@ -349,15 +376,17 @@ export class LexiconView extends ItemView {
 					this.progress,
 					schedule
 				);
-				if (stats.due > 0)
+				if (stats.words.due > 0)
 					item.createSpan({
 						cls: "hl-lex-side-due",
-						text: String(stats.due),
+						text: String(stats.words.due),
 					});
 				else
 					item.createSpan({
 						cls: "hl-lex-side-cnt",
-						text: String(stats.active + stats.mastered),
+						text: String(
+							stats.words.active + stats.words.mastered
+						),
 					});
 			} else {
 				const count = [...this.entities.values()].filter((e) =>
@@ -610,8 +639,8 @@ export class LexiconView extends ItemView {
 		row.createDiv({ cls: "hl-lex-spacer" });
 
 		const pick = row.createSpan({
-			cls: "hl-lex-tctl",
-			text: this.selectMode ? "完成" : "选择",
+			cls: `hl-lex-tctl${this.selectMode ? " is-on" : ""}`,
+			text: "选择",
 		});
 		pick.addEventListener("click", () => {
 			this.selectMode = !this.selectMode;
@@ -730,32 +759,39 @@ export class LexiconView extends ItemView {
 		const strip = main.createDiv({ cls: "hl-lex-strip" });
 		const icon = strip.createSpan({ cls: "hl-lex-strip-icon" });
 		setIcon(icon, "brain");
+		// Words first, direction keys as fine print: «到期 2 词 · 3 方向».
 		const seg = (
 			key: Exclude<StudyFilter, null>,
 			label: string,
-			value: number
+			words: number,
+			dirs: number
 		): void => {
 			const el = strip.createSpan({
 				cls: `hl-lex-strip-seg${
 					this.studyFilter === key ? " is-on" : ""
 				}`,
 			});
-			el.createSpan({ cls: "hl-lex-strip-num", text: String(value) });
+			el.createSpan({ cls: "hl-lex-strip-num", text: String(words) });
 			el.createSpan({ text: label });
+			if (dirs !== words)
+				el.createSpan({
+					cls: "hl-lex-strip-dirs",
+					text: `${dirs} 方向`,
+				});
 			el.addEventListener("click", () => {
 				this.studyFilter = this.studyFilter === key ? null : key;
 				this.render();
 			});
 		};
-		seg("due", "到期", stats.due);
-		seg("waiting", "短等待", stats.waiting);
-		seg("active", "在学", stats.active);
-		seg("mastered", "学过", stats.mastered);
+		seg("due", "到期", stats.words.due, stats.due);
+		seg("waiting", "短等待", stats.words.waiting, stats.waiting);
+		seg("active", "在学", stats.words.active, stats.active);
+		seg("mastered", "学过", stats.words.mastered, stats.mastered);
 		strip.createDiv({ cls: "hl-lex-spacer" });
-		if (stats.due > 0) {
+		if (stats.words.due > 0) {
 			const go = strip.createEl("button", {
 				cls: "mod-cta",
-				text: `开始复习 ${stats.due}`,
+				text: `开始复习 ${stats.words.due}`,
 			});
 			go.addEventListener("click", () => this.startStudy(bound, true));
 		} else if (stats.active > 0) {
@@ -1232,6 +1268,14 @@ export class LexiconView extends ItemView {
 
 	private renderSelectBar(main: HTMLElement): void {
 		const bar = main.createDiv({ cls: "hl-lex-selbar" });
+		const close = bar.createSpan({ cls: "hl-lex-selbar-act" });
+		setIcon(close, "x");
+		close.setAttr("aria-label", "退出多选（Esc）");
+		close.addEventListener("click", () => {
+			this.selectMode = false;
+			this.selectedIds.clear();
+			this.render();
+		});
 		bar.createSpan({
 			cls: "hl-lex-selbar-count",
 			text: `已选 ${this.selectedIds.size}`,
@@ -1274,16 +1318,6 @@ export class LexiconView extends ItemView {
 				return;
 			}
 			this.selectMoreMenu(ev);
-		});
-		bar.createDiv({ cls: "hl-lex-spacer" });
-		const done = bar.createSpan({
-			cls: "hl-lex-selbar-act is-strong",
-			text: "完成",
-		});
-		done.addEventListener("click", () => {
-			this.selectMode = false;
-			this.selectedIds.clear();
-			this.render();
 		});
 	}
 
