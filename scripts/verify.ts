@@ -1163,18 +1163,20 @@ eq(
 		body: "",
 	});
 	eq(
-		"fixed members require the front spelling",
+		"pinned members require the front spelling",
 		studyMembers(
 			[zh("aaa11111", ["zh", "ja"]), zh("bbb22222", ["ja"])],
-			view
+			view,
+			new Set<string>()
 		).map((e) => e.id),
 		["aaa11111"]
 	);
 	eq(
-		"following views auto-join matches",
+		"minted atoms auto-join filter matches",
 		studyMembers(
-			[zh("ccc33333", ["zh", "en"])],
-			{ ...view, follow: true, members: [] }
+			[zh("ccc33333", ["zh", "en"]), zh("ddd44444", ["zh", "en"])],
+			{ ...view, members: [] },
+			new Set([progressKey("ccc33333", "zh", "en")])
 		).map((e) => e.id),
 		["ccc33333"]
 	);

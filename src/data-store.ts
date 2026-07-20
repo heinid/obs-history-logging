@@ -363,6 +363,13 @@ export class DataStore {
 		await this.writeReciteProgress(all);
 	}
 
+	async deleteReciteProgress(keys: string[]): Promise<void> {
+		if (!keys.length) return;
+		const all = await this.readReciteProgress();
+		for (const key of keys) all.delete(key);
+		await this.writeReciteProgress(all);
+	}
+
 	async writeProfiles(profiles: Profile[]): Promise<void> {
 		await this.ensureFolder();
 		const content = serializeProfilesFile(profiles);

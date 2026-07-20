@@ -20,6 +20,7 @@
 
 import { EntityEntry } from "./db-format";
 import { ReciteDeck } from "./recite-format";
+import { progressKey } from "./recite-progress";
 
 export type ViewGroup = "none" | "date" | "type" | "tag";
 export type ViewSort = "created" | "updated" | "name";
@@ -36,11 +37,11 @@ export interface ReciteView {
 	sort: ViewSort;
 	// Whether the view carries a study deck with persistent progress.
 	study: boolean;
-	// Study membership is the fixed `members` list by default; opt-in
-	// follow mode auto-joins every filter match.
+	// Legacy auto-join flag; deck membership is now derived from minted
+	// card atoms, so this is parsed but no longer consulted.
 	follow: boolean;
-	// Explicitly added entity ids (kept even when follow is true, so cards
-	// added under a temporary filter tweak stay members).
+	// Pinned entity ids: belong to the deck regardless of filters or
+	// minted atoms (used by archive snapshots).
 	members: string[];
 }
 
@@ -168,20 +169,30 @@ export function hasLang(e: EntityEntry, lang: string): boolean {
 	return e.labels.some((l) => l.lang === lang && l.text.trim());
 }
 
-// Entities the view's study deck covers: filter matches (when following)
-// plus explicit members, all requiring the from-language spelling (a study
-// card can't exist without its front).
+// Entities the view's study deck covers. Enrollment lives in the minted
+// card atoms (progress records): a filter match belongs to the deck once
+// any of its directions in the view's from→to has an atom. Explicitly
+// pinned members (archive snapshots) belong regardless of filter or atoms.
+// All require the from-language spelling (a card can't exist without its
+// front).
 export function studyMembers(
 	entities: Iterable<EntityEntry>,
-	view: ReciteView
+	view: ReciteView,
+	minted: { has(key: string): boolean }
 ): EntityEntry[] {
-	const members = new Set(view.members);
+	const pinned = new Set(view.members);
 	const out: EntityEntry[] = [];
 	for (const e of entities) {
-		const inFilter = view.follow && entityMatchesView(e, view);
-		if (!inFilter && !members.has(e.id)) continue;
 		if (!view.from || !hasLang(e, view.from)) continue;
 		if (!view.to.some((lang) => hasLang(e, lang))) continue;
+		const hasAtom = view.to.some(
+			(lang) =>
+				lang !== view.from &&
+				hasLang(e, lang) &&
+				minted.has(progressKey(e.id, view.from, lang))
+		);
+		if (!(hasAtom && entityMatchesView(e, view)) && !pinned.has(e.id))
+			continue;
 		out.push(e);
 	}
 	return out;

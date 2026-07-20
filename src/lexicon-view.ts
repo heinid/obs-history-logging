@@ -50,6 +50,7 @@ import {
 	ReciteProgress,
 	isProgressDue,
 	isProgressWaiting,
+	newProgress,
 	progressKey,
 	toQuizShape,
 } from "./recite-progress";
@@ -116,8 +117,8 @@ export interface LexStats extends DeckStats {
 	};
 }
 
-// Study stats for a view over member × language keys; directions never
-// studied count as fresh active cards (due now).
+// Study stats for a view over member × language keys. Cards are minted
+// atoms; only pinned entities count unminted directions as fresh (due now).
 export function lexStudyStats(
 	view: ReciteView,
 	entities: Iterable<EntityEntry>,
@@ -125,7 +126,8 @@ export function lexStudyStats(
 	schedule: QuizSchedule,
 	now = new Date()
 ): LexStats {
-	const members = studyMembers(entities, view);
+	const members = studyMembers(entities, view, progress);
+	const pinned = new Set(view.members);
 	const shapes = [];
 	let fresh = 0;
 	const words = { due: 0, waiting: 0, active: 0, mastered: 0 };
@@ -136,8 +138,11 @@ export function lexStudyStats(
 		let dirs = 0;
 		for (const lang of view.to) {
 			if (lang === view.from || !hasLang(e, lang)) continue;
-			dirs++;
 			const rec = progress.get(progressKey(e.id, view.from, lang));
+			// Unminted directions aren't cards; only pinned entities
+			// (archive snapshots) count them as fresh.
+			if (!rec && !pinned.has(e.id)) continue;
+			dirs++;
 			if (rec) shapes.push(toQuizShape(rec));
 			else fresh++;
 			if (rec?.status === "mastered") continue;
@@ -181,6 +186,7 @@ export class LexiconView extends ItemView {
 	private player: StudyPlayerPage | null = null;
 	private playing = false;
 	private loading = false;
+	private migrated = false;
 	private dataSig = "";
 	private needsRender = true;
 	private queueReload = debounce(() => void this.reload(), 1500, true);
@@ -233,6 +239,30 @@ export class LexiconView extends ItemView {
 			this.colors = colors;
 		} finally {
 			this.loading = false;
+		}
+		// One-time migration: materialise legacy member lists as minted card
+		// atoms so filter-derived decks keep covering them. Members stay as
+		// pins — nothing is removed.
+		if (!this.migrated) {
+			this.migrated = true;
+			const recs: ReciteProgress[] = [];
+			for (const v of this.views) {
+				if (!v.study || !v.from) continue;
+				for (const id of v.members) {
+					const e = this.entities.get(id);
+					if (!e || !hasLang(e, v.from)) continue;
+					for (const lang of v.to) {
+						if (lang === v.from || !hasLang(e, lang)) continue;
+						if (!this.progress.has(progressKey(id, v.from, lang)))
+							recs.push(newProgress(id, v.from, lang));
+					}
+				}
+			}
+			if (recs.length) {
+				await this.plugin.store.upsertReciteProgress(recs);
+				this.progress =
+					await this.plugin.store.readReciteProgress();
+			}
 		}
 		const sig = JSON.stringify({
 			v: this.views,
@@ -302,21 +332,20 @@ export class LexiconView extends ItemView {
 		void this.plugin.saveSettings();
 	}
 
-	// Entities enrolled in any study view. The whole-library deck is the
-	// union of all decks — marking a word for memorisation always means
-	// adding it to a concrete view, never to the library itself.
+	// Entities with a minted card in the library's current direction. The
+	// whole library has no filter, so its deck is exactly the minted cards.
 	private enrolledIds(): Set<string> {
-		const ids = new Set<string>();
-		for (const v of this.views) {
-			if (!v.study) continue;
-			for (const e of studyMembers(this.entities.values(), v))
-				ids.add(e.id);
-		}
-		return ids;
+		return new Set(
+			studyMembers(
+				this.entities.values(),
+				this.libraryView(),
+				this.progress
+			).map((e) => e.id)
+		);
 	}
 
 	// Synthetic deck over the whole library: the library's own direction,
-	// membership = everything enrolled anywhere.
+	// no filter — membership falls out of the minted atoms.
 	private libraryView(): ReciteView {
 		const saved = this.plugin.settings.lexLibrary;
 		const src = !this.selected
@@ -334,7 +363,6 @@ export class LexiconView extends ItemView {
 			sort: this.draft.sort,
 			group: this.draft.group,
 			study: true,
-			members: [...this.enrolledIds()],
 		};
 	}
 
@@ -393,13 +421,13 @@ export class LexiconView extends ItemView {
 		);
 		if (this.draft.requireFrom && this.draft.from)
 			out = out.filter((e) => hasLang(e, this.draft.from));
-		const bound = this.boundView();
-		if (this.studyFilter && (bound?.study || !this.selected)) {
+		if (this.studyFilter) {
 			const now = new Date();
 			const schedule = this.schedule();
 			// On the whole-library desk the study segments only cover
-			// enrolled words — membership always lives in concrete views.
+			// words with minted cards in the current direction.
 			const enrolled = this.selected ? null : this.enrolledIds();
+			const pinned = new Set(this.draft.members);
 			out = out.filter((e) =>
 				(!enrolled || enrolled.has(e.id)) &&
 				this.draft.to.some((lang) => {
@@ -412,6 +440,7 @@ export class LexiconView extends ItemView {
 					const rec = this.progress.get(
 						progressKey(e.id, this.draft.from, lang)
 					);
+					if (!rec && !pinned.has(e.id)) return false;
 					switch (this.studyFilter) {
 						case "due":
 							return isProgressDue(rec, now, schedule);
@@ -588,14 +617,12 @@ export class LexiconView extends ItemView {
 		});
 		all.createSpan({ cls: "hl-lex-side-name", text: "全部词条" });
 		const lib = this.libraryView();
-		const libDue = lib.members.length
-			? lexStudyStats(
-					lib,
-					this.entities.values(),
-					this.progress,
-					schedule
-			  ).words.due
-			: 0;
+		const libDue = lexStudyStats(
+			lib,
+			this.entities.values(),
+			this.progress,
+			schedule
+		).words.due;
 		if (showDue && libDue > 0)
 			all.createSpan({
 				cls: "hl-lex-side-due",
@@ -939,12 +966,15 @@ export class LexiconView extends ItemView {
 						return;
 					}
 					this.selected = name;
+					// A new view carries only the filters — no pinned
+					// members inherited from wherever the draft came from.
 					void this.saveViews([
 						...this.views,
 						{
 							...this.draft,
 							name,
-							members: [...this.draft.members],
+							members: [],
+							follow: false,
 						},
 					]).then(() => new Notice(`已保存「${name}」`));
 				}).open();
@@ -1004,28 +1034,29 @@ export class LexiconView extends ItemView {
 		// The whole-library desk gets the same strip: a read/study surface
 		// over everything enrolled anywhere, in its own direction.
 		const deck = bound ?? this.libraryView();
-		if (bound && !bound.study) {
-			const strip = main.createDiv({ cls: "hl-lex-strip is-idle" });
-			strip.createSpan({
-				cls: "hl-lex-strip-invite",
-				text: "悬停词条按 ＋ 加入学习，第一张卡自动开始",
-			});
-			return;
-		}
-		if (!bound && !deck.members.length) {
-			const strip = main.createDiv({ cls: "hl-lex-strip is-idle" });
-			strip.createSpan({
-				cls: "hl-lex-strip-invite",
-				text: "还没有词条加入学习——悬停词条按 ＋ 加进一个视图",
-			});
-			return;
-		}
 		const stats = lexStudyStats(
 			deck,
 			this.entities.values(),
 			this.progress,
 			this.schedule()
 		);
+		const hasCards =
+			stats.words.due +
+				stats.words.waiting +
+				stats.words.active +
+				stats.words.mastered >
+			0;
+		if (!hasCards) {
+			const strip = main.createDiv({ cls: "hl-lex-strip is-idle" });
+			strip.createSpan({
+				cls: "hl-lex-strip-invite",
+				text: bound
+					? "悬停词条按 ＋ 按本视图方向铸卡，第一张卡自动开始"
+					: "还没有词条加入学习——悬停词条按 ＋ 铸卡",
+			});
+			return;
+		}
+		const enrolled = !bound ? this.enrolledIds() : null;
 		const strip = main.createDiv({ cls: "hl-lex-strip" });
 		const icon = strip.createSpan({ cls: "hl-lex-strip-icon" });
 		setIcon(icon, "brain");
@@ -1057,9 +1088,8 @@ export class LexiconView extends ItemView {
 		seg("waiting", "短等待", stats.words.waiting, stats.waiting);
 		seg("active", "在学", stats.words.active, stats.active);
 		seg("mastered", "学过", stats.words.mastered, stats.mastered);
-		if (!bound) {
-			// Words in the library never enrolled anywhere: grey, not due.
-			const enrolled = new Set(deck.members);
+		if (enrolled) {
+			// Words in the library with no minted card: grey, not due.
 			const fresh = [...this.entities.values()].filter(
 				(e) =>
 					!enrolled.has(e.id) &&
@@ -1230,25 +1260,31 @@ export class LexiconView extends ItemView {
 		if (e.type) head.createSpan({ cls: "hl-lex-etype", text: e.type });
 		const acts = head.createDiv({ cls: "hl-lex-eacts" });
 		const target = this.plusTarget();
-		const isMember =
+		// Minted = at least one card atom in the target's direction.
+		const minted =
 			target != null &&
-			((target.follow && entityMatchesView(e, target)) ||
-				target.members.includes(e.id));
-		if (!isMember) {
+			target.to.some(
+				(lang) =>
+					lang !== target.from &&
+					this.progress.has(progressKey(e.id, target.from, lang))
+			);
+		if (!minted) {
 			const add = acts.createSpan({ cls: "hl-lex-eact" });
 			setIcon(add, "plus");
 			add.setAttr(
 				"aria-label",
-				target ? `加入「${target.name}」学习` : "加入学习…"
+				target
+					? `加入学习（${dirLabel(target) || target.name}）`
+					: "加入学习…"
 			);
 			add.addEventListener("click", (ev) => {
 				ev.stopPropagation();
 				this.addToStudy([e.id], ev);
 			});
-		} else if (target && target.members.includes(e.id)) {
+		} else if (target) {
 			const rm = acts.createSpan({ cls: "hl-lex-eact" });
 			setIcon(rm, "minus");
-			rm.setAttr("aria-label", "移出学习（进度保留）");
+			rm.setAttr("aria-label", "移出学习（销卡，该方向进度删除）");
 			rm.addEventListener("click", (ev) => {
 				ev.stopPropagation();
 				this.removeFromStudy(target, [e.id]);
@@ -1518,7 +1554,7 @@ export class LexiconView extends ItemView {
 	private addToStudy(ids: string[], ev?: MouseEvent): void {
 		const target = this.plusTarget();
 		if (target) {
-			void this.addMembers(target, ids);
+			void this.mintCards(target, ids);
 			return;
 		}
 		const menu = new Menu();
@@ -1552,7 +1588,7 @@ export class LexiconView extends ItemView {
 						})
 					)
 					.setIcon(v.study ? "brain" : "bookmark")
-					.onClick(() => void this.addMembers(v, ids))
+					.onClick(() => void this.mintCards(v, ids))
 			);
 		if (this.views.length) menu.addSeparator();
 		menu.addItem((i) =>
@@ -1565,17 +1601,25 @@ export class LexiconView extends ItemView {
 							new Notice("已有同名视图");
 							return;
 						}
-						const view = { ...this.draft, name };
+						const view = {
+							...this.draft,
+							name,
+							members: [],
+							follow: false,
+						};
 						this.selected = name;
 						this.views = [...this.views, view];
-						void this.addMembers(view, ids);
+						void this.mintCards(view, ids);
 					}).open()
 				)
 		);
 		if (ev) menu.showAtMouseEvent(ev);
 	}
 
-	private async addMembers(
+	// Mint card atoms: one progress record per «entity × view.from → to».
+	// Enrollment IS the atom — every view whose filter covers the entity
+	// picks the card up automatically.
+	private async mintCards(
 		view: ReciteView,
 		ids: string[]
 	): Promise<void> {
@@ -1583,35 +1627,54 @@ export class LexiconView extends ItemView {
 			new Notice("先在工具行选择出发语言和目标语言");
 			return;
 		}
-		const add = ids.filter((id) => !view.members.includes(id));
 		this.lastTarget = view.name;
-		if (!add.length && view.study) {
-			new Notice("已在学习中");
+		const now = new Date();
+		const recs: ReciteProgress[] = [];
+		let skipped = 0;
+		for (const id of ids) {
+			const e = this.entities.get(id);
+			if (!e || !hasLang(e, view.from)) {
+				skipped++;
+				continue;
+			}
+			for (const lang of view.to) {
+				if (lang === view.from || !hasLang(e, lang)) continue;
+				const key = progressKey(id, view.from, lang);
+				if (!this.progress.has(key))
+					recs.push(newProgress(id, view.from, lang, now));
+			}
+		}
+		if (!recs.length) {
+			new Notice(skipped ? "缺出发语言拼写，无法铸卡" : "已在学习中");
 			return;
 		}
-		await this.saveViews(
-			this.views.map((v) =>
-				v.name === view.name
-					? {
-							...v,
-							study: true,
-							members: [...v.members, ...add],
-					  }
-					: v
-			)
-		);
-		new Notice(`已加入「${view.name}」· ${add.length} 个词条`);
+		await this.plugin.store.upsertReciteProgress(recs);
+		if (!view.study)
+			await this.plugin.store.writeReciteViews(
+				this.views.map((v) =>
+					v.name === view.name ? { ...v, study: true } : v
+				)
+			);
+		this.needsRender = true;
+		await this.reload();
+		new Notice(`已加入学习 · ${recs.length} 个方向`);
 	}
 
-	// Every progress key (词条 × 方向) a study view's deck covers.
+	// Every minted progress key (词条 × 方向) a study view's deck covers:
+	// filter matches and pinned members, atoms in the view's direction.
 	private coveredKeys(view: ReciteView): Set<string> {
 		const keys = new Set<string>();
 		if (!view.study) return keys;
-		for (const e of studyMembers(this.entities.values(), view))
+		const pinned = new Set(view.members);
+		for (const e of this.entities.values()) {
+			if (!view.from || !hasLang(e, view.from)) continue;
+			if (!entityMatchesView(e, view) && !pinned.has(e.id)) continue;
 			for (const lang of view.to) {
 				if (lang === view.from || !hasLang(e, lang)) continue;
-				keys.add(progressKey(e.id, view.from, lang));
+				const k = progressKey(e.id, view.from, lang);
+				if (this.progress.has(k)) keys.add(k);
 			}
+		}
 		return keys;
 	}
 
@@ -1693,20 +1756,44 @@ export class LexiconView extends ItemView {
 		).open();
 	}
 
+	// Destroy the card atoms in the view's direction — the direction is
+	// the atomic unit, so its progress record is deleted everywhere.
 	private removeFromStudy(view: ReciteView, ids: string[]): void {
+		const keys: string[] = [];
+		for (const id of ids)
+			for (const lang of view.to) {
+				if (lang === view.from) continue;
+				const k = progressKey(id, view.from, lang);
+				if (this.progress.has(k)) keys.push(k);
+			}
+		if (!keys.length) return;
 		const drop = new Set(ids);
-		void this.saveViews(
-			this.views.map((v) =>
-				v.name === view.name
-					? {
-							...v,
-							members: v.members.filter(
-								(id) => !drop.has(id)
-							),
-					  }
-					: v
-			)
-		).then(() => new Notice("已移出学习（进度保留）"));
+		const finish = async (): Promise<void> => {
+			await this.plugin.store.deleteReciteProgress(keys);
+			if (view.members.some((m) => drop.has(m)))
+				await this.plugin.store.writeReciteViews(
+					this.views.map((v) =>
+						v.name === view.name
+							? {
+									...v,
+									members: v.members.filter(
+										(id) => !drop.has(id)
+									),
+							  }
+							: v
+					)
+				);
+			this.needsRender = true;
+			await this.reload();
+			new Notice(`已销卡 ${keys.length} 个方向`);
+		};
+		new ConfirmModal(
+			this.app,
+			"移出学习",
+			`将销毁 ${keys.length} 个方向的卡片（${dirLabel(view)}），学习进度一并删除，所有视图同时失去这些卡。`,
+			"销卡",
+			() => void finish()
+		).open();
 	}
 
 	// ── multi-select ──
@@ -1855,8 +1942,14 @@ export class LexiconView extends ItemView {
 		const schedule = this.schedule();
 		const now = new Date();
 		const items: StudyItem[] = [];
-		for (const entity of studyMembers(this.entities.values(), view)) {
+		const pinned = new Set(view.members);
+		for (const entity of studyMembers(
+			this.entities.values(),
+			view,
+			this.progress
+		)) {
 			// A language never quizzes itself: from→from is not a direction.
+			// Unminted directions only count for pinned entities.
 			const langs = view.to
 				.filter((lang) => lang !== view.from && hasLang(entity, lang))
 				.map((lang) => {
@@ -1865,10 +1958,12 @@ export class LexiconView extends ItemView {
 					);
 					return {
 						lang,
-						due: dueOnly
-							? isProgressDue(rec, now, schedule)
-							: rec?.status !== "mastered" &&
-							  !isProgressWaiting(rec, now, schedule),
+						due:
+							(rec != null || pinned.has(entity.id)) &&
+							(dueOnly
+								? isProgressDue(rec, now, schedule)
+								: rec?.status !== "mastered" &&
+								  !isProgressWaiting(rec, now, schedule)),
 						progress: rec,
 					};
 				});
