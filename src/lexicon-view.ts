@@ -1051,8 +1051,8 @@ export class LexiconView extends ItemView {
 			strip.createSpan({
 				cls: "hl-lex-strip-invite",
 				text: bound
-					? "悬停词条按 ＋ 按本视图方向铸卡，第一张卡自动开始"
-					: "还没有词条加入学习——悬停词条按 ＋ 铸卡",
+					? "悬停词条按 ＋ 加入学习，第一张卡自动开始"
+					: "还没有词条加入学习——悬停词条按 ＋ 加入",
 			});
 			return;
 		}
@@ -1284,7 +1284,7 @@ export class LexiconView extends ItemView {
 		} else if (target) {
 			const rm = acts.createSpan({ cls: "hl-lex-eact" });
 			setIcon(rm, "minus");
-			rm.setAttr("aria-label", "移出学习（销卡，该方向进度删除）");
+			rm.setAttr("aria-label", "移出学习（该方向进度删除）");
 			rm.addEventListener("click", (ev) => {
 				ev.stopPropagation();
 				this.removeFromStudy(target, [e.id]);
@@ -1645,7 +1645,7 @@ export class LexiconView extends ItemView {
 			}
 		}
 		if (!recs.length) {
-			new Notice(skipped ? "缺出发语言拼写，无法铸卡" : "已在学习中");
+			new Notice(skipped ? "缺出发语言拼写，无法加入学习" : "已在学习中");
 			return;
 		}
 		await this.plugin.store.upsertReciteProgress(recs);
@@ -1785,13 +1785,13 @@ export class LexiconView extends ItemView {
 				);
 			this.needsRender = true;
 			await this.reload();
-			new Notice(`已销卡 ${keys.length} 个方向`);
+			new Notice(`已移出学习 · ${keys.length} 个方向`);
 		};
 		new ConfirmModal(
 			this.app,
 			"移出学习",
-			`将销毁 ${keys.length} 个方向的卡片（${dirLabel(view)}），学习进度一并删除，所有视图同时失去这些卡。`,
-			"销卡",
+			`将删除 ${keys.length} 个方向的学习卡（${dirLabel(view)}）及其进度，所有视图同时失去这些卡。`,
+			"移出学习",
 			() => void finish()
 		).open();
 	}
