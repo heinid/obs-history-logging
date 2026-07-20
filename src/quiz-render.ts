@@ -192,7 +192,11 @@ export function openDbRefMenu(
 	// default language toward the revealed one after a configured delay.
 	// Greyed out when the two coincide or the entry lacks the front spelling.
 	if (revealLang) {
-		const from = plugin.settings.entityLangs[0] ?? "";
+		// Front = the default language, but if the revealed language *is*
+		// the default, fall back to 中文; disabled only when even that
+		// coincides or the entry lacks the front spelling.
+		const preferred = plugin.settings.entityLangs[0] ?? "";
+		const from = preferred && preferred !== revealLang ? preferred : "zh";
 		const row = mk("⏱", "延后查背");
 		if (!from || from === revealLang) {
 			row.addClass("hl-le-pop-item-disabled");
