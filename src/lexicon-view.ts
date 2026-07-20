@@ -65,16 +65,32 @@ function entityStamp(e: EntityEntry): string {
 	return e.created ?? e.updated ?? "";
 }
 
-function agoLabel(stamp: string): string {
-	if (!stamp) return "";
-	const days = Math.floor(
-		(Date.now() - Date.parse(stamp)) / (24 * 3600 * 1000)
+function addedLabel(stamp: string): string {
+	const day = stamp.slice(0, 10);
+	return day ? `加入于 ${day}` : "";
+}
+
+// Relative buckets for the date grouping headers (the meta line keeps the
+// absolute date): 今天 / 昨天 / 过去 7 天 / 过去 30 天, then by month. The rank
+// sorts ascending — newest bucket first, newer months first.
+function dateBucket(stamp: string): { rank: string; label: string } {
+	const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(stamp);
+	if (!m) return { rank: "9", label: "未记日期" };
+	const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+	const days = Math.round(
+		(today.getTime() - at.getTime()) / (24 * 3600 * 1000)
 	);
-	if (isNaN(days)) return "";
-	if (days <= 0) return "今天加入";
-	if (days === 1) return "昨天加入";
-	if (days < 30) return `加入于 ${days} 天前`;
-	return `加入于 ${stamp.slice(0, 10)}`;
+	if (days <= 0) return { rank: "0", label: "今天" };
+	if (days === 1) return { rank: "1", label: "昨天" };
+	if (days < 7) return { rank: "2", label: "过去 7 天" };
+	if (days < 30) return { rank: "3", label: "过去 30 天" };
+	const ym = at.getFullYear() * 100 + (at.getMonth() + 1);
+	return {
+		rank: `4|${String(999999 - ym).padStart(6, "0")}`,
+		label: `${at.getFullYear()} 年 ${at.getMonth() + 1} 月`,
+	};
 }
 
 // Direction counts plus the merged per-word view: a word is due/waiting/
@@ -859,13 +875,20 @@ export class LexiconView extends ItemView {
 		const group = this.draft.group;
 		if (group === "none") return [{ label: "", items: sorted }];
 		const buckets = new Map<string, EntityEntry[]>();
+		const labels = new Map<string, string>();
 		for (const e of sorted) {
-			const key =
-				group === "date"
-					? entityStamp(e).slice(0, 10) || "未记日期"
-					: group === "type"
-					? e.type || "未分类"
-					: normTag(e.tags[0] ?? "") || "无标签";
+			let key: string;
+			if (group === "date") {
+				const bucket = dateBucket(entityStamp(e));
+				key = bucket.rank;
+				labels.set(key, bucket.label);
+			} else {
+				key =
+					group === "type"
+						? e.type || "未分类"
+						: normTag(e.tags[0] ?? "") || "无标签";
+				labels.set(key, key);
+			}
 			const list = buckets.get(key) ?? [];
 			list.push(e);
 			buckets.set(key, list);
@@ -873,10 +896,13 @@ export class LexiconView extends ItemView {
 		return [...buckets.entries()]
 			.sort((a, b) =>
 				group === "date"
-					? b[0].localeCompare(a[0])
+					? a[0].localeCompare(b[0])
 					: a[0].localeCompare(b[0], "zh")
 			)
-			.map(([label, list]) => ({ label, items: list }));
+			.map(([key, list]) => ({
+				label: labels.get(key) ?? key,
+				items: list,
+			}));
 	}
 
 	private renderEntry(main: HTMLElement, e: EntityEntry): void {
@@ -920,6 +946,20 @@ export class LexiconView extends ItemView {
 					cls: "hl-lex-reading",
 					text: reading.text,
 				});
+			// The headword is never masked, so its pronunciation can sit
+			// in the open — unlike target rows, which reveal theirs.
+			const audio = e.audios.find(
+				(a) => a.lang === this.draft.from
+			);
+			if (audio) {
+				const play = head.createSpan({ cls: "hl-lex-audio" });
+				setIcon(play, "volume-2");
+				play.setAttr("aria-label", "播放发音");
+				play.addEventListener("click", (ev) => {
+					ev.stopPropagation();
+					playEntityAudio(this.plugin, audio.link);
+				});
+			}
 		} else if (this.draft.from)
 			head.setAttr(
 				"aria-label",
@@ -974,8 +1014,8 @@ export class LexiconView extends ItemView {
 		const meta = entry.createDiv({ cls: "hl-lex-emeta" });
 		for (const t of e.tags)
 			meta.createSpan({ text: `#${normTag(t)}` });
-		const ago = agoLabel(entityStamp(e));
-		if (ago) meta.createSpan({ text: ago });
+		const added = addedLabel(entityStamp(e));
+		if (added) meta.createSpan({ text: added });
 	}
 
 	private renderLangRow(
