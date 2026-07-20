@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf, debounce } from "obsidian";
+import { ItemView, TFile, WorkspaceLeaf, debounce } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { scanVault } from "./scan";
 import { eventIdsForQuery } from "./profile-events";
@@ -10,29 +10,7 @@ import {
 	quizDeckStats,
 	quizOverviewStats,
 } from "./deck-stats";
-import { EntityEntry, orderLangs } from "./db-format";
-import { ReciteDeckModal } from "./recite-deck-modal";
-import { langDisplayName } from "./quiz-render";
 import { QuizPlayerPage } from "./quiz-player";
-import { RecitePlayerPage } from "./recite-player";
-import { StudyPlayerPage, StudyItem } from "./recite-study-player";
-import {
-	ReciteView,
-	entityMatchesView,
-	hasLang,
-	studyMembers,
-} from "./recite-views";
-import {
-	ReciteProgress,
-	isProgressDue,
-	progressKey,
-} from "./recite-progress";
-import {
-	BrowseState,
-	browseStateFromView,
-	renderBrowseDesk,
-	studyStats,
-} from "./recite-browse";
 import {
 	renderEventDeckDetail,
 	renderMasteryBar,
@@ -58,7 +36,6 @@ interface DynamicPart {
 type Page =
 	| { kind: "list" }
 	| { kind: "event-detail"; profile: string }
-	| { kind: "browse"; state: BrowseState }
 	| { kind: "player" };
 
 // The recitation hub: deck wall → deck detail → in-view player. State
@@ -70,13 +47,11 @@ type Page =
 // wall) instead of raising the alarm modal.
 export class RecitationView extends ItemView {
 	private eventDecks: EventDeck[] = [];
-	private reciteViews: ReciteView[] = [];
-	private reciteProgress = new Map<string, ReciteProgress>();
-	private entities = new Map<string, EntityEntry>();
+
 	private quizzes = new Map<string, QuizEntry>();
 	private byEvent = new Map<string, QuizEntry[]>();
 	private page: Page = { kind: "list" };
-	private player: QuizPlayerPage | RecitePlayerPage | StudyPlayerPage | null =
+	private player: QuizPlayerPage | null =
 		null;
 	private loading = false;
 	private queueReload = debounce(() => void this.reload(), 1500, true);
@@ -193,15 +168,7 @@ export class RecitationView extends ItemView {
 		if (this.loading) return;
 		this.loading = true;
 		try {
-			const [
-				entries,
-				profiles,
-				quizzes,
-				reciteViews,
-				reciteProgress,
-				entities,
-				maps,
-			] = await Promise.all([
+			const [entries, profiles, quizzes, maps] = await Promise.all([
 				scanVault(
 					this.app,
 					this.plugin.store,
@@ -209,14 +176,8 @@ export class RecitationView extends ItemView {
 				),
 				this.plugin.store.readProfiles(),
 				this.plugin.store.readQuizzes(),
-				this.plugin.store.readReciteViews(),
-				this.plugin.store.readReciteProgress(),
-				this.plugin.store.readEntities(),
 				this.plugin.store.readMaps(),
 			]);
-			this.reciteViews = reciteViews;
-			this.reciteProgress = reciteProgress;
-			this.entities = entities;
 			this.quizzes = quizzes;
 
 			this.byEvent = new Map();
@@ -273,9 +234,6 @@ export class RecitationView extends ItemView {
 		// used to make the view flash. Skip the render when nothing changed.
 		const sig = JSON.stringify({
 			q: [...this.quizzes.entries()],
-			r: this.reciteViews,
-			p: [...this.reciteProgress.entries()],
-			e: [...this.entities.entries()],
 			d: this.eventDecks.map((d) => [
 				d.profile.name,
 				d.profile.match,
@@ -341,34 +299,6 @@ export class RecitationView extends ItemView {
 			}
 			this.page = { kind: "list" };
 		}
-		if (this.page.kind === "browse") {
-			const state = this.page.state;
-			renderBrowseDesk(
-				root,
-				state,
-				[...this.entities.values()],
-				this.reciteViews,
-				this.reciteProgress,
-				quizSchedule(this.plugin.settings),
-				{
-					plugin: this.plugin,
-					onBack: () => this.showList(),
-					rerender: () => this.render(),
-					saveViews: async (views) => {
-						await this.plugin.store.writeReciteViews(views);
-						this.needsRender = true;
-						await this.reload();
-					},
-					startLoose: (view, candidates) =>
-						this.startReciteSession(view, candidates),
-					startStudy: (view, dueOnly) =>
-						this.startStudySession(view, dueOnly),
-				}
-			);
-			this.restoreScroll(scroller, prevScroll);
-			this.scheduleClockTick();
-			return;
-		}
 		this.renderList(root);
 		this.restoreScroll(scroller, prevScroll);
 		this.scheduleClockTick();
@@ -429,74 +359,6 @@ export class RecitationView extends ItemView {
 		void player.load();
 	}
 
-	private startReciteSession(
-		view: ReciteView,
-		candidates: EntityEntry[]
-	): void {
-		if (!candidates.length) return;
-		this.player?.unmount();
-		const player = new RecitePlayerPage(
-			this.plugin,
-			{
-				name: view.name || "临时筛选",
-				from: view.from,
-				to: view.to,
-				tags: view.tags,
-				types: view.types,
-			},
-			candidates,
-			() => this.showList()
-		);
-		this.player = player;
-		this.page = { kind: "player" };
-		const root = this.contentEl;
-		root.empty();
-		root.addClass("hl-recitation-view");
-		player.mount(root.createDiv());
-	}
-
-	// Study session over the view's member × language keys; each language
-	// row is rated on its own and lands on the shared progress record.
-	private startStudySession(view: ReciteView, dueOnly: boolean): void {
-		const schedule = quizSchedule(this.plugin.settings);
-		const now = new Date();
-		const items: StudyItem[] = [];
-		for (const entity of studyMembers(this.entities.values(), view)) {
-			const langs = view.to
-				.filter((lang) => hasLang(entity, lang))
-				.map((lang) => {
-					const rec = this.reciteProgress.get(
-						progressKey(entity.id, view.from, lang)
-					);
-					return {
-						lang,
-						due: dueOnly
-							? isProgressDue(rec, now, schedule)
-							: rec?.status !== "mastered",
-						progress: rec,
-					};
-				});
-			if (langs.some((l) => l.due)) items.push({ entity, langs });
-		}
-		if (!items.length) return;
-		this.player?.unmount();
-		const player = new StudyPlayerPage(
-			this.plugin,
-			view.name,
-			view.from,
-			items,
-			schedule,
-			(rec) => void this.plugin.store.upsertReciteProgress([rec]),
-			() => this.showList()
-		);
-		this.player = player;
-		this.page = { kind: "player" };
-		const root = this.contentEl;
-		root.empty();
-		root.addClass("hl-recitation-view");
-		player.mount(root.createDiv());
-	}
-
 	// Keyboard shortcuts pass through to the running player. Listens on the
 	// window (clicking a plain div doesn't focus the view container) and
 	// only acts while this view is the active one.
@@ -533,7 +395,6 @@ export class RecitationView extends ItemView {
 
 		this.renderOverview(root);
 		this.renderEventDecks(root);
-		this.renderReciteDecks(root);
 	}
 
 	private overviewModel(now: Date): {
@@ -792,174 +653,12 @@ export class RecitationView extends ItemView {
 		});
 	}
 
-	private renderReciteDecks(root: HTMLElement): void {
-		const section = root.createDiv({ cls: "hl-recite-section" });
-		const head = section.createDiv({ cls: "hl-recite-section-head" });
-		head.createEl("h3", { text: "词条背诵" });
-		const browse = head.createEl("button", {
-			cls: "hl-browse-open",
-			text: "浏览全部词条",
-		});
-		browse.addEventListener("click", () => this.openBrowse(null));
-		const wall = section.createDiv({ cls: this.wallCls() });
-		for (const view of this.reciteViews)
-			this.renderReciteView(wall, view);
-
-		const add = wall.createDiv({ cls: "hl-deck-card hl-deck-add" });
-		add.createDiv({ cls: "hl-deck-add-plus", text: "＋" });
-		add.createDiv({ text: "新建视图" });
-		add.addEventListener("click", () => this.editView(null));
-	}
-
-	private openBrowse(view: ReciteView | null): void {
-		this.page = { kind: "browse", state: browseStateFromView(view) };
-		this.render();
-	}
-
-	private renderReciteView(wall: HTMLElement, view: ReciteView): void {
-		const schedule = quizSchedule(this.plugin.settings);
-		const card = wall.createDiv({ cls: "hl-deck-card hl-deck-clickable" });
-		const fill = (el: HTMLElement): void => this.fillReciteView(el, view);
-		fill(card);
-		card.addEventListener("click", () => this.openBrowse(view));
-		if (view.study)
-			this.registerDynamic(
-				card,
-				() => {
-					const { stats } = studyStats(
-						view,
-						this.entities.values(),
-						this.reciteProgress,
-						schedule
-					);
-					return [
-						stats.due,
-						stats.waiting,
-						stats.active,
-						stats.mastered,
-					].join("|");
-				},
-				fill
-			);
-	}
-
-	private fillReciteView(card: HTMLElement, view: ReciteView): void {
-		const schedule = quizSchedule(this.plugin.settings);
-		const head = card.createDiv({ cls: "hl-deck-head" });
-		head.createDiv({ cls: "hl-deck-name", text: view.name });
-		const matched = [...this.entities.values()].filter(
-			(e) =>
-				entityMatchesView(e, view) &&
-				(!view.from || hasLang(e, view.from))
-		);
-		let stats = null;
-		if (view.study) {
-			stats = studyStats(
-				view,
-				this.entities.values(),
-				this.reciteProgress,
-				schedule
-			).stats;
-			if (stats.due > 0)
-				head.createSpan({
-					cls: "hl-deck-badge",
-					text: String(stats.due),
-				});
-			else if (!stats.waiting)
-				head.createSpan({ cls: "hl-deck-check", text: "✓" });
-		}
-		if (view.from && view.to.length)
-			card.createDiv({
-				cls: "hl-deck-match",
-				text: `${langDisplayName(view.from)} → ${orderLangs(view.to)
-					.map(langDisplayName)
-					.join(" / ")}`,
-			});
-		const scope: string[] = [];
-		if (view.tags.length) scope.push(view.tags.join(", "));
-		if (view.types.length) scope.push(view.types.join(", "));
-		if (scope.length)
-			card.createDiv({ cls: "hl-deck-scope", text: scope.join(" · ") });
-
-		if (stats) {
-			renderMasteryBar(card, stats);
-			const meta = card.createDiv({ cls: "hl-deck-meta" });
-			meta.createSpan({
-				text: `在学 ${stats.active} · 学过 ${stats.mastered}`,
-			});
-		} else
-			card.createDiv({
-				cls: "hl-deck-meta",
-				text: `${matched.length} 个词条`,
-			});
-
-		const actions = card.createDiv({ cls: "hl-deck-actions" });
-		if (stats) {
-			const start = actions.createEl("button", {
-				cls: "mod-cta",
-				text: stats.due > 0 ? `背到期 ${stats.due}` : "无到期",
-			});
-			if (stats.due > 0)
-				start.addEventListener("click", (ev) => {
-					ev.stopPropagation();
-					this.startStudySession(view, true);
-				});
-			else start.disabled = true;
-		} else {
-			const open = actions.createEl("button", {
-				cls: "mod-cta",
-				text: "打开",
-			});
-			open.addEventListener("click", (ev) => {
-				ev.stopPropagation();
-				this.openBrowse(view);
-			});
-		}
-		const edit = actions.createEl("button", { text: "编辑" });
-		edit.addEventListener("click", (ev) => {
-			ev.stopPropagation();
-			this.editView(view);
-		});
-	}
-
 	private wallCls(): string {
 		return this.plugin.settings.reciteDeckDisplay === "list"
 			? "hl-deck-wall is-list"
 			: "hl-deck-wall";
 	}
 
-	// The modal edits the view's direction core (name / from / to / tags /
-	// types); browse-desk state (grouping, sorting…) is edited on the desk.
-	private editView(existing: ReciteView | null): void {
-		new ReciteDeckModal(
-			this.app,
-			this.plugin,
-			existing
-				? {
-						name: existing.name,
-						from: existing.from,
-						to: [...existing.to],
-						tags: [...existing.tags],
-						types: [...existing.types],
-				  }
-				: null,
-			async (saved, remove) => {
-				const views = await this.plugin.store.readReciteViews();
-				const next = existing
-					? views.filter((v) => v.name !== existing.name)
-					: views;
-				if (!remove)
-					next.push({
-						...(existing ?? browseStateFromView(null).draft),
-						...saved,
-					});
-				await this.plugin.store.writeReciteViews(next);
-				new Notice(remove ? "已删除视图" : "已保存视图");
-				this.needsRender = true;
-				await this.reload();
-			}
-		).open();
-	}
 }
 
 function relativeDay(iso: string): string {

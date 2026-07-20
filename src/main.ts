@@ -39,6 +39,7 @@ import {
 	RECITATION_VIEW_TYPE,
 	RecitationView,
 } from "./recitation-view";
+import { LEXICON_VIEW_TYPE, LexiconView } from "./lexicon-view";
 import { QuizManagerModal, QuizPracticeModal } from "./quiz-modal";
 import { MapOcclusionEditor } from "./map-viewer";
 import { QuizEntry } from "./quiz";
@@ -113,6 +114,10 @@ export default class HistoryLoggingPlugin extends Plugin {
 			RECITATION_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new RecitationView(leaf, this)
 		);
+		this.registerView(
+			LEXICON_VIEW_TYPE,
+			(leaf: WorkspaceLeaf) => new LexiconView(leaf, this)
+		);
 
 		// Open views cache file paths from the last scan; a rename would leave
 		// their jump-to-source stale until the next manual refresh.
@@ -127,6 +132,9 @@ export default class HistoryLoggingPlugin extends Plugin {
 		);
 		this.addRibbonIcon("brain-circuit", "打开背诵", () =>
 			void this.openRecitation()
+		);
+		this.addRibbonIcon("book-a", "打开词汇", () =>
+			void this.openLexicon()
 		);
 
 		this.addCommand({
@@ -196,6 +204,11 @@ export default class HistoryLoggingPlugin extends Plugin {
 			callback: () => void this.openRecitation(),
 		});
 		this.addCommand({
+			id: "open-lexicon",
+			name: "打开词汇",
+			callback: () => void this.openLexicon(),
+		});
+		this.addCommand({
 			id: "check-data-health",
 			name: "Check data health",
 			callback: () => void checkDataHealth(this),
@@ -234,6 +247,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.app.workspace.detachLeavesOfType(ENTITY_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(ENTITY_BROWSER_VIEW_TYPE);
 		this.app.workspace.detachLeavesOfType(RECITATION_VIEW_TYPE);
+		this.app.workspace.detachLeavesOfType(LEXICON_VIEW_TYPE);
 		for (const name of [
 			"--hl-scale-player",
 			"--hl-scale-modals",
@@ -254,6 +268,21 @@ export default class HistoryLoggingPlugin extends Plugin {
 		}
 		const leaf = workspace.getLeaf("tab");
 		await leaf.setViewState({ type: RECITATION_VIEW_TYPE, active: true });
+		workspace.revealLeaf(leaf);
+	}
+
+	// Open (or focus) the lexicon workbench tab.
+	async openLexicon(): Promise<void> {
+		const { workspace } = this.app;
+		const existing = workspace.getLeavesOfType(LEXICON_VIEW_TYPE)[0];
+		if (existing) {
+			workspace.revealLeaf(existing);
+			if (existing.view instanceof LexiconView)
+				await existing.view.reload();
+			return;
+		}
+		const leaf = workspace.getLeaf("tab");
+		await leaf.setViewState({ type: LEXICON_VIEW_TYPE, active: true });
 		workspace.revealLeaf(leaf);
 	}
 
