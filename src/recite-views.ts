@@ -46,8 +46,8 @@ export interface ReciteView {
 
 export const RECITE_VIEWS_HEADER = "# History Logging — recitation views";
 
-const GROUPS = new Set<ViewGroup>(["none", "date", "type", "tag"]);
-const SORTS = new Set<ViewSort>(["created", "updated", "name"]);
+export const GROUPS = new Set<ViewGroup>(["none", "date", "type", "tag"]);
+export const SORTS = new Set<ViewSort>(["created", "updated", "name"]);
 
 export function emptyView(name = ""): ReciteView {
 	return {

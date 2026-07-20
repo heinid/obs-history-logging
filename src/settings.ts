@@ -59,10 +59,21 @@ export interface HistoryLoggingSettings {
 	annotTag: string;
 	// Deck display mode in the recitation hub: card wall or compact list.
 	reciteDeckDisplay: "wall" | "list";
+	// Persisted display parameters of the lexicon whole-library desk
+	// (direction, sort, group); saved on change, no explicit save step.
+	lexLibrary: LexLibraryParams | null;
 	// UI font scaling in percent (100 = theme default), per surface.
 	fontScalePlayer: number;
 	fontScaleModals: number;
 	fontScaleLists: number;
+}
+
+export interface LexLibraryParams {
+	from: string;
+	to: string[];
+	requireFrom: boolean;
+	sort: string;
+	group: string;
 }
 
 export interface EvMenuView {
@@ -92,6 +103,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	annotColor: "green",
 	annotTag: "专名和Entities积累",
 	reciteDeckDisplay: "wall",
+	lexLibrary: null,
 	fontScalePlayer: 100,
 	fontScaleModals: 100,
 	fontScaleLists: 100,

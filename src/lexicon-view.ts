@@ -36,7 +36,9 @@ import {
 	renderContextMarkdown,
 } from "./recite-context";
 import {
+	GROUPS,
 	ReciteView,
+	SORTS,
 	ViewGroup,
 	ViewSort,
 	emptyView,
@@ -234,12 +236,11 @@ export class LexiconView extends ItemView {
 			p: [...this.progress.entries()],
 			e: [...this.entities.entries()],
 		});
-		// The whole-library draft starts blank; give it the default
-		// direction so first open already shows the language rows.
-		if (!this.selected && !this.draft.from && !this.draft.to.length) {
-			this.draft.from = this.plugin.settings.entityLangs[0] ?? "";
-			this.draft.to = this.plugin.settings.entityLangs.slice(1);
-		}
+		// The whole-library draft starts blank; restore the persisted
+		// parameters (or the default direction) so first open already
+		// shows the language rows.
+		if (!this.selected && !this.draft.from && !this.draft.to.length)
+			this.applyLibraryParams();
 		if (sig !== this.dataSig) {
 			this.dataSig = sig;
 			this.contexts = null;
@@ -253,6 +254,85 @@ export class LexiconView extends ItemView {
 
 	private schedule(): QuizSchedule {
 		return quizSchedule(this.plugin.settings);
+	}
+
+	// ── whole-library desk ──
+
+	private applyLibraryParams(): void {
+		const saved = this.plugin.settings.lexLibrary;
+		if (saved) {
+			this.draft.from = saved.from;
+			this.draft.to = [...saved.to];
+			this.draft.requireFrom = saved.requireFrom;
+			if (SORTS.has(saved.sort as ViewSort))
+				this.draft.sort = saved.sort as ViewSort;
+			if (GROUPS.has(saved.group as ViewGroup))
+				this.draft.group = saved.group as ViewGroup;
+			return;
+		}
+		this.draft.from = this.plugin.settings.entityLangs[0] ?? "";
+		this.draft.to = this.plugin.settings.entityLangs.slice(1);
+	}
+
+	// The whole-library desk has no saved view to write back to; its display
+	// parameters persist into settings on every change instead.
+	private persistLibraryParams(): void {
+		if (this.selected || !this.draft.from) return;
+		const cur = {
+			from: this.draft.from,
+			to: [...this.draft.to],
+			requireFrom: this.draft.requireFrom,
+			sort: this.draft.sort,
+			group: this.draft.group,
+		};
+		const prev = this.plugin.settings.lexLibrary;
+		if (
+			prev &&
+			prev.from === cur.from &&
+			prev.requireFrom === cur.requireFrom &&
+			prev.sort === cur.sort &&
+			prev.group === cur.group &&
+			prev.to.join(",") === cur.to.join(",")
+		)
+			return;
+		this.plugin.settings.lexLibrary = cur;
+		void this.plugin.saveSettings();
+	}
+
+	// Entities enrolled in any study view. The whole-library deck is the
+	// union of all decks — marking a word for memorisation always means
+	// adding it to a concrete view, never to the library itself.
+	private enrolledIds(): Set<string> {
+		const ids = new Set<string>();
+		for (const v of this.views) {
+			if (!v.study) continue;
+			for (const e of studyMembers(this.entities.values(), v))
+				ids.add(e.id);
+		}
+		return ids;
+	}
+
+	// Synthetic deck over the whole library: the library's own direction,
+	// membership = everything enrolled anywhere.
+	private libraryView(): ReciteView {
+		const saved = this.plugin.settings.lexLibrary;
+		const src = !this.selected
+			? this.draft
+			: saved ?? {
+					from: this.plugin.settings.entityLangs[0] ?? "",
+					to: this.plugin.settings.entityLangs.slice(1),
+					requireFrom: false,
+			  };
+		return {
+			...emptyView("全部词条"),
+			from: src.from,
+			to: [...src.to],
+			requireFrom: src.requireFrom,
+			sort: this.draft.sort,
+			group: this.draft.group,
+			study: true,
+			members: [...this.enrolledIds()],
+		};
 	}
 
 	// A studied direction came off its short wait while this tab is active.
@@ -280,11 +360,8 @@ export class LexiconView extends ItemView {
 					types: [...view.types],
 					members: [...view.members],
 			  }
-			: {
-					...emptyView(),
-					from: this.plugin.settings.entityLangs[0] ?? "",
-					to: this.plugin.settings.entityLangs.slice(1),
-			  };
+			: emptyView();
+		if (!view) this.applyLibraryParams();
 		this.studyFilter = null;
 		this.render();
 	}
@@ -314,10 +391,14 @@ export class LexiconView extends ItemView {
 		if (this.draft.requireFrom && this.draft.from)
 			out = out.filter((e) => hasLang(e, this.draft.from));
 		const bound = this.boundView();
-		if (this.studyFilter && bound?.study) {
+		if (this.studyFilter && (bound?.study || !this.selected)) {
 			const now = new Date();
 			const schedule = this.schedule();
+			// On the whole-library desk the study segments only cover
+			// enrolled words — membership always lives in concrete views.
+			const enrolled = this.selected ? null : this.enrolledIds();
 			out = out.filter((e) =>
+				(!enrolled || enrolled.has(e.id)) &&
 				this.draft.to.some((lang) => {
 					if (
 						lang === this.draft.from ||
@@ -349,6 +430,7 @@ export class LexiconView extends ItemView {
 	// ── render ──
 
 	private render(): void {
+		this.persistLibraryParams();
 		const root = this.contentEl;
 		const scroller = root.querySelector(".hl-lex-main");
 		const prevScroll = scroller ? scroller.scrollTop : 0;
@@ -373,12 +455,110 @@ export class LexiconView extends ItemView {
 		const searchIcon = searchWrap.createSpan({ cls: "hl-lex-search-icon" });
 		setIcon(searchIcon, "search");
 		const search = searchWrap.createEl("input", {
-			attr: { type: "search", placeholder: "搜索词条…" },
+			attr: { type: "search", placeholder: "搜索词条，# 选标签…" },
 		});
 		search.value = this.search;
+
+		// Typing `#` switches the box to tag mode: a dropdown of matching
+		// tags, ↑↓ + Enter (or click) toggles the tag filter like a sidebar
+		// click would.
+		const allTagCounts = new Map<string, number>();
+		for (const e of this.entities.values())
+			for (const t of e.tags) {
+				const k = normTag(t);
+				if (!k) continue;
+				const parts = k.split("/");
+				for (let i = 1; i <= parts.length; i++) {
+					const p = parts.slice(0, i).join("/");
+					allTagCounts.set(p, (allTagCounts.get(p) ?? 0) + 1);
+				}
+			}
+		const sug = searchWrap.createDiv({ cls: "hl-lex-sug" });
+		let sugIdx = 0;
+		let sugOpts: string[] = [];
+		const pickTag = (tag: string): void => {
+			const on = this.draft.tags.some((t) => normTag(t) === tag);
+			this.draft.tags = on
+				? this.draft.tags.filter((t) => normTag(t) !== tag)
+				: [...this.draft.tags, tag];
+			this.render();
+			const again = this.contentEl.querySelector<HTMLInputElement>(
+				".hl-lex-search input"
+			);
+			again?.focus();
+		};
+		const renderSug = (): void => {
+			sug.empty();
+			const v = search.value.trim();
+			if (!v.startsWith("#")) {
+				sug.removeClass("is-open");
+				return;
+			}
+			const q = normTag(v).toLowerCase();
+			sugOpts = [...allTagCounts.keys()]
+				.filter((t) => t.toLowerCase().includes(q))
+				.sort(
+					(a, b) =>
+						(allTagCounts.get(b) ?? 0) -
+						(allTagCounts.get(a) ?? 0)
+				)
+				.slice(0, 8);
+			if (!sugOpts.length) {
+				sug.removeClass("is-open");
+				return;
+			}
+			if (sugIdx >= sugOpts.length) sugIdx = 0;
+			sug.addClass("is-open");
+			sugOpts.forEach((tag, i) => {
+				const on = this.draft.tags.some(
+					(t) => normTag(t) === tag
+				);
+				const item = sug.createDiv({
+					cls: `hl-lex-sug-item${i === sugIdx ? " is-sel" : ""}${
+						on ? " is-on" : ""
+					}`,
+				});
+				item.createSpan({ text: `#${tag}` });
+				item.createSpan({
+					cls: "hl-lex-side-cnt",
+					text: String(allTagCounts.get(tag)),
+				});
+				// mousedown, so the input doesn't lose focus first
+				item.addEventListener("mousedown", (ev) => {
+					ev.preventDefault();
+					pickTag(tag);
+				});
+			});
+		};
+		search.addEventListener("keydown", (ev) => {
+			if (!sug.hasClass("is-open")) return;
+			if (ev.key === "ArrowDown") {
+				sugIdx = (sugIdx + 1) % sugOpts.length;
+				renderSug();
+				ev.preventDefault();
+			} else if (ev.key === "ArrowUp") {
+				sugIdx = (sugIdx + sugOpts.length - 1) % sugOpts.length;
+				renderSug();
+				ev.preventDefault();
+			} else if (ev.key === "Enter") {
+				pickTag(sugOpts[sugIdx]);
+				ev.preventDefault();
+			} else if (ev.key === "Escape") {
+				search.value = "";
+				renderSug();
+				ev.preventDefault();
+			}
+		});
+
 		let timer = 0;
 		search.addEventListener("input", () => {
 			window.clearTimeout(timer);
+			if (search.value.trim().startsWith("#")) {
+				sugIdx = 0;
+				renderSug();
+				return;
+			}
+			renderSug();
 			timer = window.setTimeout(() => {
 				this.search = search.value.trim().toLowerCase();
 				this.render();
@@ -443,10 +623,25 @@ export class LexiconView extends ItemView {
 			cls: `hl-lex-side-item${this.selected === null ? " is-on" : ""}`,
 		});
 		all.createSpan({ cls: "hl-lex-side-name", text: "全部词条" });
-		all.createSpan({
-			cls: "hl-lex-side-cnt",
-			text: String(this.entities.size),
-		});
+		const lib = this.libraryView();
+		const libDue = lib.members.length
+			? lexStudyStats(
+					lib,
+					this.entities.values(),
+					this.progress,
+					schedule
+			  ).words.due
+			: 0;
+		if (libDue > 0)
+			all.createSpan({
+				cls: "hl-lex-side-due",
+				text: String(libDue),
+			});
+		else
+			all.createSpan({
+				cls: "hl-lex-side-cnt",
+				text: String(this.entities.size),
+			});
 		all.addEventListener("click", () => this.selectView(null));
 
 		// tag tree with counts (within current type/search scope)
@@ -526,6 +721,31 @@ export class LexiconView extends ItemView {
 	private viewMenu(view: ReciteView, ev: MouseEvent): void {
 		ev.preventDefault();
 		const menu = new Menu();
+		// Overwrites the view's filters/params with the current desk; its
+		// name, study flag and membership stay untouched.
+		menu.addItem((i) =>
+			i
+				.setTitle("将当前筛选保存为此视图参数")
+				.setIcon("save")
+				.onClick(() =>
+					void this.saveViews(
+						this.views.map((v) =>
+							v.name === view.name
+								? {
+										...v,
+										from: this.draft.from,
+										to: [...this.draft.to],
+										tags: [...this.draft.tags],
+										types: [...this.draft.types],
+										requireFrom: this.draft.requireFrom,
+										sort: this.draft.sort,
+										group: this.draft.group,
+								  }
+								: v
+						)
+					).then(() => new Notice(`已更新「${view.name}」`))
+				)
+		);
 		menu.addItem((i) =>
 			i
 				.setTitle("重命名")
@@ -685,7 +905,8 @@ export class LexiconView extends ItemView {
 			this.render();
 		});
 
-		// save: appears only when the desk differs from the saved view
+		// The button only ever saves the current filters as a NEW view;
+		// updating an existing view goes through its context menu.
 		const bound = this.boundView();
 		const dirty = bound
 			? JSON.stringify({
@@ -701,20 +922,10 @@ export class LexiconView extends ItemView {
 		if (dirty) {
 			const save = row.createEl("button", {
 				cls: "hl-lex-save",
-				text: bound ? "保存视图" : "保存为视图",
+				text: "另存为新视图",
 			});
 			save.addEventListener("click", () => {
-				if (bound) {
-					void this.saveViews(
-						this.views.map((v) =>
-							v.name === bound.name
-								? { ...this.draft, name: bound.name }
-								: v
-						)
-					).then(() => new Notice(`已保存「${bound.name}」`));
-					return;
-				}
-				new NameModal(this.app, "保存视图", "", (name) => {
+				new NameModal(this.app, "另存为新视图", "", (name) => {
 					if (this.views.some((v) => v.name === name)) {
 						new Notice("已有同名视图");
 						return;
@@ -722,7 +933,11 @@ export class LexiconView extends ItemView {
 					this.selected = name;
 					void this.saveViews([
 						...this.views,
-						{ ...this.draft, name },
+						{
+							...this.draft,
+							name,
+							members: [...this.draft.members],
+						},
 					]).then(() => new Notice(`已保存「${name}」`));
 				}).open();
 			});
@@ -778,8 +993,10 @@ export class LexiconView extends ItemView {
 
 	private renderStudyStrip(main: HTMLElement): void {
 		const bound = this.boundView();
-		if (!bound) return;
-		if (!bound.study) {
+		// The whole-library desk gets the same strip: a read/study surface
+		// over everything enrolled anywhere, in its own direction.
+		const deck = bound ?? this.libraryView();
+		if (bound && !bound.study) {
 			const strip = main.createDiv({ cls: "hl-lex-strip is-idle" });
 			strip.createSpan({
 				cls: "hl-lex-strip-invite",
@@ -787,8 +1004,16 @@ export class LexiconView extends ItemView {
 			});
 			return;
 		}
+		if (!bound && !deck.members.length) {
+			const strip = main.createDiv({ cls: "hl-lex-strip is-idle" });
+			strip.createSpan({
+				cls: "hl-lex-strip-invite",
+				text: "还没有词条加入学习——悬停词条按 ＋ 加进一个视图",
+			});
+			return;
+		}
 		const stats = lexStudyStats(
-			bound,
+			deck,
 			this.entities.values(),
 			this.progress,
 			this.schedule()
@@ -824,19 +1049,42 @@ export class LexiconView extends ItemView {
 		seg("waiting", "短等待", stats.words.waiting, stats.waiting);
 		seg("active", "在学", stats.words.active, stats.active);
 		seg("mastered", "学过", stats.words.mastered, stats.mastered);
+		if (!bound) {
+			// Words in the library never enrolled anywhere: grey, not due.
+			const enrolled = new Set(deck.members);
+			const fresh = [...this.entities.values()].filter(
+				(e) =>
+					!enrolled.has(e.id) &&
+					hasLang(e, deck.from) &&
+					deck.to.some(
+						(l) => l !== deck.from && hasLang(e, l)
+					)
+			).length;
+			if (fresh > 0) {
+				const el = strip.createSpan({
+					cls: "hl-lex-strip-seg is-rest",
+				});
+				el.createSpan({
+					cls: "hl-lex-strip-num",
+					text: String(fresh),
+				});
+				el.createSpan({ text: "未开始" });
+				el.setAttr("aria-label", "还没加入任何学习视图的词条");
+			}
+		}
 		strip.createDiv({ cls: "hl-lex-spacer" });
 		if (stats.words.due > 0) {
 			const go = strip.createEl("button", {
 				cls: "mod-cta",
 				text: `开始复习 ${stats.words.due}`,
 			});
-			go.addEventListener("click", () => this.startStudy(bound, true));
+			go.addEventListener("click", () => this.startStudy(deck, true));
 		} else if (stats.active > 0) {
 			const go = strip.createEl("button", {
 				cls: "hl-lex-ghost",
 				text: "提前复习",
 			});
-			go.addEventListener("click", () => this.startStudy(bound, false));
+			go.addEventListener("click", () => this.startStudy(deck, false));
 		} else {
 			strip.createSpan({
 				cls: "hl-lex-strip-done",
