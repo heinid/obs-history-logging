@@ -679,6 +679,8 @@ export default class HistoryLoggingPlugin extends Plugin {
 			window.clearTimeout(pending);
 			this.reciteReminders.delete(key);
 		}
+		// A language never quizzes itself: from→from is not a direction.
+		if (rec.from === rec.to) return;
 		if (rec.status !== "active" || !rec.nextReview) return;
 		const due = Date.parse(rec.nextReview);
 		if (Number.isNaN(due)) return;

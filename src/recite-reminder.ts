@@ -39,7 +39,7 @@ export class ReciteReminderModal extends Modal {
 	async onOpen(): Promise<void> {
 		this.plugin.modalStash.track(this);
 		await this.load();
-		if (!this.rec || !this.entity) {
+		if (!this.rec || !this.entity || this.rec.from === this.rec.to) {
 			await this.advance();
 			return;
 		}
@@ -224,6 +224,7 @@ export class ReciteReminderModal extends Modal {
 		if (
 			!this.rec ||
 			!this.entity ||
+			this.rec.from === this.rec.to ||
 			this.rec.status !== "active" ||
 			!isProgressDue(this.rec, new Date(), schedule)
 		) {

@@ -107,7 +107,7 @@ export function lexStudyStats(
 		let active = false;
 		let dirs = 0;
 		for (const lang of view.to) {
-			if (!hasLang(e, lang)) continue;
+			if (lang === view.from || !hasLang(e, lang)) continue;
 			dirs++;
 			const rec = progress.get(progressKey(e.id, view.from, lang));
 			if (rec) shapes.push(toQuizShape(rec));
@@ -297,7 +297,11 @@ export class LexiconView extends ItemView {
 			const schedule = this.schedule();
 			out = out.filter((e) =>
 				this.draft.to.some((lang) => {
-					if (!hasLang(e, lang) || !hasLang(e, this.draft.from))
+					if (
+						lang === this.draft.from ||
+						!hasLang(e, lang) ||
+						!hasLang(e, this.draft.from)
+					)
 						return false;
 					const rec = this.progress.get(
 						progressKey(e.id, this.draft.from, lang)
@@ -1422,8 +1426,9 @@ export class LexiconView extends ItemView {
 		const now = new Date();
 		const items: StudyItem[] = [];
 		for (const entity of studyMembers(this.entities.values(), view)) {
+			// A language never quizzes itself: from→from is not a direction.
 			const langs = view.to
-				.filter((lang) => hasLang(entity, lang))
+				.filter((lang) => lang !== view.from && hasLang(entity, lang))
 				.map((lang) => {
 					const rec = this.progress.get(
 						progressKey(entity.id, view.from, lang)
