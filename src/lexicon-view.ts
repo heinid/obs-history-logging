@@ -854,6 +854,21 @@ export class LexiconView extends ItemView {
 			reset.addEventListener("click", () =>
 				this.selectView(boundEarly)
 			);
+		} else if (
+			!this.selected &&
+			(this.draft.tags.length || this.draft.types.length || this.search)
+		) {
+			// The library desk equivalent: drop the extra filters, keep the
+			// persisted direction/sort/grouping.
+			const reset = row.createSpan({ cls: "hl-lex-dirty" });
+			setIcon(reset, "rotate-ccw");
+			reset.setAttr("aria-label", "有附加筛选 · 点击清空回到全库");
+			reset.addEventListener("click", () => {
+				this.draft.tags = [];
+				this.draft.types = [];
+				this.search = "";
+				this.render();
+			});
 		}
 		row.createSpan({ cls: "hl-lex-total", text: `${count} 个词条` });
 		row.createSpan({ cls: "hl-lex-tsep", text: "·" });
