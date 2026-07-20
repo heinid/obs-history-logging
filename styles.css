@@ -4976,3 +4976,25 @@ input.hl-tag-chip-input:focus-visible {
 	color: var(--text-faint);
 	cursor: default;
 }
+
+/* Direction fine print after view names (sidebar + «+» target menu). */
+.hl-lex-side-dir {
+	margin-left: 6px;
+	font-size: 0.78em;
+	color: var(--text-faint);
+	font-weight: 400;
+}
+.hl-lex-menu-dir {
+	margin-left: 8px;
+	font-size: 0.82em;
+	color: var(--text-faint);
+}
+.hl-lex-menu-warn {
+	margin-left: 8px;
+	font-size: 0.78em;
+	color: var(--text-warning, var(--text-muted));
+	border: 1px solid currentColor;
+	border-radius: 4px;
+	padding: 0 4px;
+	opacity: 0.75;
+}

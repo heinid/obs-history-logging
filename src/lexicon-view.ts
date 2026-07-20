@@ -63,6 +63,16 @@ function normTag(t: string): string {
 	return t.replace(/^#+/, "").trim();
 }
 
+// Compact «ja → 中 / EN» direction tag for the sidebar and menus.
+function dirLabel(view: { from: string; to: string[] }): string {
+	if (!view.from || !view.to.length) return "";
+	const to = orderLangs(view.to.filter((l) => l !== view.from));
+	if (!to.length) return "";
+	return `${langDisplayName(view.from)} → ${to
+		.map(langDisplayName)
+		.join(" / ")}`;
+}
+
 function entityStamp(e: EntityEntry): string {
 	return e.created ?? e.updated ?? "";
 }
@@ -585,7 +595,13 @@ export class LexiconView extends ItemView {
 					this.selected === view.name ? " is-on" : ""
 				}`,
 			});
-			item.createSpan({ cls: "hl-lex-side-name", text: view.name });
+			const nm = item.createSpan({ cls: "hl-lex-side-name" });
+			nm.createSpan({ text: view.name });
+			const dir = dirLabel(view);
+			if (dir) {
+				nm.createSpan({ cls: "hl-lex-side-dir", text: dir });
+				nm.setAttr("aria-label", `${view.name} · ${dir}`);
+			}
 			if (view.study) {
 				const stats = lexStudyStats(
 					view,
@@ -1514,10 +1530,35 @@ export class LexiconView extends ItemView {
 			return;
 		}
 		const menu = new Menu();
-		for (const v of this.views)
+		// Views covering the direction being browsed come first; the rest
+		// stay selectable but carry a soft “方向不同” hint.
+		const covers = (v: ReciteView): boolean =>
+			v.from === this.draft.from &&
+			this.draft.to.some(
+				(l) => l !== this.draft.from && v.to.includes(l)
+			);
+		const ordered = [...this.views].sort(
+			(a, b) => Number(covers(b)) - Number(covers(a))
+		);
+		for (const v of ordered)
 			menu.addItem((i) =>
 				i
-					.setTitle(`加入「${v.name}」`)
+					.setTitle(
+						createFragment((f) => {
+							f.createSpan({ text: `加入「${v.name}」` });
+							const dir = dirLabel(v);
+							if (dir)
+								f.createSpan({
+									cls: "hl-lex-menu-dir",
+									text: dir,
+								});
+							if (!covers(v))
+								f.createSpan({
+									cls: "hl-lex-menu-warn",
+									text: "方向不同",
+								});
+						})
+					)
 					.setIcon(v.study ? "brain" : "bookmark")
 					.onClick(() => void this.addMembers(v, ids))
 			);
