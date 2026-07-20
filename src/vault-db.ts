@@ -244,7 +244,14 @@ class VaultDbRefWidget extends WidgetType {
 				e.stopPropagation();
 				if (span.classList.contains("hl-db-mask"))
 					openDbLangMenu(this.plugin, span, this.id, e);
-				else openDbRefMenu(this.plugin, this.id, e, unannotate);
+				else
+					openDbRefMenu(
+						this.plugin,
+						this.id,
+						e,
+						unannotate,
+						span.dataset.dbRevealLang
+					);
 			});
 			return span;
 		}

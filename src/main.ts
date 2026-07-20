@@ -42,13 +42,18 @@ import {
 import { LEXICON_VIEW_TYPE, LexiconView } from "./lexicon-view";
 import { QuizManagerModal, QuizPracticeModal } from "./quiz-modal";
 import { MapOcclusionEditor } from "./map-viewer";
-import { QuizEntry } from "./quiz";
+import { QuizEntry, addMinutes } from "./quiz";
 import { quizSchedule } from "./quiz-display";
 import { ModalStash } from "./modal-stash";
 import { setDisplayLangOrder } from "./db-format";
 import { QuizReminderModal } from "./quiz-reminder";
 import { ReciteReminderModal } from "./recite-reminder";
-import { ReciteProgress, keyOf } from "./recite-progress";
+import {
+	ReciteProgress,
+	keyOf,
+	newProgress,
+	progressKey,
+} from "./recite-progress";
 import {
 	DbVaultCache,
 	VaultDbSuggest,
@@ -66,6 +71,9 @@ export default class HistoryLoggingPlugin extends Plugin {
 	private reminderModal: QuizReminderModal | null = null;
 	private reciteReminders = new Map<string, number>();
 	private reciteReminderModal: ReciteReminderModal | null = null;
+	// One-shot «延后查背» records for directions with no card: quizzed once,
+	// never written to the store.
+	readonly reciteEphemeral = new Map<string, ReciteProgress>();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -701,6 +709,56 @@ export default class HistoryLoggingPlugin extends Plugin {
 				this.reciteReminders.delete(key);
 			}
 		});
+	}
+
+	// «延后查背»: after a cloze reveal, quiz this direction in the reminder
+	// popup once the configured delay passes. An existing card just has its
+	// review pulled to that moment; a cardless direction either mints a card
+	// (setting on) or gets a one-shot ephemeral record (setting off).
+	async scheduleReciteCheckup(
+		entityId: string,
+		from: string,
+		to: string
+	): Promise<void> {
+		if (!from || !to || from === to) return;
+		const minutes = Math.max(1, this.settings.lexCheckupMinutes);
+		const key = progressKey(entityId, from, to);
+		const now = new Date();
+		const nextReview = addMinutes(now, minutes);
+		const progress = await this.store.readReciteProgress();
+		const rec = progress.get(key);
+		if (rec) {
+			await this.store.upsertReciteProgress([
+				{ ...rec, nextReview, updated: now.toISOString() },
+			]);
+		} else if (this.settings.lexCheckupEnroll) {
+			await this.store.upsertReciteProgress([
+				{ ...newProgress(entityId, from, to, now), nextReview },
+			]);
+		} else {
+			this.reciteEphemeral.set(key, {
+				...newProgress(entityId, from, to, now),
+				nextReview,
+			});
+		}
+		const pending = this.reciteReminders.get(key);
+		if (pending !== undefined) {
+			window.clearTimeout(pending);
+			this.reciteReminders.delete(key);
+		}
+		const timer = window.setTimeout(() => {
+			this.reciteReminders.delete(key);
+			this.routeReciteReminder(key);
+		}, minutes * 60_000);
+		this.reciteReminders.set(key, timer);
+		this.register(() => {
+			const active = this.reciteReminders.get(key);
+			if (active === timer) {
+				window.clearTimeout(timer);
+				this.reciteReminders.delete(key);
+			}
+		});
+		new Notice(`延后查背：${minutes} 分钟后弹出`);
 	}
 
 	// When the lexicon tab is the active view the user is already inside the

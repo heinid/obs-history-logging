@@ -75,7 +75,14 @@ export function wireDbRef(
 			e.preventDefault();
 			e.stopPropagation();
 			if (el.hasClass("hl-db-mask")) openDbLangMenu(plugin, el, id, e);
-			else openDbRefMenu(plugin, id, e, opts.onUnannotate);
+			else
+				openDbRefMenu(
+					plugin,
+					id,
+					e,
+					opts.onUnannotate,
+					el.dataset.dbRevealLang
+				);
 		});
 		return;
 	}
@@ -155,7 +162,8 @@ export function openDbRefMenu(
 	plugin: HistoryLoggingPlugin,
 	id: string,
 	e: MouseEvent,
-	onUnannotate?: () => void
+	onUnannotate?: () => void,
+	revealLang?: string
 ): void {
 	const { mk, close } = makeDbPop(e);
 	mk("✎", "编辑词条").addEventListener("mousedown", (ev) => {
@@ -180,6 +188,32 @@ export function openDbRefMenu(
 		void navigator.clipboard?.writeText(id);
 		new Notice(`已复制词条 ID：${id}`);
 	});
+	// «延后查背»: only on a reference just revealed by language — quiz the
+	// default language toward the revealed one after a configured delay.
+	// Greyed out when the two coincide or the entry lacks the front spelling.
+	if (revealLang) {
+		const from = plugin.settings.entityLangs[0] ?? "";
+		const row = mk("⏱", "延后查背");
+		if (!from || from === revealLang) {
+			row.addClass("hl-le-pop-item-disabled");
+			return;
+		}
+		void plugin.store.readEntities().then((entities) => {
+			const entity = entities.get(id);
+			if (
+				!entity?.labels.some(
+					(l) => l.lang === from && l.text.trim()
+				)
+			)
+				row.addClass("hl-le-pop-item-disabled");
+		});
+		row.addEventListener("mousedown", (ev) => {
+			ev.preventDefault();
+			if (row.hasClass("hl-le-pop-item-disabled")) return;
+			close();
+			void plugin.scheduleReciteCheckup(id, from, revealLang);
+		});
+	}
 }
 
 // Mask-mode right-click: a standalone menu listing the configured display
@@ -222,6 +256,7 @@ export function openDbLangMenu(
 			row.addEventListener("mousedown", (ev) => {
 				ev.preventDefault();
 				close();
+				el.dataset.dbRevealLang = lang;
 				el.setText(label.text);
 				// Remaining same-language spellings trail in faint text, so
 				// a correct recall of an alias is not mistaken for an error.

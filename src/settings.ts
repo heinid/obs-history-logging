@@ -65,6 +65,12 @@ export interface HistoryLoggingSettings {
 	// Show due-count badges on the lexicon sidebar (global red on 全部词条,
 	// soft per-view numbers); off = grey totals only.
 	lexShowDueBadges: boolean;
+	// «延后查背»: minutes before the recite popup fires after picking the
+	// action on a revealed cloze reference.
+	lexCheckupMinutes: number;
+	// «延后查背» on a direction with no card yet: mint the card (join the
+	// study loop) or quiz once without recording progress.
+	lexCheckupEnroll: boolean;
 	// UI font scaling in percent (100 = theme default), per surface.
 	fontScalePlayer: number;
 	fontScaleModals: number;
@@ -108,6 +114,8 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	reciteDeckDisplay: "wall",
 	lexLibrary: null,
 	lexShowDueBadges: true,
+	lexCheckupMinutes: 10,
+	lexCheckupEnroll: false,
 	fontScalePlayer: 100,
 	fontScaleModals: 100,
 	fontScaleLists: 100,
@@ -353,6 +361,36 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.lexShowDueBadges)
 					.onChange(async (value) => {
 						this.plugin.settings.lexShowDueBadges = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("延后查背间隔（分钟）")
+			.setDesc(
+				"在揭开的词条上选择「延后查背」后，等待多少分钟弹出背诵卡片。"
+			)
+			.addText((text) =>
+				text
+					.setValue(String(this.plugin.settings.lexCheckupMinutes))
+					.onChange(async (value) => {
+						const n = Number(value);
+						if (!Number.isFinite(n) || n < 1) return;
+						this.plugin.settings.lexCheckupMinutes = Math.round(n);
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("延后查背时自动加入学习")
+			.setDesc(
+				"开启后，对还没有学习卡的方向使用「延后查背」会顺手加入学习（建立进度记录）；关闭则只考一次，不记录进度。"
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.lexCheckupEnroll)
+					.onChange(async (value) => {
+						this.plugin.settings.lexCheckupEnroll = value;
 						await this.plugin.saveSettings();
 					})
 			);

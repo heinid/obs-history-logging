@@ -20,6 +20,8 @@ export class ReciteReminderModal extends Modal {
 	private rec: ReciteProgress | null = null;
 	private entity: EntityEntry | null = null;
 	private answerShown = false;
+	// One-shot «延后查背» without a stored card: rate once, record nothing.
+	private persisted = true;
 
 	constructor(
 		app: App,
@@ -56,7 +58,10 @@ export class ReciteReminderModal extends Modal {
 			this.plugin.store.readReciteProgress(),
 			this.plugin.store.readEntities(),
 		]);
-		this.rec = progress.get(this.key) ?? null;
+		const stored = progress.get(this.key);
+		this.persisted = stored != null;
+		this.rec =
+			stored ?? this.plugin.reciteEphemeral.get(this.key) ?? null;
 		this.entity = this.rec
 			? entities.get(this.rec.entity) ?? null
 			: null;
@@ -179,6 +184,15 @@ export class ReciteReminderModal extends Modal {
 			await this.advance();
 			return;
 		}
+		if (!this.persisted) {
+			void this.plugin.scheduleReciteCheckup(
+				this.rec.entity,
+				this.rec.from,
+				this.rec.to
+			);
+			await this.advance();
+			return;
+		}
 		const updated: ReciteProgress = {
 			...this.rec,
 			nextReview: addMinutes(new Date(), minutes),
@@ -191,6 +205,16 @@ export class ReciteReminderModal extends Modal {
 
 	private async rate(result: "remembered" | "forgot"): Promise<void> {
 		if (!this.rec) return;
+		if (!this.persisted) {
+			this.plugin.reciteEphemeral.delete(this.key);
+			new Notice(
+				result === "remembered"
+					? "查背完成 · 未加入学习，进度不记录"
+					: "查背完成 · 进度不记录，可在词汇页加入学习"
+			);
+			await this.advance();
+			return;
+		}
 		const schedule = quizSchedule(this.plugin.settings);
 		const updated = reviewProgress(
 			this.rec,
@@ -226,7 +250,8 @@ export class ReciteReminderModal extends Modal {
 			!this.entity ||
 			this.rec.from === this.rec.to ||
 			this.rec.status !== "active" ||
-			!isProgressDue(this.rec, new Date(), schedule)
+			(this.persisted &&
+				!isProgressDue(this.rec, new Date(), schedule))
 		) {
 			await this.advance();
 			return;
