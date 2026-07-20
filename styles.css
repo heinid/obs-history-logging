@@ -4419,7 +4419,7 @@ input.hl-tag-chip-input:focus-visible {
 }
 .hl-lex-tctl.is-on {
 	background: var(--background-modifier-hover);
-	color: var(--interactive-accent);
+	color: var(--text-normal);
 	font-weight: 500;
 }
 .hl-lex-strong {
@@ -4436,15 +4436,15 @@ input.hl-tag-chip-input:focus-visible {
 	padding: 2px 12px;
 	border-radius: 12px;
 	background: transparent;
-	border: 1px solid var(--interactive-accent);
-	color: var(--interactive-accent);
+	border: 1px solid var(--background-modifier-border-hover, var(--background-modifier-border));
+	color: var(--text-muted);
 	box-shadow: none;
 	cursor: pointer;
 	height: auto;
 }
 .hl-lex-save:hover {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 }
 
 /* study strip */
@@ -4997,4 +4997,24 @@ input.hl-tag-chip-input:focus-visible {
 	border-radius: 4px;
 	padding: 0 4px;
 	opacity: 0.75;
+}
+
+/* Dirty marker: restore icon by the title, click returns to the view's
+   saved filters. */
+.hl-lex-dirty {
+	display: inline-flex;
+	align-items: center;
+	margin: 0 2px 0 -4px;
+	padding: 3px;
+	border-radius: 5px;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+.hl-lex-dirty:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.hl-lex-dirty svg {
+	width: 15px;
+	height: 15px;
 }

@@ -208,13 +208,6 @@ export class LexiconView extends ItemView {
 					this.queueReload();
 			})
 		);
-		this.registerDomEvent(this.containerEl, "keydown", (ev) => {
-			if (ev.key === "Escape" && this.selectMode) {
-				this.selectMode = false;
-				this.selectedIds.clear();
-				this.render();
-			}
-		});
 		this.registerEvent(this.app.vault.on("delete", () => this.queueReload()));
 		this.registerEvent(this.app.vault.on("rename", () => this.queueReload()));
 		await this.reload();
@@ -586,9 +579,33 @@ export class LexiconView extends ItemView {
 			}, 250);
 		});
 
-		// views
+		// views — the whole library is the fixed first entry
 		side.createDiv({ cls: "hl-lex-side-label", text: "视图" });
 		const schedule = this.schedule();
+		const all = side.createDiv({
+			cls: `hl-lex-side-item${this.selected === null ? " is-on" : ""}`,
+		});
+		all.createSpan({ cls: "hl-lex-side-name", text: "全部词条" });
+		const lib = this.libraryView();
+		const libDue = lib.members.length
+			? lexStudyStats(
+					lib,
+					this.entities.values(),
+					this.progress,
+					schedule
+			  ).words.due
+			: 0;
+		if (libDue > 0)
+			all.createSpan({
+				cls: "hl-lex-side-due",
+				text: String(libDue),
+			});
+		else
+			all.createSpan({
+				cls: "hl-lex-side-cnt",
+				text: String(this.entities.size),
+			});
+		all.addEventListener("click", () => this.selectView(null));
 		for (const view of this.views) {
 			const item = side.createDiv({
 				cls: `hl-lex-side-item${
@@ -600,7 +617,7 @@ export class LexiconView extends ItemView {
 			const dir = dirLabel(view);
 			if (dir) {
 				nm.createSpan({ cls: "hl-lex-side-dir", text: dir });
-				nm.setAttr("aria-label", `${view.name} · ${dir}`);
+				nm.setAttr("aria-label", dir);
 			}
 			if (view.study) {
 				const stats = lexStudyStats(
@@ -635,30 +652,6 @@ export class LexiconView extends ItemView {
 				this.viewMenu(view, ev)
 			);
 		}
-		const all = side.createDiv({
-			cls: `hl-lex-side-item${this.selected === null ? " is-on" : ""}`,
-		});
-		all.createSpan({ cls: "hl-lex-side-name", text: "全部词条" });
-		const lib = this.libraryView();
-		const libDue = lib.members.length
-			? lexStudyStats(
-					lib,
-					this.entities.values(),
-					this.progress,
-					schedule
-			  ).words.due
-			: 0;
-		if (libDue > 0)
-			all.createSpan({
-				cls: "hl-lex-side-due",
-				text: String(libDue),
-			});
-		else
-			all.createSpan({
-				cls: "hl-lex-side-cnt",
-				text: String(this.entities.size),
-			});
-		all.addEventListener("click", () => this.selectView(null));
 
 		// tag tree with counts (within current type/search scope)
 		const facetBase = [...this.entities.values()].filter((e) =>
@@ -741,7 +734,7 @@ export class LexiconView extends ItemView {
 		// name, study flag and membership stay untouched.
 		menu.addItem((i) =>
 			i
-				.setTitle("将当前筛选保存为此视图参数")
+				.setTitle("更新为当前筛选")
 				.setIcon("save")
 				.onClick(() =>
 					void this.saveViews(
@@ -839,6 +832,21 @@ export class LexiconView extends ItemView {
 		row.createEl("h1", {
 			text: this.selected ?? "全部词条",
 		});
+		// Desk differs from the saved view: a restore icon right by the
+		// title drops the draft and returns to the view's own filters.
+		const boundEarly = this.boundView();
+		if (
+			boundEarly &&
+			JSON.stringify({ ...this.draft, members: [] }) !==
+				JSON.stringify({ ...boundEarly, members: [] })
+		) {
+			const reset = row.createSpan({ cls: "hl-lex-dirty" });
+			setIcon(reset, "rotate-ccw");
+			reset.setAttr("aria-label", "筛选已修改 · 点击恢复视图原筛选");
+			reset.addEventListener("click", () =>
+				this.selectView(boundEarly)
+			);
+		}
 		row.createSpan({ cls: "hl-lex-total", text: `${count} 个词条` });
 		row.createSpan({ cls: "hl-lex-tsep", text: "·" });
 
@@ -938,10 +946,10 @@ export class LexiconView extends ItemView {
 		if (dirty) {
 			const save = row.createEl("button", {
 				cls: "hl-lex-save",
-				text: "另存为新视图",
+				text: "存为视图",
 			});
 			save.addEventListener("click", () => {
-				new NameModal(this.app, "另存为新视图", "", (name) => {
+				new NameModal(this.app, "存为新视图", "", (name) => {
 					if (this.views.some((v) => v.name === name)) {
 						new Notice("已有同名视图");
 						return;
@@ -1824,9 +1832,16 @@ export class LexiconView extends ItemView {
 	onKeyDown = (ev: KeyboardEvent): void => {
 		if (this.app.workspace.getActiveViewOfType(LexiconView) !== this)
 			return;
-		if (!this.playing || !this.player) return;
 		const target = ev.target as HTMLElement;
 		if (target.closest("input, textarea, [contenteditable]")) return;
+		if (ev.key === "Escape" && this.selectMode && !this.playing) {
+			this.selectMode = false;
+			this.selectedIds.clear();
+			this.render();
+			ev.preventDefault();
+			return;
+		}
+		if (!this.playing || !this.player) return;
 		if (this.player.handleKey(ev)) ev.preventDefault();
 	};
 
