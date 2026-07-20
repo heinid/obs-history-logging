@@ -1647,6 +1647,53 @@ export class LexiconView extends ItemView {
 					)
 			);
 		if (dirs.length) menu.addSeparator();
+		// Free minting: every single-direction atom the entry's own
+		// languages allow (intersection when several are selected),
+		// skipping directions already minted for all of them.
+		const langs = this.plugin.settings.entityLangs.filter((lang) =>
+			ids.every((id) => {
+				const e = this.entities.get(id);
+				return e != null && hasLang(e, lang);
+			})
+		);
+		const free: { from: string; to: string[] }[] = [];
+		for (const from of langs)
+			for (const to of langs) {
+				if (to === from) continue;
+				if (
+					ids.every((id) =>
+						this.progress.has(progressKey(id, from, to))
+					)
+				)
+					continue;
+				free.push({ from, to: [to] });
+			}
+		if (free.length)
+			menu.addItem((i) =>
+				i
+					.setTitle("其它方向…")
+					.setIcon("shuffle")
+					.onClick(() => {
+						const sub = new Menu();
+						for (const d of free)
+							sub.addItem((si) =>
+								si
+									.setTitle(`加入 ${dirLabel(d)}`)
+									.setIcon("brain")
+									.onClick(() =>
+										void this.mintCards(
+											{
+												...emptyView(""),
+												...d,
+												to: [...d.to],
+											},
+											ids
+										)
+									)
+							);
+						if (ev) sub.showAtMouseEvent(ev);
+					})
+			);
 		menu.addItem((i) =>
 			i
 				.setTitle("保存为新视图并加入…")
