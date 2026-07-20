@@ -20,8 +20,10 @@ import {
 	ReciteProgress,
 	isProgressDue,
 	newProgress,
+	progressKey,
 	reviewProgress,
 } from "./recite-progress";
+import { EntityModal } from "./entity-modal";
 
 export interface StudyLang {
 	lang: string;
@@ -72,10 +74,29 @@ export class StudyPlayerPage extends PlayerPage {
 		super.unmount();
 	}
 
+	// Rows sitting out a short wait: forgotten ones on their retry, plus
+	// first-learn rechecks — both come back into the queue once due.
 	private retrySlots(item: StudyItem): StudyLang[] {
 		return item.langs.filter(
-			(l) => l.due && l.rated === "forgot"
+			(l) =>
+				l.due &&
+				(l.rated === "forgot" ||
+					(l.rated === "remembered" &&
+						l.progress?.pendingRecheck))
 		);
+	}
+
+	// A direction came off its short wait while this session is running;
+	// consume it when the card is in our waiting pool.
+	handleDueDirection(key: string): boolean {
+		const owns = this.pending.some((it) =>
+			this.retrySlots(it).some(
+				(l) =>
+					progressKey(it.entity.id, this.from, l.lang) === key
+			)
+		);
+		if (owns) this.poll();
+		return owns;
 	}
 
 	// Move pending cards whose retry wait has elapsed back into the queue,
@@ -156,6 +177,10 @@ export class StudyPlayerPage extends PlayerPage {
 				cls: "hl-lex-reading",
 				text: reading.text,
 			});
+		const edit = head.createSpan({ cls: "hl-study-edit" });
+		setIcon(edit, "pencil");
+		edit.setAttr("aria-label", "编辑词条 (E)");
+		edit.addEventListener("click", () => this.editCurrent());
 		const rows = card.createDiv({ cls: "hl-lex-langs hl-study-rows" });
 		const ordered = orderLangs(item.langs.map((l) => l.lang));
 		for (const lang of ordered) {
@@ -331,12 +356,19 @@ export class StudyPlayerPage extends PlayerPage {
 	}
 
 	// Space also reveals the next hidden due row once the card is flipped.
+	// E opens the entity editor; A reveals every row (or masks them again).
 	handleKey(ev: KeyboardEvent): boolean {
-		if (
-			this.revealed &&
-			(ev.key === " " || ev.code === "Space") &&
-			!this.finished()
-		) {
+		if (this.finished() || ev.ctrlKey || ev.metaKey || ev.altKey)
+			return super.handleKey(ev);
+		if (ev.key === "e" || ev.key === "E") {
+			this.editCurrent();
+			return true;
+		}
+		if (ev.key === "a" || ev.key === "A") {
+			this.toggleAllRows();
+			return true;
+		}
+		if (this.revealed && (ev.key === " " || ev.code === "Space")) {
 			const item = this.items[this.index];
 			const hidden = item?.langs.find((l) => l.due && !l.revealed);
 			if (hidden) {
@@ -346,6 +378,33 @@ export class StudyPlayerPage extends PlayerPage {
 			}
 		}
 		return super.handleKey(ev);
+	}
+
+	private editCurrent(): void {
+		const item = this.items[this.index];
+		if (!item) return;
+		new EntityModal(
+			this.plugin.app,
+			this.plugin,
+			item.entity,
+			false,
+			(saved) => {
+				item.entity = saved;
+				this.render();
+			}
+		).open();
+	}
+
+	// Reveal every still-masked unrated row; when all are open, mask back.
+	private toggleAllRows(): void {
+		const item = this.items[this.index];
+		if (!item) return;
+		const rows = item.langs.filter((l) => !l.rated);
+		if (!rows.length) return;
+		const hidden = rows.filter((l) => !l.revealed);
+		if (hidden.length) for (const l of hidden) l.revealed = true;
+		else for (const l of rows) l.revealed = false;
+		this.render();
 	}
 
 	protected renderActions(bar: HTMLElement): void {

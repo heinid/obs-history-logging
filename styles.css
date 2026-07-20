@@ -4894,3 +4894,41 @@ input.hl-tag-chip-input:focus-visible {
 	color: var(--text-muted);
 	font-size: 0.88em;
 }
+
+/* Hover-in edit affordance on the study card head (shortcut: E). */
+.hl-study-edit {
+	display: inline-flex;
+	align-items: center;
+	margin-left: 10px;
+	padding: 4px;
+	border-radius: 5px;
+	color: var(--text-faint);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+.hl-study-head:hover .hl-study-edit {
+	opacity: 1;
+}
+.hl-study-edit:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+.hl-study-edit svg {
+	width: 15px;
+	height: 15px;
+}
+
+/* Lexicon reminder modal: the alarm banner over a single dictionary-style
+   row, same visual language as the study card. */
+.hl-recite-reminder .hl-study-head {
+	margin-top: 8px;
+}
+.hl-recite-reminder .hl-study-rows {
+	margin-top: 14px;
+}
+.hl-recite-reminder .hl-study-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}

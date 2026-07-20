@@ -233,6 +233,17 @@ export class LexiconView extends ItemView {
 		return quizSchedule(this.plugin.settings);
 	}
 
+	// A studied direction came off its short wait while this tab is active.
+	// A running session interjects the card; on the workbench the refreshed
+	// badges are the notification — no popup either way.
+	handleDueDirection(key: string): boolean {
+		if (this.playing && this.player)
+			return this.player.handleDueDirection(key);
+		this.needsRender = true;
+		void this.reload();
+		return true;
+	}
+
 	private boundView(): ReciteView | null {
 		return this.views.find((v) => v.name === this.selected) ?? null;
 	}
@@ -1436,7 +1447,10 @@ export class LexiconView extends ItemView {
 			view.from,
 			items,
 			schedule,
-			(rec) => void this.plugin.store.upsertReciteProgress([rec]),
+			(rec) => {
+				void this.plugin.store.upsertReciteProgress([rec]);
+				this.plugin.remindReciteWhenReady(rec);
+			},
 			() => {
 				this.playing = false;
 				this.player = null;

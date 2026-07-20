@@ -47,6 +47,8 @@ import { quizSchedule } from "./quiz-display";
 import { ModalStash } from "./modal-stash";
 import { setDisplayLangOrder } from "./db-format";
 import { QuizReminderModal } from "./quiz-reminder";
+import { ReciteReminderModal } from "./recite-reminder";
+import { ReciteProgress, keyOf } from "./recite-progress";
 import {
 	DbVaultCache,
 	VaultDbSuggest,
@@ -62,6 +64,8 @@ export default class HistoryLoggingPlugin extends Plugin {
 	dbVault = new DbVaultCache(this);
 	private quizReminders = new Map<string, number>();
 	private reminderModal: QuizReminderModal | null = null;
+	private reciteReminders = new Map<string, number>();
+	private reciteReminderModal: ReciteReminderModal | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -655,6 +659,76 @@ export default class HistoryLoggingPlugin extends Plugin {
 		};
 		if (this.modalStash.hasOpen()) {
 			const notice = new Notice("⏰ 有 Quiz 到了重温时间，点击开始。", 0);
+			notice.noticeEl.addEventListener("click", () => {
+				notice.hide();
+				openReminder();
+			});
+			return;
+		}
+		openReminder();
+	}
+
+	// Same alarm pipeline for lexicon directions coming off a short wait:
+	// the timer fires on due, the lexicon tab consumes it when active,
+	// otherwise a light reminder card pops up (or a persistent notice while
+	// another modal is in the way). Day-scale intervals never pop.
+	remindReciteWhenReady(rec: ReciteProgress): void {
+		const key = keyOf(rec);
+		const pending = this.reciteReminders.get(key);
+		if (pending !== undefined) {
+			window.clearTimeout(pending);
+			this.reciteReminders.delete(key);
+		}
+		if (rec.status !== "active" || !rec.nextReview) return;
+		const due = Date.parse(rec.nextReview);
+		if (Number.isNaN(due)) return;
+		const delay = due - Date.now();
+		const schedule = quizSchedule(this.settings);
+		const horizon =
+			Math.max(0, schedule.retryMinutes, schedule.recheckMinutes) * 60_000;
+		if (delay <= 0 || delay > horizon) return;
+		const timer = window.setTimeout(() => {
+			this.reciteReminders.delete(key);
+			this.routeReciteReminder(key);
+		}, delay);
+		this.reciteReminders.set(key, timer);
+		this.register(() => {
+			const active = this.reciteReminders.get(key);
+			if (active === timer) {
+				window.clearTimeout(timer);
+				this.reciteReminders.delete(key);
+			}
+		});
+	}
+
+	// When the lexicon tab is the active view the user is already inside the
+	// practice surface: a running session interjects the card, the workbench
+	// refreshes its badges — no popup either way.
+	private routeReciteReminder(key: string): void {
+		const active = this.app.workspace.getActiveViewOfType(LexiconView);
+		if (active && active.handleDueDirection(key)) return;
+		this.popReciteReminder(key);
+	}
+
+	private popReciteReminder(key: string): void {
+		if (this.reciteReminderModal) {
+			this.reciteReminderModal.enqueue(key);
+			return;
+		}
+		const openReminder = (): void => {
+			if (this.reciteReminderModal) {
+				this.reciteReminderModal.enqueue(key);
+				return;
+			}
+			const modal = new ReciteReminderModal(this.app, this, key, () => {
+				if (this.reciteReminderModal === modal)
+					this.reciteReminderModal = null;
+			});
+			this.reciteReminderModal = modal;
+			modal.open();
+		};
+		if (this.modalStash.hasOpen()) {
+			const notice = new Notice("⏰ 有词条到了重温时间，点击开始。", 0);
 			notice.noticeEl.addEventListener("click", () => {
 				notice.hide();
 				openReminder();
