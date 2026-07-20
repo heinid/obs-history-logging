@@ -5018,3 +5018,15 @@ input.hl-tag-chip-input:focus-visible {
 	width: 15px;
 	height: 15px;
 }
+
+/* Per-view due counts: quiet tint, no pill — the filled badge stays on the
+   deduplicated global count of 全部词条 only. */
+.hl-lex-side-due.is-soft {
+	background: transparent;
+	color: var(--color-red);
+	opacity: 0.75;
+	font-weight: 500;
+	padding: 0;
+	font-size: 0.82em;
+	font-variant-numeric: tabular-nums;
+}

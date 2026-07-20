@@ -62,6 +62,9 @@ export interface HistoryLoggingSettings {
 	// Persisted display parameters of the lexicon whole-library desk
 	// (direction, sort, group); saved on change, no explicit save step.
 	lexLibrary: LexLibraryParams | null;
+	// Show due-count badges on the lexicon sidebar (global red on 全部词条,
+	// soft per-view numbers); off = grey totals only.
+	lexShowDueBadges: boolean;
 	// UI font scaling in percent (100 = theme default), per surface.
 	fontScalePlayer: number;
 	fontScaleModals: number;
@@ -104,6 +107,7 @@ export const DEFAULT_SETTINGS: HistoryLoggingSettings = {
 	annotTag: "专名和Entities积累",
 	reciteDeckDisplay: "wall",
 	lexLibrary: null,
+	lexShowDueBadges: true,
 	fontScalePlayer: 100,
 	fontScaleModals: 100,
 	fontScaleLists: 100,
@@ -336,6 +340,20 @@ export class HistoryLoggingSettingTab extends PluginSettingTab {
 						this.plugin.settings.quizHoverHideYears = value;
 						await this.plugin.saveSettings();
 						await this.plugin.refreshTimelines();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("词汇侧栏显示到期徽标")
+			.setDesc(
+				"开启后，词汇工作台侧栏在「全部词条」显示全局到期数（红色），各学习视图显示淡色到期数；关闭则只显示灰色总数。"
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.lexShowDueBadges)
+					.onChange(async (value) => {
+						this.plugin.settings.lexShowDueBadges = value;
+						await this.plugin.saveSettings();
 					})
 			);
 

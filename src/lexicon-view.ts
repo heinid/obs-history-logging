@@ -25,7 +25,7 @@ import {
 	playEntityAudio,
 } from "./quiz-render";
 import { EntityModal } from "./entity-modal";
-import { NameModal, ConfirmModal } from "./name-modal";
+import { NameModal, ConfirmModal, ChoiceModal } from "./name-modal";
 import { QuizSchedule } from "./quiz";
 import { quizSchedule } from "./quiz-display";
 import { quizDeckStats, DeckStats } from "./deck-stats";
@@ -582,6 +582,7 @@ export class LexiconView extends ItemView {
 		// views — the whole library is the fixed first entry
 		side.createDiv({ cls: "hl-lex-side-label", text: "视图" });
 		const schedule = this.schedule();
+		const showDue = this.plugin.settings.lexShowDueBadges;
 		const all = side.createDiv({
 			cls: `hl-lex-side-item${this.selected === null ? " is-on" : ""}`,
 		});
@@ -595,7 +596,7 @@ export class LexiconView extends ItemView {
 					schedule
 			  ).words.due
 			: 0;
-		if (libDue > 0)
+		if (showDue && libDue > 0)
 			all.createSpan({
 				cls: "hl-lex-side-due",
 				text: String(libDue),
@@ -626,9 +627,9 @@ export class LexiconView extends ItemView {
 					this.progress,
 					schedule
 				);
-				if (stats.words.due > 0)
+				if (showDue && stats.words.due > 0)
 					item.createSpan({
-						cls: "hl-lex-side-due",
+						cls: "hl-lex-side-due is-soft",
 						text: String(stats.words.due),
 					});
 				else
@@ -736,24 +737,7 @@ export class LexiconView extends ItemView {
 			i
 				.setTitle("更新为当前筛选")
 				.setIcon("save")
-				.onClick(() =>
-					void this.saveViews(
-						this.views.map((v) =>
-							v.name === view.name
-								? {
-										...v,
-										from: this.draft.from,
-										to: [...this.draft.to],
-										tags: [...this.draft.tags],
-										types: [...this.draft.types],
-										requireFrom: this.draft.requireFrom,
-										sort: this.draft.sort,
-										group: this.draft.group,
-								  }
-								: v
-						)
-					).then(() => new Notice(`已更新「${view.name}」`))
-				)
+				.onClick(() => this.updateViewParams(view))
 		);
 		menu.addItem((i) =>
 			i
@@ -1617,6 +1601,96 @@ export class LexiconView extends ItemView {
 			)
 		);
 		new Notice(`已加入「${view.name}」· ${add.length} 个词条`);
+	}
+
+	// Every progress key (词条 × 方向) a study view's deck covers.
+	private coveredKeys(view: ReciteView): Set<string> {
+		const keys = new Set<string>();
+		if (!view.study) return keys;
+		for (const e of studyMembers(this.entities.values(), view))
+			for (const lang of view.to) {
+				if (lang === view.from || !hasLang(e, lang)) continue;
+				keys.add(progressKey(e.id, view.from, lang));
+			}
+		return keys;
+	}
+
+	private archiveName(base: string): string {
+		let name = `${base}（旧）`;
+		let n = 2;
+		while (this.views.some((v) => v.name === name))
+			name = `${base}（旧${n++}）`;
+		return name;
+	}
+
+	// Write the desk's filters into a saved view. When that would leave
+	// studied cards outside every study view, ask first — optionally
+	// snapshotting the squeezed-out cards into a members-only 「名（旧）」
+	// view so their progress keeps getting reviewed.
+	private updateViewParams(view: ReciteView): void {
+		const updated: ReciteView = {
+			...view,
+			from: this.draft.from,
+			to: [...this.draft.to],
+			tags: [...this.draft.tags],
+			types: [...this.draft.types],
+			requireFrom: this.draft.requireFrom,
+			sort: this.draft.sort,
+			group: this.draft.group,
+		};
+		const apply = (extra?: ReciteView) => {
+			const next = this.views.map((v) =>
+				v.name === view.name ? updated : v
+			);
+			void this.saveViews(extra ? [...next, extra] : next).then(() =>
+				new Notice(`已更新「${view.name}」`)
+			);
+		};
+		if (!view.study) {
+			apply();
+			return;
+		}
+		const after = this.coveredKeys(updated);
+		const others = new Set<string>();
+		for (const v of this.views) {
+			if (v.name === view.name) continue;
+			for (const k of this.coveredKeys(v)) others.add(k);
+		}
+		const orphans = [...this.coveredKeys(view)].filter(
+			(k) => this.progress.has(k) && !after.has(k) && !others.has(k)
+		);
+		if (!orphans.length) {
+			apply();
+			return;
+		}
+		const ids = new Set<string>();
+		for (const k of orphans) {
+			const rec = this.progress.get(k);
+			if (rec) ids.add(rec.entity);
+		}
+		const archive: ReciteView = {
+			...emptyView(this.archiveName(view.name)),
+			from: view.from,
+			to: [...view.to],
+			sort: view.sort,
+			group: view.group,
+			study: true,
+			members: [...ids],
+		};
+		new ChoiceModal(
+			this.app,
+			"更新视图参数",
+			`这次修改会让 ${orphans.length} 个学过的方向（${ids.size} 个词条）不再属于任何学习视图——进度保留，但不会再被安排复习。`,
+			[
+				{ text: "取消" },
+				{ text: "仍然更新", onPick: () => apply() },
+				{
+					text: `更新并存档到「${archive.name}」`,
+					cta: true,
+					onPick: () => apply(archive),
+				},
+			]
+		).open();
 	}
 
 	private removeFromStudy(view: ReciteView, ids: string[]): void {

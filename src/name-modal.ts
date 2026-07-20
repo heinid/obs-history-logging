@@ -74,3 +74,33 @@ export class ConfirmModal extends Modal {
 		this.contentEl.empty();
 	}
 }
+
+// Confirmation with several explicit outcomes (e.g. save / archive / cancel).
+export class ChoiceModal extends Modal {
+	constructor(
+		app: App,
+		private heading: string,
+		private body: string,
+		private choices: { text: string; cta?: boolean; onPick?: () => void }[]
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(this.heading);
+		this.contentEl.createEl("p", { text: this.body });
+		const row = new Setting(this.contentEl);
+		for (const c of this.choices)
+			row.addButton((b) => {
+				b.setButtonText(c.text).onClick(() => {
+					this.close();
+					c.onPick?.();
+				});
+				if (c.cta) b.setCta();
+			});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
