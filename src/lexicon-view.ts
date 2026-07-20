@@ -1028,9 +1028,10 @@ export class LexiconView extends ItemView {
 
 	private renderStudyStrip(main: HTMLElement): void {
 		const bound = this.boundView();
-		// The whole-library desk gets the same strip: a read/study surface
-		// over everything enrolled anywhere, in its own direction.
-		const deck = bound ?? this.libraryView();
+		// The strip reflects the desk as it stands — live filters and
+		// direction included — so the counts and the session always match
+		// what's listed below.
+		const deck: ReciteView = { ...this.draft, to: [...this.draft.to] };
 		const stats = lexStudyStats(
 			deck,
 			this.entities.values(),
@@ -1090,6 +1091,7 @@ export class LexiconView extends ItemView {
 			const fresh = [...this.entities.values()].filter(
 				(e) =>
 					!enrolled.has(e.id) &&
+					entityMatchesView(e, deck) &&
 					hasLang(e, deck.from) &&
 					deck.to.some(
 						(l) => l !== deck.from && hasLang(e, l)
@@ -1586,39 +1588,50 @@ export class LexiconView extends ItemView {
 					.onClick(() => void this.mintCards(bound, ids))
 			);
 		menu.addSeparator();
-		// Other profiles: views covering the direction being browsed come
-		// first; the rest stay selectable but carry a soft “方向不同” hint.
-		const covers = (v: ReciteView): boolean =>
+		// Cards belong to directions, not views, so the remaining choices
+		// are the deduplicated directions across all saved views. Those
+		// covering the direction being browsed come first; the rest stay
+		// selectable but carry a soft “方向不同” hint.
+		const covers = (v: { from: string; to: string[] }): boolean =>
 			v.from === this.draft.from &&
 			this.draft.to.some(
 				(l) => l !== this.draft.from && v.to.includes(l)
 			);
-		const ordered = [...this.views]
-			.filter((v) => v.name !== bound?.name)
-			.sort((a, b) => Number(covers(b)) - Number(covers(a)));
-		for (const v of ordered)
+		const sigOf = (v: { from: string; to: string[] }): string =>
+			`${v.from}>${[...v.to].sort().join(",")}`;
+		const seen = new Set([sigOf(cur)]);
+		if (bound) seen.add(sigOf(bound));
+		const dirs: { from: string; to: string[] }[] = [];
+		for (const v of this.views) {
+			if (!v.from || !v.to.length) continue;
+			const sig = sigOf(v);
+			if (seen.has(sig)) continue;
+			seen.add(sig);
+			dirs.push({ from: v.from, to: [...v.to] });
+		}
+		dirs.sort((a, b) => Number(covers(b)) - Number(covers(a)));
+		for (const d of dirs)
 			menu.addItem((i) =>
 				i
 					.setTitle(
 						createFragment((f) => {
-							f.createSpan({ text: `加入「${v.name}」` });
-							const dir = dirLabel(v);
-							if (dir)
-								f.createSpan({
-									cls: "hl-lex-menu-dir",
-									text: dir,
-								});
-							if (!covers(v))
+							f.createSpan({ text: `加入 ${dirLabel(d)}` });
+							if (!covers(d))
 								f.createSpan({
 									cls: "hl-lex-menu-warn",
 									text: "方向不同",
 								});
 						})
 					)
-					.setIcon(v.study ? "brain" : "bookmark")
-					.onClick(() => void this.mintCards(v, ids))
+					.setIcon("brain")
+					.onClick(() =>
+						void this.mintCards(
+							{ ...emptyView(""), ...d, to: [...d.to] },
+							ids
+						)
+					)
 			);
-		if (ordered.length) menu.addSeparator();
+		if (dirs.length) menu.addSeparator();
 		menu.addItem((i) =>
 			i
 				.setTitle("保存为新视图并加入…")
