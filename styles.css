@@ -2923,6 +2923,12 @@ input.hl-tag-chip-input:focus-visible {
 	overflow-y: auto;
 	background: var(--background-primary);
 }
+/* breathing room after the last line when the body scrolls (bottom padding
+   is swallowed by the overflow container) */
+.hl-player-body::after {
+	content: "";
+	flex: 0 0 12px;
+}
 .hl-player-footer {
 	display: grid;
 	grid-template-columns: 1fr minmax(200px, 320px) 1fr;
