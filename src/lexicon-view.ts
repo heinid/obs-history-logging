@@ -18,7 +18,12 @@ import {
 } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { EntityEntry, displayName, orderLangs } from "./db-format";
-import { langDisplayName, playEntityAudio } from "./quiz-render";
+import {
+	DbColors,
+	langDisplayName,
+	loadDbColors,
+	playEntityAudio,
+} from "./quiz-render";
 import { EntityModal } from "./entity-modal";
 import { NameModal, ConfirmModal } from "./name-modal";
 import { QuizSchedule } from "./quiz";
@@ -28,7 +33,7 @@ import { jumpToLocation } from "./jump";
 import {
 	ContextHint,
 	contextHintsForMany,
-	maskedSegments,
+	renderContextMarkdown,
 } from "./recite-context";
 import {
 	ReciteView,
@@ -110,8 +115,13 @@ export class LexiconView extends ItemView {
 	private revealed = new Set<string>(); // `${id}:${lang}`
 	private ctxOpen = new Set<string>(); // entity ids with expanded context
 	private ctxIndex = new Map<string, number>();
-	private ctxRevealed = new Set<string>(); // `${id}:ctx:${n}:${seg}`
 	private contexts: Map<string, ContextHint[]> | null = null;
+	private colors: DbColors = new Map();
+	private selectMode = false;
+	private selectedIds = new Set<string>();
+	// Name of the view that last received members, the fallback «+» target
+	// when browsing outside any view.
+	private lastTarget: string | null = null;
 	private ctxLoading = false;
 	private player: StudyPlayerPage | null = null;
 	private playing = false;
@@ -143,6 +153,13 @@ export class LexiconView extends ItemView {
 					this.queueReload();
 			})
 		);
+		this.registerDomEvent(this.containerEl, "keydown", (ev) => {
+			if (ev.key === "Escape" && this.selectMode) {
+				this.selectMode = false;
+				this.selectedIds.clear();
+				this.render();
+			}
+		});
 		this.registerEvent(this.app.vault.on("delete", () => this.queueReload()));
 		this.registerEvent(this.app.vault.on("rename", () => this.queueReload()));
 		await this.reload();
@@ -156,14 +173,16 @@ export class LexiconView extends ItemView {
 		if (this.loading) return;
 		this.loading = true;
 		try {
-			const [views, progress, entities] = await Promise.all([
+			const [views, progress, entities, colors] = await Promise.all([
 				this.plugin.store.readReciteViews(),
 				this.plugin.store.readReciteProgress(),
 				this.plugin.store.readEntities(),
+				loadDbColors(this.plugin),
 			]);
 			this.views = views;
 			this.progress = progress;
 			this.entities = entities;
+			this.colors = colors;
 		} finally {
 			this.loading = false;
 		}
@@ -510,6 +529,7 @@ export class LexiconView extends ItemView {
 		this.renderToolrow(main, items.length);
 		this.renderStudyStrip(main);
 		this.renderEntries(main, items);
+		if (this.selectMode) this.renderSelectBar(main);
 	}
 
 	private renderToolrow(main: HTMLElement, count: number): void {
@@ -588,6 +608,16 @@ export class LexiconView extends ItemView {
 		});
 
 		row.createDiv({ cls: "hl-lex-spacer" });
+
+		const pick = row.createSpan({
+			cls: "hl-lex-tctl",
+			text: this.selectMode ? "完成" : "选择",
+		});
+		pick.addEventListener("click", () => {
+			this.selectMode = !this.selectMode;
+			if (!this.selectMode) this.selectedIds.clear();
+			this.render();
+		});
 
 		// save: appears only when the desk differs from the saved view
 		const bound = this.boundView();
@@ -685,20 +715,9 @@ export class LexiconView extends ItemView {
 		if (!bound) return;
 		if (!bound.study) {
 			const strip = main.createDiv({ cls: "hl-lex-strip is-idle" });
-			const invite = strip.createSpan({
+			strip.createSpan({
 				cls: "hl-lex-strip-invite",
-				text: "把此视图加入学习 →",
-			});
-			invite.addEventListener("click", () => {
-				if (!bound.from || !bound.to.length) {
-					new Notice("先在工具行选择出发语言和目标语言");
-					return;
-				}
-				void this.saveViews(
-					this.views.map((v) =>
-						v.name === bound.name ? { ...v, study: true } : v
-					)
-				).then(() => new Notice(`「${bound.name}」已开始学习`));
+				text: "悬停词条按 ＋ 加入学习，第一张卡自动开始",
 			});
 			return;
 		}
@@ -813,7 +832,22 @@ export class LexiconView extends ItemView {
 		const bound = this.boundView();
 		const schedule = this.schedule();
 		const now = new Date();
-		const entry = main.createDiv({ cls: "hl-lex-entry" });
+		const picked = this.selectedIds.has(e.id);
+		const entry = main.createDiv({
+			cls: `hl-lex-entry${this.selectMode ? " is-selecting" : ""}${
+				picked ? " is-picked" : ""
+			}`,
+		});
+		if (this.selectMode) {
+			const tick = entry.createDiv({ cls: "hl-lex-tick" });
+			setIcon(tick, picked ? "check-circle-2" : "circle");
+			entry.addEventListener("click", () => {
+				if (this.selectedIds.has(e.id))
+					this.selectedIds.delete(e.id);
+				else this.selectedIds.add(e.id);
+				this.render();
+			});
+		}
 
 		// head: word + reading + type + hover actions
 		const head = entry.createDiv({ cls: "hl-lex-ehead" });
@@ -842,47 +876,38 @@ export class LexiconView extends ItemView {
 			);
 		if (e.type) head.createSpan({ cls: "hl-lex-etype", text: e.type });
 		const acts = head.createDiv({ cls: "hl-lex-eacts" });
-		if (bound?.study) {
-			const inFilter =
-				bound.follow && entityMatchesView(e, bound);
-			const isMember = inFilter || bound.members.includes(e.id);
-			if (!isMember) {
-				const add = acts.createSpan({ cls: "hl-lex-eact" });
-				setIcon(add, "plus");
-				add.setAttr("aria-label", `加入「${bound.name}」学习`);
-				add.addEventListener("click", () =>
-					void this.saveViews(
-						this.views.map((v) =>
-							v.name === bound.name
-								? { ...v, members: [...v.members, e.id] }
-								: v
-						)
-					).then(() => new Notice(`已加入「${bound.name}」`))
-				);
-			} else if (!inFilter) {
-				const rm = acts.createSpan({ cls: "hl-lex-eact" });
-				setIcon(rm, "minus");
-				rm.setAttr("aria-label", "移出学习（进度保留）");
-				rm.addEventListener("click", () =>
-					void this.saveViews(
-						this.views.map((v) =>
-							v.name === bound.name
-								? {
-										...v,
-										members: v.members.filter(
-											(id) => id !== e.id
-										),
-								  }
-								: v
-						)
-					).then(() => new Notice("已移出学习（进度保留）"))
-				);
-			}
+		const target = this.plusTarget();
+		const isMember =
+			target != null &&
+			((target.follow && entityMatchesView(e, target)) ||
+				target.members.includes(e.id));
+		if (!isMember) {
+			const add = acts.createSpan({ cls: "hl-lex-eact" });
+			setIcon(add, "plus");
+			add.setAttr(
+				"aria-label",
+				target ? `加入「${target.name}」学习` : "加入学习…"
+			);
+			add.addEventListener("click", (ev) => {
+				ev.stopPropagation();
+				this.addToStudy([e.id], ev);
+			});
+		} else if (target && target.members.includes(e.id)) {
+			const rm = acts.createSpan({ cls: "hl-lex-eact" });
+			setIcon(rm, "minus");
+			rm.setAttr("aria-label", "移出学习（进度保留）");
+			rm.addEventListener("click", (ev) => {
+				ev.stopPropagation();
+				this.removeFromStudy(target, [e.id]);
+			});
 		}
 		const edit = acts.createSpan({ cls: "hl-lex-eact" });
 		setIcon(edit, "pencil");
 		edit.setAttr("aria-label", "编辑词条");
-		edit.addEventListener("click", () => this.editEntity(e));
+		edit.addEventListener("click", (ev) => {
+			ev.stopPropagation();
+			this.editEntity(e);
+		});
 
 		// language rows
 		const langsBox = entry.createDiv({ cls: "hl-lex-langs" });
@@ -928,7 +953,10 @@ export class LexiconView extends ItemView {
 			);
 			const plus = blank.createSpan({ cls: "hl-lex-blank-plus" });
 			setIcon(plus, "plus");
-			blank.addEventListener("click", () => this.editEntity(e));
+			blank.addEventListener("click", (ev) => {
+				ev.stopPropagation();
+				this.editEntity(e);
+			});
 			return;
 		}
 		const key = `${e.id}:${lang}`;
@@ -951,7 +979,8 @@ export class LexiconView extends ItemView {
 				text: `／${aliases.join("／")}`,
 			});
 		word.setAttr("aria-label", revealed ? "点击遮住" : "点击揭开");
-		word.addEventListener("click", () => {
+		word.addEventListener("click", (ev) => {
+			ev.stopPropagation();
 			if (revealed) this.revealed.delete(key);
 			else this.revealed.add(key);
 			word.toggleClass("hl-db-mask", revealed);
@@ -971,9 +1000,10 @@ export class LexiconView extends ItemView {
 				const play = row.createSpan({ cls: "hl-lex-audio" });
 				setIcon(play, "volume-2");
 				play.setAttr("aria-label", "播放发音");
-				play.addEventListener("click", () =>
-					playEntityAudio(this.plugin, audio.link)
-				);
+				play.addEventListener("click", (ev) => {
+					ev.stopPropagation();
+					playEntityAudio(this.plugin, audio.link);
+				});
 			}
 		}
 		// mastery dots for studied directions
@@ -1043,34 +1073,22 @@ export class LexiconView extends ItemView {
 		const expanded = this.ctxOpen.has(e.id);
 		const idx = (this.ctxIndex.get(e.id) ?? 0) % hints.length;
 		const hint = hints[idx];
-		const labels = e.labels.map((l) => l.text);
 		const quote = box.createSpan({
 			cls: `hl-lex-ctx-q${expanded ? " is-open" : ""}`,
 		});
 		quote.createSpan({ cls: "hl-lex-ctx-mark", text: "「" });
-		for (const seg of maskedSegments(hint.raw, labels)) {
-			if (typeof seg === "string") {
-				quote.createSpan({ text: seg });
-				continue;
-			}
-			const ckey = `${e.id}:ctx:${idx}:${seg.hidden}`;
-			const open = this.ctxRevealed.has(ckey);
-			const mask = quote.createSpan({
-				cls: `hl-db-ref${open ? "" : " hl-db-mask"}`,
-				text: seg.hidden,
-			});
-			mask.setAttr("aria-label", open ? "点击遮住" : "点击揭开");
-			mask.addEventListener("click", (ev) => {
-				ev.stopPropagation();
-				const nowOpen = this.ctxRevealed.has(ckey);
-				if (nowOpen) this.ctxRevealed.delete(ckey);
-				else this.ctxRevealed.add(ckey);
-				mask.toggleClass("hl-db-mask", nowOpen);
-			});
-		}
+		renderContextMarkdown(
+			this.plugin,
+			hint.raw,
+			e.id,
+			quote.createSpan({ cls: "hl-lex-ctx-body" }),
+			this.colors,
+			hint.kind === "note" ? hint.path : ""
+		);
 		quote.createSpan({ cls: "hl-lex-ctx-mark", text: "」" });
-		// clicking the quote (not a mask) expands / collapses
-		quote.addEventListener("click", () => {
+		// clicking the quote (not an entity span) expands / collapses
+		quote.addEventListener("click", (ev) => {
+			ev.stopPropagation();
 			if (this.ctxOpen.has(e.id)) this.ctxOpen.delete(e.id);
 			else this.ctxOpen.add(e.id);
 			box.empty();
@@ -1082,7 +1100,8 @@ export class LexiconView extends ItemView {
 				text: `${idx + 1} / ${hints.length} ›`,
 			});
 			pager.setAttr("aria-label", "换一条语境");
-			pager.addEventListener("click", () => {
+			pager.addEventListener("click", (ev) => {
+				ev.stopPropagation();
 				this.ctxIndex.set(e.id, idx + 1);
 				box.empty();
 				this.fillContext(box, e);
@@ -1099,7 +1118,8 @@ export class LexiconView extends ItemView {
 			"aria-label",
 			hint.kind === "note" ? "跳到笔记原文" : "在时间线上显示"
 		);
-		src.addEventListener("click", () => {
+		src.addEventListener("click", (ev) => {
+			ev.stopPropagation();
 			if (hint.kind === "note")
 				void jumpToLocation(
 					this.app,
@@ -1115,6 +1135,239 @@ export class LexiconView extends ItemView {
 		new EntityModal(this.app, this.plugin, e, false, () => {
 			this.queueReload();
 		}).open();
+	}
+
+	// ── study membership ──
+
+	// The deck a bare «+» lands in: the current view (even when its filters
+	// were tweaked afterwards), else the view that last received members.
+	private plusTarget(): ReciteView | null {
+		return (
+			this.boundView() ??
+			this.views.find((v) => v.name === this.lastTarget) ??
+			null
+		);
+	}
+
+	private addToStudy(ids: string[], ev?: MouseEvent): void {
+		const target = this.plusTarget();
+		if (target) {
+			void this.addMembers(target, ids);
+			return;
+		}
+		const menu = new Menu();
+		for (const v of this.views)
+			menu.addItem((i) =>
+				i
+					.setTitle(`加入「${v.name}」`)
+					.setIcon(v.study ? "brain" : "bookmark")
+					.onClick(() => void this.addMembers(v, ids))
+			);
+		if (this.views.length) menu.addSeparator();
+		menu.addItem((i) =>
+			i
+				.setTitle("保存为新视图并加入…")
+				.setIcon("plus")
+				.onClick(() =>
+					new NameModal(this.app, "保存视图", "", (name) => {
+						if (this.views.some((v) => v.name === name)) {
+							new Notice("已有同名视图");
+							return;
+						}
+						const view = { ...this.draft, name };
+						this.selected = name;
+						this.views = [...this.views, view];
+						void this.addMembers(view, ids);
+					}).open()
+				)
+		);
+		if (ev) menu.showAtMouseEvent(ev);
+	}
+
+	private async addMembers(
+		view: ReciteView,
+		ids: string[]
+	): Promise<void> {
+		if (!view.from || !view.to.length) {
+			new Notice("先在工具行选择出发语言和目标语言");
+			return;
+		}
+		const add = ids.filter((id) => !view.members.includes(id));
+		this.lastTarget = view.name;
+		if (!add.length && view.study) {
+			new Notice("已在学习中");
+			return;
+		}
+		await this.saveViews(
+			this.views.map((v) =>
+				v.name === view.name
+					? {
+							...v,
+							study: true,
+							members: [...v.members, ...add],
+					  }
+					: v
+			)
+		);
+		new Notice(`已加入「${view.name}」· ${add.length} 个词条`);
+	}
+
+	private removeFromStudy(view: ReciteView, ids: string[]): void {
+		const drop = new Set(ids);
+		void this.saveViews(
+			this.views.map((v) =>
+				v.name === view.name
+					? {
+							...v,
+							members: v.members.filter(
+								(id) => !drop.has(id)
+							),
+					  }
+					: v
+			)
+		).then(() => new Notice("已移出学习（进度保留）"));
+	}
+
+	// ── multi-select ──
+
+	private renderSelectBar(main: HTMLElement): void {
+		const bar = main.createDiv({ cls: "hl-lex-selbar" });
+		bar.createSpan({
+			cls: "hl-lex-selbar-count",
+			text: `已选 ${this.selectedIds.size}`,
+		});
+		const act = (label: string, fn: (ev: MouseEvent) => void): void => {
+			const el = bar.createSpan({
+				cls: "hl-lex-selbar-act",
+				text: label,
+			});
+			el.addEventListener("click", (ev) => {
+				if (!this.selectedIds.size) {
+					new Notice("先勾选词条");
+					return;
+				}
+				fn(ev);
+			});
+		};
+		act("加入学习", (ev) =>
+			this.addToStudy([...this.selectedIds], ev)
+		);
+		const target = this.plusTarget();
+		if (target?.study)
+			act("移出学习", () =>
+				this.removeFromStudy(target, [...this.selectedIds])
+			);
+		act("打标签…", () =>
+			new NameModal(this.app, "给选中词条打标签", "", (tag) =>
+				void this.batchEdit((e) => {
+					const k = normTag(tag);
+					if (!e.tags.some((t) => normTag(t) === k))
+						e.tags.push(k);
+				})
+			).open()
+		);
+		const more = bar.createSpan({ cls: "hl-lex-selbar-act" });
+		setIcon(more, "ellipsis");
+		more.addEventListener("click", (ev) => {
+			if (!this.selectedIds.size) {
+				new Notice("先勾选词条");
+				return;
+			}
+			this.selectMoreMenu(ev);
+		});
+		bar.createDiv({ cls: "hl-lex-spacer" });
+		const done = bar.createSpan({
+			cls: "hl-lex-selbar-act is-strong",
+			text: "完成",
+		});
+		done.addEventListener("click", () => {
+			this.selectMode = false;
+			this.selectedIds.clear();
+			this.render();
+		});
+	}
+
+	private selectMoreMenu(ev: MouseEvent): void {
+		const menu = new Menu();
+		menu.addItem((i) =>
+			i
+				.setTitle("移除标签…")
+				.setIcon("tag")
+				.onClick(() =>
+					new NameModal(this.app, "从选中词条移除标签", "", (tag) =>
+						void this.batchEdit((e) => {
+							const k = normTag(tag);
+							e.tags = e.tags.filter(
+								(t) => normTag(t) !== k
+							);
+						})
+					).open()
+				)
+		);
+		menu.addItem((i) =>
+			i
+				.setTitle("改类型…")
+				.setIcon("shapes")
+				.onClick(() =>
+					new NameModal(this.app, "设置类型", "", (type) =>
+						void this.batchEdit((e) => {
+							e.type = type.trim();
+						})
+					).open()
+				)
+		);
+		menu.addItem((i) =>
+			i
+				.setTitle("复制 ID 列表")
+				.setIcon("copy")
+				.onClick(() => {
+					void navigator.clipboard?.writeText(
+						[...this.selectedIds].join("\n")
+					);
+					new Notice(`已复制 ${this.selectedIds.size} 个 ID`);
+				})
+		);
+		menu.addSeparator();
+		menu.addItem((i) =>
+			i
+				.setTitle("删除词条…")
+				.setIcon("trash")
+				.onClick(() =>
+					new ConfirmModal(
+						this.app,
+						"删除词条",
+						`删除选中的 ${this.selectedIds.size} 个词条？笔记里的标记会失去引用。`,
+						"删除",
+						() => void this.deleteSelected()
+					).open()
+				)
+		);
+		menu.showAtMouseEvent(ev);
+	}
+
+	private async batchEdit(
+		mutate: (e: EntityEntry) => void
+	): Promise<void> {
+		const stamp = new Date().toISOString();
+		for (const id of this.selectedIds) {
+			const e = this.entities.get(id);
+			if (!e) continue;
+			mutate(e);
+			e.updated = stamp;
+		}
+		await this.plugin.store.writeEntities(this.entities);
+		new Notice(`已更新 ${this.selectedIds.size} 个词条`);
+		this.needsRender = true;
+		await this.reload();
+	}
+
+	private async deleteSelected(): Promise<void> {
+		for (const id of this.selectedIds) this.entities.delete(id);
+		await this.plugin.store.writeEntities(this.entities);
+		new Notice(`已删除 ${this.selectedIds.size} 个词条`);
+		this.selectedIds.clear();
+		this.needsRender = true;
+		await this.reload();
 	}
 
 	// ── study session ──
@@ -1155,7 +1408,9 @@ export class LexiconView extends ItemView {
 				this.player = null;
 				this.needsRender = true;
 				void this.reload();
-			}
+			},
+			this.contexts ?? new Map(),
+			this.colors
 		);
 		this.player = player;
 		this.playing = true;

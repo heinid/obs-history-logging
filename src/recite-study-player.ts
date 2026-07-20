@@ -8,9 +8,14 @@ import { setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { EntityEntry, orderLangs } from "./db-format";
 import { QuizSchedule } from "./quiz";
-import { langDisplayName, playEntityAudio } from "./quiz-render";
+import {
+	DbColors,
+	langDisplayName,
+	playEntityAudio,
+} from "./quiz-render";
 import { PlayerPage } from "./player-shell";
 import { shuffle } from "./session-queue";
+import { ContextHint, renderContextMarkdown } from "./recite-context";
 import {
 	ReciteProgress,
 	newProgress,
@@ -34,6 +39,7 @@ export class StudyPlayerPage extends PlayerPage {
 	private items: StudyItem[] = [];
 	private index = 0;
 	private results = { remembered: 0, forgot: 0 };
+	private ctxIdx = new Map<string, number>();
 
 	constructor(
 		plugin: HistoryLoggingPlugin,
@@ -42,10 +48,15 @@ export class StudyPlayerPage extends PlayerPage {
 		items: StudyItem[],
 		private schedule: QuizSchedule,
 		private onRecord: (rec: ReciteProgress) => void,
-		onExit: () => void
+		onExit: () => void,
+		private contexts: Map<string, ContextHint[]> = new Map(),
+		private colors: DbColors = new Map()
 	) {
 		super(plugin, deckLabel, onExit);
 		this.items = shuffle(items);
+		// The dictionary-style card masks answers in place, so there is no
+		// separate front / “show answer” step.
+		this.revealed = true;
 	}
 
 	protected done(): number {
@@ -84,16 +95,56 @@ export class StudyPlayerPage extends PlayerPage {
 	protected renderBack(card: HTMLElement): void {
 		const item = this.items[this.index];
 		if (!item) return;
-		card.createDiv({
-			cls: "hl-player-question hl-player-question-dim hl-recite-prompt",
+		const head = card.createDiv({ cls: "hl-lex-ehead hl-study-head" });
+		head.createSpan({
+			cls: "hl-lex-word",
 			text: this.label(item.entity, this.from) ?? item.entity.id,
 		});
-		const rows = card.createDiv({ cls: "hl-recite-answers" });
+		const reading = item.entity.readings.find(
+			(r) => r.lang === this.from && r.text.trim()
+		);
+		if (reading)
+			head.createSpan({
+				cls: "hl-lex-reading",
+				text: reading.text,
+			});
+		const rows = card.createDiv({ cls: "hl-lex-langs hl-study-rows" });
 		const ordered = orderLangs(item.langs.map((l) => l.lang));
 		for (const lang of ordered) {
 			const slot = item.langs.find((l) => l.lang === lang);
 			if (!slot) continue;
 			this.renderRow(rows, item, slot);
+		}
+		this.renderContext(card, item.entity);
+	}
+
+	private renderContext(card: HTMLElement, e: EntityEntry): void {
+		const hints = this.contexts.get(e.id) ?? [];
+		if (!hints.length) return;
+		const idx = (this.ctxIdx.get(e.id) ?? 0) % hints.length;
+		const hint = hints[idx];
+		const box = card.createDiv({ cls: "hl-lex-ctx hl-study-ctx" });
+		const quote = box.createSpan({ cls: "hl-lex-ctx-q is-open" });
+		quote.createSpan({ cls: "hl-lex-ctx-mark", text: "「" });
+		renderContextMarkdown(
+			this.plugin,
+			hint.raw,
+			e.id,
+			quote.createSpan({ cls: "hl-lex-ctx-body" }),
+			this.colors,
+			hint.kind === "note" ? hint.path : ""
+		);
+		quote.createSpan({ cls: "hl-lex-ctx-mark", text: "」" });
+		if (hints.length > 1) {
+			const pager = box.createSpan({
+				cls: "hl-lex-ctx-pager",
+				text: `${idx + 1} / ${hints.length} ›`,
+			});
+			pager.setAttr("aria-label", "换一条语境");
+			pager.addEventListener("click", () => {
+				this.ctxIdx.set(e.id, idx + 1);
+				this.render();
+			});
 		}
 	}
 
@@ -103,51 +154,44 @@ export class StudyPlayerPage extends PlayerPage {
 		slot: StudyLang
 	): void {
 		const row = host.createDiv({
-			cls: `hl-recite-answer-row hl-study-row${
-				slot.due ? " is-due" : ""
-			}${slot.rated ? ` is-${slot.rated}` : ""}`,
+			cls: `hl-lex-lrow hl-study-row${slot.due ? " is-due" : " is-rest"}${
+				slot.rated ? ` is-${slot.rated}` : ""
+			}`,
 		});
 		row.createSpan({
-			cls: "hl-recite-lang",
+			cls: "hl-lex-lname",
 			text: langDisplayName(slot.lang),
 		});
 		const text = this.label(item.entity, slot.lang) ?? "";
-		if (!slot.revealed) {
-			const mask = row.createEl("button", {
-				cls: "hl-study-mask",
-				text: "点击揭开",
-			});
-			mask.addEventListener("click", () => {
-				slot.revealed = true;
-				this.render();
-			});
-		} else {
-			const word = row.createSpan({
-				cls: "hl-recite-word hl-study-word",
-				text,
-			});
-			word.setAttr("aria-label", "再次遮住");
-			word.addEventListener("click", () => {
-				if (slot.rated) return;
-				slot.revealed = false;
-				this.render();
-			});
+		// The answer sits in place under the standard cloze blur; clicking
+		// reveals, clicking the revealed word (before rating) re-masks.
+		const word = row.createSpan({
+			cls: `hl-lex-answer hl-db-ref${
+				slot.revealed ? "" : " hl-db-mask"
+			}`,
+			text,
+		});
+		word.setAttr("aria-label", slot.revealed ? "再次遮住" : "点击揭开");
+		word.addEventListener("click", () => {
+			if (slot.rated) return;
+			slot.revealed = !slot.revealed;
+			this.render();
+		});
+		if (slot.revealed) {
 			const reading = item.entity.readings.find(
 				(r) => r.lang === slot.lang && r.text.trim()
 			);
 			if (reading)
 				row.createSpan({
-					cls: "hl-recite-reading",
+					cls: "hl-lex-reading",
 					text: reading.text,
 				});
 			const audio = item.entity.audios.find(
 				(a) => a.lang === slot.lang
 			);
 			if (audio) {
-				const play = row.createEl("button", {
-					cls: "hl-recite-audio",
-					text: "▶",
-				});
+				const play = row.createSpan({ cls: "hl-lex-audio" });
+				setIcon(play, "volume-2");
 				play.setAttr("aria-label", "播放发音");
 				play.addEventListener("click", () =>
 					playEntityAudio(this.plugin, audio.link)
@@ -156,38 +200,41 @@ export class StudyPlayerPage extends PlayerPage {
 		}
 		const side = row.createDiv({ cls: "hl-study-row-side" });
 		if (slot.rated) {
-			const mark = side.createSpan({ cls: "hl-study-rated" });
+			const mark = side.createSpan({
+				cls: `hl-study-rated is-${slot.rated}`,
+			});
 			setIcon(mark, slot.rated === "remembered" ? "check" : "x");
 		} else if (slot.revealed && slot.due) {
-			for (const [result, icon, label] of [
-				["forgot", "x", "不记得"],
-				["remembered", "check", "记得"],
+			for (const [result, label] of [
+				["remembered", "记得"],
+				["forgot", "忘了"],
 			] as const) {
-				const btn = side.createEl("button", {
-					cls: `hl-study-rate is-${result}`,
+				const link = side.createSpan({
+					cls: `hl-study-link is-${result}`,
+					text: label,
 				});
-				setIcon(btn, icon);
-				btn.setAttr("aria-label", label);
-				btn.addEventListener("click", () =>
+				link.addEventListener("click", () =>
 					this.rate(item, slot, result)
 				);
 			}
-		} else if (!slot.due) {
-			const dots = side.createSpan({
-				cls: "hl-study-dots",
-				text: this.dots(slot),
-			});
-			dots.setAttr("aria-label", "该方向暂不到期");
 		}
+		this.renderDots(side, slot);
 	}
 
-	private dots(slot: StudyLang): string {
+	private renderDots(side: HTMLElement, slot: StudyLang): void {
 		const steps = Math.max(1, this.schedule.masterySteps);
 		const p =
 			slot.progress?.status === "mastered"
 				? steps
 				: slot.progress?.progress ?? 0;
-		return "●".repeat(Math.min(p, steps)) + "○".repeat(steps - Math.min(p, steps));
+		const dots = side.createSpan({ cls: "hl-lex-dots" });
+		for (let i = 0; i < steps; i++)
+			dots.createSpan({ cls: `hl-lex-dot${i < p ? " is-f" : ""}` });
+		if (slot.progress?.status === "mastered") dots.addClass("is-done");
+		dots.setAttr(
+			"aria-label",
+			slot.due ? `掌握 ${p}/${steps}` : "该方向暂不到期"
+		);
 	}
 
 	private rate(
@@ -204,10 +251,7 @@ export class StudyPlayerPage extends PlayerPage {
 		this.onRecord(
 			reviewProgress(base, result, new Date(), this.schedule)
 		);
-		if (item.langs.every((l) => !l.due || l.rated)) {
-			this.index++;
-			this.revealed = false;
-		}
+		if (item.langs.every((l) => !l.due || l.rated)) this.index++;
 		this.render();
 	}
 

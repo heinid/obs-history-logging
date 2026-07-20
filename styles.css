@@ -4712,71 +4712,165 @@ input.hl-tag-chip-input:focus-visible {
 	color: var(--text-faint);
 }
 
-/* ── Study session (per-language rating) ────────────────────────── */
+/* markdown-rendered occurrence line: inline, quiet */
+.hl-lex-ctx-body {
+	min-width: 0;
+}
+.hl-lex-ctx-body p,
+.hl-lex-ctx-body ul,
+.hl-lex-ctx-body ol,
+.hl-lex-ctx-body h1,
+.hl-lex-ctx-body h2,
+.hl-lex-ctx-body h3,
+.hl-lex-ctx-body h4 {
+	display: inline;
+	margin: 0;
+	padding: 0;
+	font-size: inherit;
+	font-weight: inherit;
+	color: inherit;
+	line-height: inherit;
+}
+.hl-lex-ctx-body a {
+	color: inherit;
+}
+.hl-lex-ctx-q:not(.is-open) .hl-lex-ctx-body {
+	white-space: nowrap;
+}
+
+/* multi-select */
+.hl-lex-entry {
+	position: relative;
+}
+.hl-lex-entry.is-selecting {
+	padding-left: 36px;
+	cursor: pointer;
+}
+.hl-lex-entry.is-picked {
+	background: var(--background-modifier-hover);
+	box-shadow: inset 2px 0 0 var(--interactive-accent);
+}
+.hl-lex-tick {
+	position: absolute;
+	left: 10px;
+	top: 20px;
+	display: inline-flex;
+	color: var(--text-faint);
+}
+.hl-lex-entry.is-picked .hl-lex-tick {
+	color: var(--interactive-accent);
+}
+.hl-lex-tick svg {
+	width: 16px;
+	height: 16px;
+}
+.hl-lex-selbar {
+	position: sticky;
+	bottom: 12px;
+	margin-top: 16px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	border-radius: 10px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+}
+.hl-lex-selbar-count {
+	font-size: 0.88em;
+	font-weight: 600;
+	margin-right: 8px;
+	font-variant-numeric: tabular-nums;
+}
+.hl-lex-selbar-act {
+	font-size: 0.88em;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 3px 8px;
+	border-radius: 6px;
+	display: inline-flex;
+	align-items: center;
+}
+.hl-lex-selbar-act:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.hl-lex-selbar-act.is-strong {
+	color: var(--interactive-accent);
+	font-weight: 500;
+}
+.hl-lex-selbar-act svg {
+	width: 15px;
+	height: 15px;
+}
+
+/* ── Study session (per-language rating, dictionary-style card) ─── */
 .hl-study-ask {
 	color: var(--text-muted);
 	font-size: 0.95em;
 	margin-top: 8px;
 }
-.hl-study-row {
-	min-height: 34px;
+.hl-study-head {
+	margin-bottom: 4px;
 }
-.hl-study-row.is-remembered .hl-recite-word {
+.hl-study-rows {
+	margin-top: 12px;
+}
+.hl-study-row {
+	min-height: 32px;
+}
+.hl-study-row.is-rest {
+	opacity: 0.55;
+}
+.hl-study-row.is-remembered .hl-lex-answer,
+.hl-study-row.is-forgot .hl-lex-answer {
 	color: var(--text-muted);
 }
 .hl-study-row-side {
 	margin-left: auto;
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 12px;
 }
-.hl-study-mask {
-	flex: 0 1 160px;
-	height: 22px;
-	border-radius: 6px;
+.hl-study-link {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 4px 6px;
+	border-radius: 5px;
+	animation: hl-study-link-in 150ms ease 150ms backwards;
+}
+@keyframes hl-study-link-in {
+	from {
+		opacity: 0;
+	}
+}
+.hl-study-link:hover {
 	background: var(--background-modifier-hover);
-	border: none;
-	box-shadow: none;
-	cursor: pointer;
-	color: var(--text-faint);
-	font-size: 0.75em;
 }
-.hl-study-word {
-	cursor: pointer;
+.hl-study-link.is-remembered:hover {
+	color: var(--color-green);
 }
-.hl-study-rate {
-	width: 30px;
-	height: 30px;
-	border-radius: 8px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	padding: 0;
-	cursor: pointer;
-}
-.hl-study-rate svg {
-	width: 15px;
-	height: 15px;
-}
-.hl-study-rate.is-remembered {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
+.hl-study-link.is-forgot:hover {
+	color: var(--color-red);
 }
 .hl-study-rated {
 	display: inline-flex;
 	color: var(--text-muted);
 }
+.hl-study-rated.is-remembered {
+	color: var(--color-green);
+}
+.hl-study-rated.is-forgot {
+	color: var(--color-red);
+}
 .hl-study-rated svg {
 	width: 15px;
 	height: 15px;
 }
-.hl-study-dots {
-	font-size: 0.7em;
-	letter-spacing: 2px;
-	color: var(--interactive-accent);
-}
-.hl-study-dots.is-due {
-	color: var(--text-accent);
+.hl-study-ctx {
+	margin: 14px 0 0 16px;
 }
 .hl-study-progress-note {
 	color: var(--text-muted);

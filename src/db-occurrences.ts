@@ -25,6 +25,7 @@ export interface NoteOccurrence {
 	offset: number; // char offset of the marker (LF-normalised)
 	length: number; // marker length, for jump selection
 	snippet: string; // cleaned text of the containing line
+	raw: string; // containing line with `{db …}` markers preserved
 	fnId?: string; // wrapping highlight id, when present
 }
 
@@ -43,6 +44,21 @@ function annotationDates(content: string): Map<string, string> {
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(content)) !== null) out.set(m[1], m[2]);
 	return out;
+}
+
+// The line as renderable markdown: `{db …}` markers kept intact so it can
+// go through the same rendering pipeline as notes/summaries; the highlight
+// wrapper, `{;; …}` line notes and `{ev …}` marks removed.
+function rawLine(line: string): string {
+	return line
+		.replace(/~=\{[^{}]*\}/g, "")
+		.replace(/=~/g, "")
+		.replace(/\{;;[^{}]*\}/g, "")
+		.replace(/\{ev\s+[^{}]*\}/g, "")
+		.replace(/^#{1,6}\s+/, "")
+		.replace(/^\s*[-*]\s+/, "")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 // The line's text cleaned for display: markers folded to their text, the
@@ -86,6 +102,7 @@ export function scanNoteOccurrences(
 			offset: m.index,
 			length: m[0].length,
 			snippet: cleanLine(line),
+			raw: rawLine(line),
 			fnId,
 		});
 		if (fnId) {

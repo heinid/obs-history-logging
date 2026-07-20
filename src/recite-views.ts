@@ -36,8 +36,8 @@ export interface ReciteView {
 	sort: ViewSort;
 	// Whether the view carries a study deck with persistent progress.
 	study: boolean;
-	// Study membership follows the filter (new matches auto-join) or is
-	// the fixed `members` list only.
+	// Study membership is the fixed `members` list by default; opt-in
+	// follow mode auto-joins every filter match.
 	follow: boolean;
 	// Explicitly added entity ids (kept even when follow is true, so cards
 	// added under a temporary filter tweak stay members).
@@ -60,7 +60,7 @@ export function emptyView(name = ""): ReciteView {
 		group: "none",
 		sort: "created",
 		study: false,
-		follow: true,
+		follow: false,
 		members: [],
 	};
 }
@@ -124,7 +124,7 @@ export function serializeReciteViewsFile(views: ReciteView[]): string {
 		if (v.group !== "none") parts.push(`group: ${v.group}`);
 		if (v.sort !== "created") parts.push(`sort: ${v.sort}`);
 		if (v.study) parts.push("study: true");
-		if (!v.follow) parts.push("follow: false");
+		if (v.follow) parts.push("follow: true");
 		if (v.members.length) parts.push(`members: ${v.members.join(", ")}`);
 		parts.push("");
 	}
