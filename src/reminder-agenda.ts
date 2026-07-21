@@ -1,4 +1,4 @@
-import { App, Modal, setIcon } from "obsidian";
+import { App, EventRef, Modal, TFile, setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { QuizEntry, isQuizParked, isQuizWaiting } from "./quiz";
 import { quizQuestion, quizSchedule } from "./quiz-display";
@@ -31,15 +31,21 @@ function inShortPipeline(shape: QuizEntry, now: Date, due: number, schedule: Ret
 	return isQuizWaiting(shape, now, schedule);
 }
 
+// Under an hour the label is a live mm:ss countdown (ticked every second);
+// farther out it stays coarse — second precision means nothing there.
 function dueLabel(due: number, now: number): string {
-	const minutes = Math.max(1, Math.round(Math.abs(due - now) / 60_000));
-	const span =
-		minutes < 60
-			? `${minutes} 分钟`
-			: minutes < 24 * 60
-			? `${Math.round(minutes / 60)} 小时`
-			: `${Math.round(minutes / (24 * 60))} 天`;
-	return due <= now ? `${span}前到期` : `${span}后`;
+	const diff = Math.abs(due - now);
+	let span: string;
+	if (diff < 60 * 60_000) {
+		const total = Math.max(0, Math.floor(diff / 1000));
+		const pad = (n: number): string => String(n).padStart(2, "0");
+		span = `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+	} else if (diff < 24 * 60 * 60_000) {
+		span = `${Math.round(diff / (60 * 60_000))} 小时`;
+	} else {
+		span = `${Math.round(diff / (24 * 60 * 60_000))} 天`;
+	}
+	return due <= now ? `${span} 前到期` : `${span} 后`;
 }
 
 function clockLabel(due: number): string {
@@ -49,6 +55,13 @@ function clockLabel(due: number): string {
 }
 
 export class ReminderAgendaModal extends Modal {
+	// Countdown cells refreshed in place every second; a row crossing its due
+	// moment triggers one full re-render (it moves between groups).
+	private tickers: { el: HTMLElement; due: number; overdue: boolean }[] =
+		[];
+	private ticker: number | null = null;
+	private modifyRef: EventRef | null = null;
+
 	constructor(app: App, private plugin: HistoryLoggingPlugin) {
 		super(app);
 	}
@@ -56,6 +69,28 @@ export class ReminderAgendaModal extends Modal {
 	async onOpen(): Promise<void> {
 		this.modalEl.addClass("hl-agenda-modal");
 		await this.render();
+		this.ticker = window.setInterval(() => this.tick(), 1000);
+		// Every status change lands in a dataFolder file sooner or later;
+		// re-collect on write so answers, snoozes and removals made in other
+		// windows show up while the agenda is open.
+		this.modifyRef = this.app.vault.on("modify", (f) => {
+			if (
+				f instanceof TFile &&
+				f.path.startsWith(this.plugin.settings.dataFolder + "/")
+			)
+				void this.render();
+		});
+	}
+
+	private tick(): void {
+		const now = Date.now();
+		for (const t of this.tickers) {
+			if (t.due <= now !== t.overdue) {
+				void this.render();
+				return;
+			}
+			t.el.setText(dueLabel(t.due, now));
+		}
 	}
 
 	private async collect(): Promise<AgendaItem[]> {
@@ -134,6 +169,7 @@ export class ReminderAgendaModal extends Modal {
 		const host = this.contentEl;
 		host.empty();
 		host.addClass("hl-agenda");
+		this.tickers = [];
 		const items = await this.collect();
 		const now = Date.now();
 		const head = host.createDiv({ cls: "hl-agenda-head" });
@@ -203,10 +239,11 @@ export class ReminderAgendaModal extends Modal {
 					text: "一次性",
 				});
 			const side = row.createDiv({ cls: "hl-agenda-side" });
-			side.createSpan({
+			const dueEl = side.createSpan({
 				cls: `hl-agenda-due${overdue ? " is-due" : ""}`,
 				text: dueLabel(item.due, now),
 			});
+			this.tickers.push({ el: dueEl, due: item.due, overdue });
 			side.createSpan({
 				cls: "hl-agenda-clock",
 				text: clockLabel(item.due),
@@ -221,6 +258,11 @@ export class ReminderAgendaModal extends Modal {
 	}
 
 	onClose(): void {
+		if (this.ticker !== null) window.clearInterval(this.ticker);
+		this.ticker = null;
+		if (this.modifyRef) this.app.vault.offref(this.modifyRef);
+		this.modifyRef = null;
+		this.tickers = [];
 		this.contentEl.empty();
 	}
 }
