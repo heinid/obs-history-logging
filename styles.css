@@ -5030,3 +5030,158 @@ input.hl-tag-chip-input:focus-visible {
 	font-size: 0.82em;
 	font-variant-numeric: tabular-nums;
 }
+
+/* Reminder agenda: one list over both short-wait pipelines (quizzes and
+   lexicon directions), grouped into due-now and still-waiting. */
+.hl-agenda-modal {
+	max-width: 560px;
+	width: 92vw;
+}
+.hl-agenda-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+.hl-agenda-head-icon {
+	display: flex;
+	color: var(--text-muted);
+}
+.hl-agenda-head-icon svg {
+	width: 17px;
+	height: 17px;
+}
+.hl-agenda-title {
+	font-weight: 600;
+	font-size: 1.05em;
+}
+.hl-agenda-count {
+	margin-left: auto;
+	color: var(--text-faint);
+	font-size: 0.85em;
+	font-variant-numeric: tabular-nums;
+}
+.hl-agenda-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	padding: 40px 0 32px;
+	color: var(--text-faint);
+}
+.hl-agenda-empty-icon {
+	display: flex;
+	color: var(--color-green);
+	opacity: 0.7;
+}
+.hl-agenda-empty-icon svg {
+	width: 28px;
+	height: 28px;
+}
+.hl-agenda-section {
+	margin-top: 16px;
+}
+.hl-agenda-heading {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	margin-bottom: 6px;
+	padding: 0 2px;
+}
+.hl-agenda-heading-label {
+	font-size: 0.78em;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}
+.hl-agenda-heading-label.is-due {
+	color: var(--color-red);
+}
+.hl-agenda-heading-count {
+	font-size: 0.78em;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+.hl-agenda-list {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	overflow: hidden;
+}
+.hl-agenda-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 14px;
+	cursor: pointer;
+	transition: background 0.1s ease;
+}
+.hl-agenda-row + .hl-agenda-row {
+	border-top: 1px solid var(--background-modifier-border);
+}
+.hl-agenda-row:hover {
+	background: var(--background-modifier-hover);
+}
+.hl-agenda-kind {
+	display: flex;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.hl-agenda-row.is-due .hl-agenda-kind {
+	color: var(--text-muted);
+}
+.hl-agenda-kind svg {
+	width: 16px;
+	height: 16px;
+}
+.hl-agenda-body {
+	flex: 1;
+	min-width: 0;
+}
+.hl-agenda-item-title {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: 0.95em;
+}
+.hl-agenda-meta {
+	display: flex;
+	gap: 6px;
+	margin-top: 2px;
+}
+.hl-agenda-tag {
+	font-size: 0.75em;
+	color: var(--text-faint);
+	background: var(--background-secondary);
+	border-radius: var(--radius-s);
+	padding: 0 6px;
+	line-height: 1.6;
+}
+.hl-agenda-tag.is-oneshot {
+	color: var(--color-orange);
+	background: color-mix(in srgb, var(--color-orange) 10%, transparent);
+}
+.hl-agenda-side {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 1px;
+	flex-shrink: 0;
+}
+.hl-agenda-due {
+	font-size: 0.82em;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+.hl-agenda-due.is-due {
+	color: var(--color-red);
+	font-weight: 500;
+}
+.hl-agenda-clock {
+	font-size: 0.75em;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}

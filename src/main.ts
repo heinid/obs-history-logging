@@ -47,6 +47,7 @@ import { quizSchedule } from "./quiz-display";
 import { ModalStash } from "./modal-stash";
 import { setDisplayLangOrder } from "./db-format";
 import { QuizReminderModal } from "./quiz-reminder";
+import { ReminderAgendaModal } from "./reminder-agenda";
 import { ReciteReminderModal } from "./recite-reminder";
 import {
 	ReciteProgress,
@@ -219,6 +220,13 @@ export default class HistoryLoggingPlugin extends Plugin {
 			id: "open-lexicon",
 			name: "打开词汇",
 			callback: () => void this.openLexicon(),
+		});
+		this.addCommand({
+			id: "open-reminder-agenda",
+			name: "打开重温清单",
+			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "r" }],
+			callback: () =>
+				new ReminderAgendaModal(this.app, this).open(),
 		});
 		this.addCommand({
 			id: "check-data-health",
@@ -634,6 +642,16 @@ export default class HistoryLoggingPlugin extends Plugin {
 	// that opens the reminder on click.
 	private surfaceQuizReminder(quizId: string): void {
 		void this.routeQuizReminder(quizId);
+	}
+
+	// Entry point for the reminder agenda: open (or queue into) the quiz
+	// reminder window directly, skipping the active-view routing.
+	openQuizReminder(quizId: string): void {
+		this.popQuizReminder(quizId);
+	}
+
+	openReciteReminder(key: string): void {
+		this.popReciteReminder(key);
 	}
 
 	// When the recitation hub is the active view the user is already inside
