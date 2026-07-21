@@ -3030,26 +3030,23 @@ input.hl-tag-chip-input:focus-visible {
 /* Quiz popup: the practice/reminder modal hosting the recitation-player
    chrome — undo the modal's fixed-height practice frame and the player's
    full-height centering. */
+/* Match the recitation-tab card exactly: 560px-wide block, fixed 240px
+   body. The window is the block width plus the modal's own padding. */
 .hl-quiz-popup-window {
-	width: 560px;
-	max-width: 92vw;
+	width: 600px;
+	max-width: 94vw;
 }
 .hl-quiz-practice.hl-quiz-popup {
+	padding: 20px;
 	height: auto;
 	overflow: visible;
 }
 .hl-quiz-popup .hl-player {
 	min-height: 0;
-	max-width: none;
 }
 .hl-quiz-popup .hl-player::before,
 .hl-quiz-popup .hl-player::after {
 	display: none;
-}
-.hl-quiz-popup .hl-player-body {
-	min-height: 300px;
-	max-height: 60vh;
-	overflow-y: auto;
 }
 .hl-quiz-popup .hl-popup-context {
 	color: var(--text-muted);
