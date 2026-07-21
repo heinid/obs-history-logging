@@ -1938,7 +1938,7 @@ input.hl-tag-chip-input:focus-visible {
 .hl-quiz-editor .hl-modal-foot {
 	margin-top: auto;
 }
-.modal:has(.hl-quiz-practice):not(.hl-map-exam-window) {
+.modal:has(.hl-quiz-practice):not(.hl-map-exam-window):not(.hl-quiz-popup-window) {
 	width: min(480px, calc(100vw - 64px));
 	max-width: 84vw;
 }
