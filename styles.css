@@ -3031,7 +3031,7 @@ input.hl-tag-chip-input:focus-visible {
    chrome — undo the modal's fixed-height practice frame and the player's
    full-height centering. */
 .hl-quiz-popup-window {
-	width: 620px;
+	width: 560px;
 	max-width: 92vw;
 }
 .hl-quiz-practice.hl-quiz-popup {
@@ -3047,8 +3047,8 @@ input.hl-tag-chip-input:focus-visible {
 	display: none;
 }
 .hl-quiz-popup .hl-player-body {
-	min-height: 120px;
-	max-height: 48vh;
+	min-height: 300px;
+	max-height: 60vh;
 	overflow-y: auto;
 }
 .hl-quiz-popup .hl-popup-context {
