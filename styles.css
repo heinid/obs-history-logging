@@ -3047,13 +3047,7 @@ input.hl-tag-chip-input:focus-visible {
 	padding: 2px 0 6px;
 }
 .hl-quiz-popup .hl-quiz-reminder-banner {
-	margin-bottom: 4px;
-	padding: 3px 6px 3px 10px;
-}
-.hl-quiz-popup .hl-quiz-reminder-actions button {
-	height: auto;
-	padding: 2px 10px;
-	font-size: 0.85em;
+	margin-bottom: 2px;
 }
 .hl-quiz-popup .hl-player {
 	min-height: 0;
