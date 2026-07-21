@@ -45,7 +45,7 @@ function dueLabel(due: number, now: number): string {
 	} else {
 		span = `${Math.round(diff / (24 * 60 * 60_000))} 天`;
 	}
-	return due <= now ? `${span} 前到期` : `${span} 后`;
+	return span;
 }
 
 function clockLabel(due: number): string {
