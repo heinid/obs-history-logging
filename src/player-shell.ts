@@ -35,6 +35,22 @@ export abstract class PlayerPage {
 	protected abstract renderActions(bar: HTMLElement): void;
 	protected abstract renderSummary(host: HTMLElement): void;
 	protected headExtra(_head: HTMLElement): void {}
+
+	// Bar above the card: back button, subclass extras, counter. The popup
+	// player replaces it with a context line (no session to go back to).
+	protected renderTop(top: HTMLElement): void {
+		const back = top.createEl("button", { cls: "hl-player-back" });
+		setIcon(back, "arrow-left");
+		back.createSpan({ text: this.deckLabel });
+		back.setAttr("aria-label", "返回 deck 列表");
+		back.addEventListener("click", () => this.onExit());
+		this.headExtra(top);
+		if (!this.finished())
+			top.createSpan({
+				cls: "hl-player-counter",
+				text: this.counterText(),
+			});
+	}
 	// Small controls anchored in the footer's side zones (hint toggle,
 	// timeline jump…); the card face itself carries content only.
 	protected footerExtras(_left: HTMLElement, _right: HTMLElement): void {}
@@ -77,18 +93,7 @@ export abstract class PlayerPage {
 		host.empty();
 		host.addClass("hl-player");
 
-		const top = host.createDiv({ cls: "hl-player-top" });
-		const back = top.createEl("button", { cls: "hl-player-back" });
-		setIcon(back, "arrow-left");
-		back.createSpan({ text: this.deckLabel });
-		back.setAttr("aria-label", "返回 deck 列表");
-		back.addEventListener("click", () => this.onExit());
-		this.headExtra(top);
-		if (!this.finished())
-			top.createSpan({
-				cls: "hl-player-counter",
-				text: this.counterText(),
-			});
+		this.renderTop(host.createDiv({ cls: "hl-player-top" }));
 
 		// One continuous block: progress bar as the card's top edge, the
 		// question body, then a footer bar the buttons are anchored in —

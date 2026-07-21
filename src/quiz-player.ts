@@ -13,14 +13,13 @@ import {
 	isQuizWaiting,
 	reviewQuiz,
 } from "./quiz";
+import { nextReviewLabel, quizSchedule } from "./quiz-display";
+import { DbColors, loadDbColors } from "./quiz-render";
 import {
-	clozeRevealsInline,
-	nextReviewLabel,
-	quizAnswer,
-	quizQuestion,
-	quizSchedule,
-} from "./quiz-display";
-import { DbColors, loadDbColors, renderQuizText } from "./quiz-render";
+	renderQuizFaceBack,
+	renderQuizFaceFront,
+	renderQuizRateButtons,
+} from "./quiz-popup-player";
 import {
 	SessionQueueState,
 	interject,
@@ -257,60 +256,47 @@ export class QuizPlayerPage extends PlayerPage {
 	protected renderFront(card: HTMLElement): void {
 		const quiz = this.current();
 		if (!quiz) return;
-		const question = card.createDiv({ cls: "hl-player-question" });
-		renderQuizText(
+		renderQuizFaceFront(
 			this.plugin,
-			quizQuestion(quiz, this.eventOf(quiz), false),
-			question,
-			this.dbColors
+			quiz,
+			this.eventOf(quiz),
+			this.dbColors,
+			this.hintShown,
+			card,
+			quiz.kind === "map"
+				? (host): void =>
+						void renderMapQuizSurface(
+							this.plugin,
+							quiz,
+							host.createDiv({ cls: "hl-player-map" }),
+							this.dbColors,
+							false
+						)
+				: undefined
 		);
-		if (quiz.kind === "map")
-			void renderMapQuizSurface(
-				this.plugin,
-				quiz,
-				card.createDiv({ cls: "hl-player-map" }),
-				this.dbColors,
-				false
-			);
-		if (this.hintShown && quiz.hint) {
-			const hint = card.createDiv({ cls: "hl-player-hint" });
-			renderQuizText(this.plugin, quiz.hint, hint, this.dbColors);
-		}
 	}
 
 	protected renderBack(card: HTMLElement): void {
 		const quiz = this.current();
 		if (!quiz) return;
-		const question = card.createDiv({
-			cls: "hl-player-question hl-player-question-dim",
-		});
-		renderQuizText(
+		renderQuizFaceBack(
 			this.plugin,
-			quizQuestion(quiz, this.eventOf(quiz), true),
-			question,
-			this.dbColors
+			quiz,
+			this.eventOf(quiz),
+			this.dbColors,
+			this.hintShown,
+			card,
+			quiz.kind === "map"
+				? (host): void =>
+						void renderMapQuizSurface(
+							this.plugin,
+							quiz,
+							host.createDiv({ cls: "hl-player-map" }),
+							this.dbColors,
+							true
+						)
+				: undefined
 		);
-		if (quiz.kind === "map")
-			void renderMapQuizSurface(
-				this.plugin,
-				quiz,
-				card.createDiv({ cls: "hl-player-map" }),
-				this.dbColors,
-				true
-			);
-		if (!clozeRevealsInline(quiz)) {
-			const answer = card.createDiv({ cls: "hl-player-answer" });
-			renderQuizText(
-				this.plugin,
-				quizAnswer(quiz, this.eventOf(quiz)),
-				answer,
-				this.dbColors
-			);
-		}
-		if (this.hintShown && quiz.hint) {
-			const hint = card.createDiv({ cls: "hl-player-hint" });
-			renderQuizText(this.plugin, quiz.hint, hint, this.dbColors);
-		}
 	}
 
 	protected headExtra(head: HTMLElement): void {
@@ -412,23 +398,7 @@ export class QuizPlayerPage extends PlayerPage {
 			next.addEventListener("click", () => this.advance());
 			return;
 		}
-		for (const [result, label, key, note] of [
-			["forgot", "不记得", "1", "退一级 · 10 分钟后重试"],
-			["remembered", "记得", "2", "进一级"],
-		] as [QuizResult, string, string, string][]) {
-			const button = bar.createEl("button", {
-				cls: "hl-player-rate",
-			});
-			if (result === "remembered") button.addClass("mod-cta");
-			button.createDiv({ text: label });
-			button.createDiv({
-				cls: "hl-player-rate-note",
-				text: `${key} · ${note}`,
-			});
-			button.addEventListener("click", () =>
-				void this.rate(quiz, result)
-			);
-		}
+		renderQuizRateButtons(bar, (result) => void this.rate(quiz, result));
 	}
 
 	handleKey(ev: KeyboardEvent): boolean {

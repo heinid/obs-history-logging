@@ -19,7 +19,6 @@ import {
 	reviveQuiz,
 } from "./quiz";
 import {
-	clozeRevealsInline,
 	nextReviewLabel,
 	quizAnswer,
 	quizQuestion,
@@ -33,6 +32,7 @@ import { makeClozeMarked, stripDbMarkers } from "./db-marker";
 import { DbColors, loadDbColors, renderQuizText } from "./quiz-render";
 import { attachAnnotateMenu } from "./textarea-annotate";
 import { renderMapExamHeader, renderMapExamStage } from "./map-occlusion";
+import { QuizPopupPlayer } from "./quiz-popup-player";
 
 export class QuizManagerModal extends Modal {
 	private event?: EventEntry;
@@ -551,8 +551,26 @@ export class QuizPracticeModal extends Modal {
 	protected quiz?: QuizEntry;
 	private event?: EventEntry;
 	private dbColors: DbColors = new Map();
+	private quizIds = new Set<string>();
+	private player: QuizPopupPlayer | null = null;
+	private editing = false;
 	protected revealed = false;
 	protected hintShown = false;
+	private keyHandler = (ev: KeyboardEvent): void => {
+		const target = ev.target as HTMLElement | null;
+		if (
+			target &&
+			(target instanceof HTMLInputElement ||
+				target instanceof HTMLTextAreaElement ||
+				target.isContentEditable)
+		)
+			return;
+		if (this.editing) return;
+		if (this.player?.handleKey(ev)) {
+			ev.preventDefault();
+			ev.stopPropagation();
+		}
+	};
 
 	constructor(
 		app: App,
@@ -565,12 +583,15 @@ export class QuizPracticeModal extends Modal {
 
 	async onOpen(): Promise<void> {
 		this.plugin.modalStash.track(this);
+		this.containerEl.addEventListener("keydown", this.keyHandler);
 		await this.loadQuiz();
 		this.render();
 	}
 
 	protected async loadQuiz(): Promise<void> {
-		this.quiz = (await this.plugin.store.readQuizzes()).get(this.quizId);
+		const quizzes = await this.plugin.store.readQuizzes();
+		this.quizIds = new Set(quizzes.keys());
+		this.quiz = quizzes.get(this.quizId);
 		this.event = this.quiz
 			? await this.plugin.store.getEvent(this.quiz.sourceEvId)
 			: undefined;
@@ -579,11 +600,7 @@ export class QuizPracticeModal extends Modal {
 
 	// Reload quiz/event/colors but keep the reveal and hint state.
 	async onStashRestore(): Promise<void> {
-		this.quiz = (await this.plugin.store.readQuizzes()).get(this.quizId);
-		this.event = this.quiz
-			? await this.plugin.store.getEvent(this.quiz.sourceEvId)
-			: undefined;
-		this.dbColors = await loadDbColors(this.plugin);
+		await this.loadQuiz();
 		this.render();
 	}
 
@@ -598,6 +615,8 @@ export class QuizPracticeModal extends Modal {
 		const isMap = quiz?.kind === "map";
 		this.modalEl.toggleClass("hl-map-exam-window", isMap);
 		host.toggleClass("hl-map-exam", isMap);
+		this.modalEl.toggleClass("hl-quiz-popup-window", !isMap);
+		host.toggleClass("hl-quiz-popup", !isMap);
 		this.renderBanner(host);
 		if (!quiz) {
 			host.createDiv({ cls: "hl-empty", text: "找不到这个 Quiz。" });
@@ -610,96 +629,66 @@ export class QuizPracticeModal extends Modal {
 			return;
 		}
 
-		const head = host.createDiv({ cls: "hl-quiz-practice-head" });
-		head.createSpan({ cls: "hl-quiz-practice-title", text: "Quiz" });
-		const state = head.createDiv({ cls: "hl-quiz-practice-state" });
-		state.createSpan({
-			text: quiz.status === "mastered" ? "学过" : "在学",
-		});
-		state.createSpan({
-			text: `掌握 ${quiz.progress}/${this.plugin.settings.quizMasterySteps}`,
-		});
-		if (!ready)
-			state.createSpan({
-				cls: "hl-quiz-cooling",
-				text: nextReviewLabel(quiz, new Date(), schedule),
-			});
-
-		const surface = host.createDiv({ cls: "hl-quiz-practice-surface" });
-		{
-			const context = surface.createDiv({
-				cls: "hl-quiz-practice-context",
-			});
-			const decoded = this.event?.tag
-				? parseYearTag(this.event.tag)
-				: null;
-			context.createSpan({
-				text: decoded
-					? describeYear(decoded)
-					: this.event?.tag ?? "来源事件已不存在",
-			});
-		}
-
-		const questionPanel = surface.createDiv({
-			cls: `hl-quiz-practice-panel hl-quiz-practice-question-panel${
-				clozeRevealsInline(quiz) ? " is-cloze" : ""
-			}`,
-		});
-		questionPanel.createDiv({
-			cls: "hl-quiz-practice-label",
-			text: clozeRevealsInline(quiz) ? "填空" : "问题",
-		});
-		const question = questionPanel.createDiv({
-			cls: "hl-quiz-practice-question",
-		});
-		renderQuizText(
+		// Non-map quizzes: the recitation-player chrome hosting this one
+		// card, so the popup looks exactly like the study tab.
+		const playerHost = host.createDiv({ cls: "hl-quiz-popup-player" });
+		this.player = new QuizPopupPlayer(
 			this.plugin,
-			quizQuestion(quiz, this.event, this.revealed),
-			question,
-			this.dbColors
+			quiz,
+			this.event,
+			this.dbColors,
+			{
+				onRate: (result) => void this.rate(result),
+				onClose: () => this.close(),
+				onEdit: this.event ? () => this.openEditor() : undefined,
+				onReveal: () => {
+					this.revealed = true;
+				},
+				onHint: () => {
+					this.hintShown = true;
+				},
+				counter: () => this.queueCounter(),
+			},
+			this.revealed,
+			this.hintShown
 		);
+		this.player.mount(playerHost);
+	}
 
-		if (this.hintShown && quiz.hint) {
-			const hint = questionPanel.createDiv({ cls: "hl-quiz-practice-hint" });
-			hint.createSpan({ text: "提示" });
-			const hintBody = hint.createDiv();
-			renderQuizText(this.plugin, quiz.hint, hintBody, this.dbColors);
-		}
+	// Extra text in the top bar's counter slot; the reminder subclass shows
+	// its queue size here.
+	protected queueCounter(): string {
+		return "";
+	}
 
-		const answerPanel = surface.createDiv({
-			cls: `hl-quiz-practice-panel hl-quiz-practice-answer-panel${
-				this.revealed ? " is-revealed" : ""
-			}`,
-		});
-		answerPanel.createDiv({
-			cls: "hl-quiz-practice-label",
-			text: "答案",
-		});
-		if (!this.revealed) {
-			answerPanel.createDiv({
-				cls: "hl-quiz-practice-placeholder",
-				text: clozeRevealsInline(quiz)
-					? "先在心里补全空缺，再显示答案"
-					: "先在心里回答，再显示答案",
-			});
-		} else if (clozeRevealsInline(quiz)) {
-			answerPanel.createDiv({
-				cls: "hl-quiz-practice-inline-note",
-				text: "答案已在上方空缺处原位显示",
-			});
-		} else {
-			const answer = answerPanel.createDiv({
-				cls: "hl-quiz-practice-answer",
-			});
-			renderQuizText(
-				this.plugin,
-				quizAnswer(quiz, this.event),
-				answer,
-				this.dbColors
+	// Footer pencil / E: edit this quiz's text fields in place; the card
+	// re-renders on save, scheduling state untouched.
+	private openEditor(): void {
+		const quiz = this.quiz;
+		const event = this.event;
+		if (!quiz || !event) return;
+		if (quiz.kind === "map" && quiz.sourceMapId) {
+			void this.plugin.openMapViewer(
+				quiz.sourceMapId,
+				() => void this.onStashRestore(),
+				quiz.occlusionId
 			);
+			return;
 		}
-
-		this.renderPracticeFooter(host, quiz, ready, schedule, false);
+		this.editing = true;
+		new QuizEditorModal(this.app, this.plugin, {
+			event,
+			tag: event.tag ?? "",
+			quizIds: this.quizIds,
+			existing: quiz,
+			initialKind: quiz.kind,
+			clozeAnswer: "",
+			ensure: async () => true,
+			onSaved: () => void this.onStashRestore(),
+			onClosed: () => {
+				this.editing = false;
+			},
+		}).open();
 	}
 
 	// Immersive map exam: a solid header bar (the "lintel") holds the
@@ -743,22 +732,23 @@ export class QuizPracticeModal extends Modal {
 			const answer = drawer.createDiv({ cls: "hl-map-exam-answer" });
 			renderQuizText(this.plugin, answerText, answer, this.dbColors);
 		}
-		this.renderPracticeFooter(bottom, quiz, ready, schedule, true);
+		this.renderPracticeFooter(bottom, quiz, ready, schedule);
 	}
 
+	// Map-exam footer: edit / hint on the left, reveal or rating on the
+	// right (non-map quizzes use the popup player's own action bar).
 	private renderPracticeFooter(
 		host: HTMLElement,
 		quiz: QuizEntry,
 		ready: boolean,
-		schedule: QuizSchedule,
-		isMap: boolean
+		schedule: QuizSchedule
 	): void {
 		const footer = host.createDiv({ cls: "hl-quiz-practice-footer" });
 		const auxiliary = footer.createDiv({
 			cls: "hl-quiz-practice-auxiliary",
 		});
 		const sourceMapId = quiz.sourceMapId;
-		if (isMap && sourceMapId) {
+		if (sourceMapId) {
 			const edit = auxiliary.createEl("button", {
 				cls: "hl-map-exam-editbtn",
 			});
@@ -842,6 +832,9 @@ export class QuizPracticeModal extends Modal {
 	}
 
 	onClose(): void {
+		this.containerEl.removeEventListener("keydown", this.keyHandler);
+		this.player?.unmount();
+		this.player = null;
 		this.plugin.modalStash.untrack(this);
 		this.contentEl.empty();
 		this.onClosed?.();

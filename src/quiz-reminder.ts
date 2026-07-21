@@ -47,6 +47,10 @@ export class QuizReminderModal extends QuizPracticeModal {
 		later.addEventListener("click", () => this.close());
 	}
 
+	protected queueCounter(): string {
+		return this.queue.length ? `队列还有 ${this.queue.length} 道` : "";
+	}
+
 	private snoozeMinutes(): number {
 		const schedule = quizSchedule(this.plugin.settings);
 		const base = this.quiz?.pendingRecheck
