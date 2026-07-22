@@ -68,9 +68,18 @@ export function isQuizNew(quiz: QuizEntry): boolean {
 
 // A card sitting in the short retry/recheck pipeline: its last real
 // attempt (early successes change nothing and are skipped) did not clear
-// the current step, so the card stays mid-gate until it passes.
-export function isQuizShortLoop(quiz: QuizEntry): boolean {
-	if (quiz.status !== "active") return false;
+// the current step. The episode lapses once the wait is `parkMinutes`
+// stale — an unanswered retry falls back to its regular home.
+export function isQuizShortLoop(
+	quiz: QuizEntry,
+	now = new Date(),
+	schedule = DEFAULT_QUIZ_SCHEDULE
+): boolean {
+	if (quiz.status !== "active" || !quiz.nextReview) return false;
+	const due = Date.parse(quiz.nextReview);
+	if (Number.isNaN(due)) return false;
+	if (now.getTime() > due + Math.max(0, schedule.parkMinutes) * 60_000)
+		return false;
 	for (let i = quiz.attempts.length - 1; i >= 0; i--) {
 		const a = quiz.attempts[i];
 		if (a.early && a.result !== "forgot") continue;

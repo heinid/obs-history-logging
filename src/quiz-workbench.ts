@@ -232,16 +232,17 @@ export class QuizWorkbench {
 		return out;
 	}
 
-	// One home per card: mastered → 学过; mid-gate short loop → 稍后;
-	// never answered → 待学习; otherwise due → 待复习 or interval → 在学.
+	// One home per card: mastered → 学过; live short loop → 稍后; never
+	// passed a step → 待学习; otherwise due → 待复习 or interval → 在学.
 	private section(
 		q: QuizEntry,
 		now: Date,
 		schedule: ReturnType<typeof quizSchedule>
 	): Exclude<StudyFilter, null> {
 		if (q.status === "mastered") return "mastered";
-		if (isQuizShortLoop(q)) return "waiting";
-		if (!q.attempts.length) return "fresh";
+		if (isQuizShortLoop(q, now, schedule)) return "waiting";
+		if (!q.attempts.some((a) => a.progressAfter > a.progressBefore))
+			return "fresh";
 		return isQuizReady(q, now, schedule) ? "due" : "active";
 	}
 
@@ -1122,7 +1123,8 @@ export class QuizWorkbench {
 		const schedule = this.schedule();
 		// Only short-loop cards speak: a countdown while waiting, a quiet
 		// 可练 once the wait is over. Every other state is the section's job.
-		if (!isQuizShortLoop(quiz)) return { text: "", cls: "" };
+		if (!isQuizShortLoop(quiz, now, schedule))
+			return { text: "", cls: "" };
 		if (isQuizWaiting(quiz, now, schedule)) {
 			const wait = nextReviewLabel(quiz, now, schedule);
 			return {
