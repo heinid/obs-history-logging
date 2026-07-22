@@ -12,7 +12,6 @@ import { Profile } from "./profiles";
 import {
 	QuizEntry,
 	QuizKind,
-	isQuizNew,
 	isQuizReady,
 	isQuizUnlearned,
 	isQuizWaiting,
@@ -1131,16 +1130,17 @@ export class QuizWorkbench {
 		if (quiz.status === "mastered") {
 			return { text: "学过", cls: "" };
 		}
-		// A fresh card carries no state text — untouched dots say it all.
-		if (isQuizNew(quiz)) return { text: "", cls: "" };
-		if (isQuizReady(quiz, now, schedule))
-			return { text: "待复习", cls: " is-overdue" };
 		const wait = nextReviewLabel(quiz, now, schedule);
 		if (isQuizWaiting(quiz, now, schedule))
 			return {
 				text: wait ? `⏰ ${wait}` : "⏰ 稍后",
 				cls: " is-wait",
 			};
+		// A never-passed card carries no state text — untouched dots say
+		// it all.
+		if (isQuizUnlearned(quiz)) return { text: "", cls: "" };
+		if (isQuizReady(quiz, now, schedule))
+			return { text: "待复习", cls: " is-overdue" };
 		return { text: wait, cls: "" };
 	}
 
