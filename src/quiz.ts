@@ -66,6 +66,17 @@ export function isQuizNew(quiz: QuizEntry): boolean {
 	);
 }
 
+// A card that has never been passed: nothing in its history ever raised
+// the progress above zero. Short retry/recheck waits after a failed first
+// learn keep the card here.
+export function isQuizUnlearned(quiz: QuizEntry): boolean {
+	return (
+		quiz.status === "active" &&
+		quiz.progress === 0 &&
+		!quiz.attempts.some((a) => a.progressAfter > 0)
+	);
+}
+
 export function isQuizReady(
 	quiz: QuizEntry,
 	now = new Date(),

@@ -14,6 +14,7 @@ import {
 	QuizKind,
 	isQuizNew,
 	isQuizReady,
+	isQuizUnlearned,
 	isQuizWaiting,
 	reviveQuiz,
 } from "./quiz";
@@ -241,12 +242,12 @@ export class QuizWorkbench {
 			switch (this.studyFilter) {
 				case "due":
 					return (
-						!isQuizNew(q) &&
+						!isQuizUnlearned(q) &&
 						q.status === "active" &&
 						isQuizReady(q, now, schedule)
 					);
 				case "fresh":
-					return isQuizNew(q);
+					return isQuizUnlearned(q);
 				case "waiting":
 					return isQuizWaiting(q, now, schedule);
 				case "active":
@@ -846,7 +847,7 @@ export class QuizWorkbench {
 				);
 				return [
 					s.due,
-					pool.filter(isQuizNew).length,
+					pool.filter(isQuizUnlearned).length,
 					s.waiting,
 					s.active,
 					s.mastered,
@@ -879,25 +880,30 @@ export class QuizWorkbench {
 				this.ctx.rerender();
 			});
 		};
-		const fresh = quizzes.filter(isQuizNew).length;
-		seg("due", "待复习", stats.due - fresh, " is-due");
-		seg("fresh", "待学习", fresh);
+		const now = new Date();
+		const schedule = this.schedule();
+		const dueN = quizzes.filter(
+			(q) =>
+				!isQuizUnlearned(q) &&
+				q.status === "active" &&
+				isQuizReady(q, now, schedule)
+		).length;
+		seg("due", "待复习", dueN, " is-due");
+		seg("fresh", "待学习", quizzes.filter(isQuizUnlearned).length);
 		seg("waiting", "稍后", stats.waiting, " is-wait");
 		seg("active", "在学", stats.active);
 		seg("mastered", "学过", stats.mastered);
 		strip.createDiv({ cls: "hl-lex-spacer" });
 		const label = this.selected ?? "全部 Quiz";
 		const scopeIds = quizzes.map((q) => q.id);
-		const now = new Date();
-		const schedule = this.schedule();
 		// Reviews first, fresh cards after — the session works through what
 		// is actually due before introducing anything new.
 		const ready = quizzes.filter(
 			(q) => q.status === "active" && isQuizReady(q, now, schedule)
 		);
 		const dueIds = [
-			...ready.filter((q) => !isQuizNew(q)),
-			...ready.filter((q) => isQuizNew(q)),
+			...ready.filter((q) => !isQuizUnlearned(q)),
+			...ready.filter((q) => isQuizUnlearned(q)),
 		].map((q) => q.id);
 		const activeIds = quizzes
 			.filter((q) => q.status === "active")
@@ -1034,10 +1040,16 @@ export class QuizWorkbench {
 				{ label: "在学", items: [] },
 				{ label: "学过", items: [] },
 			];
+			// Short retry/recheck waits never move a card between groups:
+			// a never-passed card stays under 待学习, a passed one under
+			// 待复习 — the ⏰ row label alone marks the wait.
 			for (const q of sorted) {
 				if (q.status === "mastered") buckets[3].items.push(q);
-				else if (isQuizNew(q)) buckets[1].items.push(q);
-				else if (isQuizReady(q, now, schedule))
+				else if (isQuizUnlearned(q)) buckets[1].items.push(q);
+				else if (
+					isQuizReady(q, now, schedule) ||
+					isQuizWaiting(q, now, schedule)
+				)
 					buckets[0].items.push(q);
 				else buckets[2].items.push(q);
 			}
