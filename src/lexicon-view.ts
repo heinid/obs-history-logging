@@ -178,6 +178,8 @@ export class LexiconView extends ItemView {
 	private draft: ReciteView = emptyView();
 	private search = "";
 	private studyFilter: StudyFilter = null;
+	// List scroll offset stashed while the study player owns the pane.
+	private savedScroll = 0;
 	private sortDesc = false;
 	private revealed = new Set<string>(); // `${id}:${lang}`
 	private ctxOpen = new Set<string>(); // entity ids with expanded context
@@ -481,7 +483,8 @@ export class LexiconView extends ItemView {
 		this.persistLibraryParams();
 		const root = this.contentEl;
 		const scroller = root.querySelector(".hl-lex-main");
-		const prevScroll = scroller ? scroller.scrollTop : 0;
+		const prevScroll = scroller ? scroller.scrollTop : this.savedScroll;
+		this.savedScroll = 0;
 		root.empty();
 		root.addClass("hl-lex-view");
 		this.playing = false;
@@ -2186,6 +2189,8 @@ export class LexiconView extends ItemView {
 		this.player = player;
 		this.playing = true;
 		const root = this.contentEl;
+		this.savedScroll =
+			root.querySelector(".hl-lex-main")?.scrollTop ?? 0;
 		root.empty();
 		root.addClass("hl-lex-view");
 		player.mount(root.createDiv());
