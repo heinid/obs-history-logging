@@ -1099,11 +1099,24 @@ export class QuizWorkbench {
 
 		const meta = mainCol.createDiv({ cls: "hl-qd-meta" });
 		const decoded = event?.tag ? parseYearTag(event.tag) : null;
-		if (decoded || event?.tag)
-			meta.createSpan({
-				cls: "hl-qd-meta-year",
-				text: decoded ? describeYear(decoded) : event?.tag ?? "",
+		if (decoded || event?.tag) {
+			// The year is the answer of an unmastered YEAR quiz — never
+			// show it. Other rows follow the hover-to-peek setting.
+			const hideYear =
+				quiz.kind === "year" && quiz.status !== "mastered";
+			const peek =
+				!hideYear &&
+				this.ctx.plugin.settings.quizHoverHideYears;
+			const year = meta.createSpan({
+				cls: `hl-qd-meta-year${peek ? " hl-qd-year-peek" : ""}`,
+				text: hideYear
+					? "年份？"
+					: decoded
+					? describeYear(decoded)
+					: event?.tag ?? "",
 			});
+			if (peek) year.setAttr("aria-label", "悬停显示年份");
+		}
 		if (quiz.kind === "map" && quiz.sourceMapId) {
 			const map = this.ctx.maps().get(quiz.sourceMapId);
 			if (map) {

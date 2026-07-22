@@ -5376,6 +5376,16 @@ input.hl-tag-chip-input:focus-visible {
 .hl-qd-row:hover .hl-qd-acts {
 	display: inline-flex;
 }
+.hl-qd-year-peek {
+	filter: blur(5px);
+	transition: filter 120ms ease;
+	cursor: default;
+	user-select: none;
+}
+.hl-qd-year-peek:hover,
+.hl-qd-year-peek:active {
+	filter: none;
+}
 .hl-qd-chiprow {
 	display: flex;
 	flex-wrap: wrap;
