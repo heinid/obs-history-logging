@@ -58,7 +58,13 @@ import { StudyPlayerPage, StudyItem } from "./recite-study-player";
 
 export const LEXICON_VIEW_TYPE = "history-logging-lexicon";
 
-type StudyFilter = null | "due" | "waiting" | "active" | "mastered";
+type StudyFilter =
+	| null
+	| "due"
+	| "waiting"
+	| "active"
+	| "mastered"
+	| "fresh";
 
 function normTag(t: string): string {
 	return t.replace(/^#+/, "").trim();
@@ -419,6 +425,18 @@ export class LexiconView extends ItemView {
 		);
 		if (this.draft.requireFrom && this.draft.from)
 			out = out.filter((e) => hasLang(e, this.draft.from));
+		if (this.studyFilter === "fresh") {
+			// Library words that could be studied but have no minted card.
+			const enrolled = this.enrolledIds();
+			return out.filter(
+				(e) =>
+					!enrolled.has(e.id) &&
+					hasLang(e, this.draft.from) &&
+					this.draft.to.some(
+						(l) => l !== this.draft.from && hasLang(e, l)
+					)
+			);
+		}
 		if (this.studyFilter) {
 			const now = new Date();
 			const schedule = this.schedule();
@@ -1141,7 +1159,9 @@ export class LexiconView extends ItemView {
 			).length;
 			if (fresh > 0) {
 				const el = strip.createSpan({
-					cls: "hl-lex-strip-seg is-rest",
+					cls: `hl-lex-strip-seg is-rest${
+						this.studyFilter === "fresh" ? " is-on" : ""
+					}`,
 				});
 				el.createSpan({
 					cls: "hl-lex-strip-num",
@@ -1149,6 +1169,11 @@ export class LexiconView extends ItemView {
 				});
 				el.createSpan({ text: "未开始" });
 				el.setAttr("aria-label", "还没加入任何学习视图的词条");
+				el.addEventListener("click", () => {
+					this.studyFilter =
+						this.studyFilter === "fresh" ? null : "fresh";
+					this.render();
+				});
 			}
 		}
 		strip.createDiv({ cls: "hl-lex-spacer" });
@@ -1328,6 +1353,34 @@ export class LexiconView extends ItemView {
 				ev.stopPropagation();
 				this.removeFromStudy(this.directionView(), [e.id]);
 			});
+			const hasDue = this.draft.to.some(
+				(lang) =>
+					lang !== this.draft.from &&
+					hasLang(e, lang) &&
+					this.progress.has(
+						progressKey(e.id, this.draft.from, lang)
+					) &&
+					isProgressDue(
+						this.progress.get(
+							progressKey(e.id, this.draft.from, lang)
+						),
+						now,
+						schedule
+					)
+			);
+			if (hasDue) {
+				const go = acts.createSpan({ cls: "hl-lex-eact" });
+				setIcon(go, "brain");
+				go.setAttr("aria-label", "练这个词的到期方向");
+				go.addEventListener("click", (ev) => {
+					ev.stopPropagation();
+					this.startStudy(
+						this.directionView(),
+						true,
+						new Set([e.id])
+					);
+				});
+			}
 		}
 		const edit = acts.createSpan({ cls: "hl-lex-eact" });
 		setIcon(edit, "pencil");
@@ -2073,7 +2126,11 @@ export class LexiconView extends ItemView {
 
 	// ── study session ──
 
-	private startStudy(view: ReciteView, dueOnly: boolean): void {
+	private startStudy(
+		view: ReciteView,
+		dueOnly: boolean,
+		only?: Set<string>
+	): void {
 		const schedule = this.schedule();
 		const now = new Date();
 		const items: StudyItem[] = [];
@@ -2083,6 +2140,7 @@ export class LexiconView extends ItemView {
 			view,
 			this.progress
 		)) {
+			if (only && !only.has(entity.id)) continue;
 			// A language never quizzes itself: from→from is not a direction.
 			// Unminted directions only count for pinned entities.
 			const langs = view.to
