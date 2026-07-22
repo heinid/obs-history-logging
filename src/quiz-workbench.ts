@@ -18,6 +18,7 @@ import {
 } from "./quiz";
 import {
 	nextReviewLabel,
+	quizAnswer,
 	quizQuestion,
 	quizSchedule,
 } from "./quiz-display";
@@ -783,7 +784,7 @@ export class QuizWorkbench {
 		if (dueIds.length) {
 			const go = strip.createEl("button", {
 				cls: "mod-cta",
-				text: `开始背诵 ${dueIds.length}`,
+				text: "开始背诵",
 			});
 			go.addEventListener("click", () =>
 				this.ctx.startSession(
@@ -1011,34 +1012,7 @@ export class QuizWorkbench {
 		const event = this.eventOf(quiz);
 		const colors = this.ctx.colors();
 		const text = mainCol.createDiv({ cls: "hl-qd-text" });
-		renderQuizText(
-			this.ctx.plugin,
-			quizQuestion(quiz, event),
-			text,
-			colors
-		);
-		// The answer masked in place, lexicon style: click to reveal.
-		if (quiz.kind !== "map" && quiz.answer.trim()) {
-			const revealed = this.revealed.has(quiz.id);
-			const answer = text.createSpan({
-				cls: `hl-qd-answer${revealed ? " is-open" : ""}`,
-			});
-			renderQuizText(this.ctx.plugin, quiz.answer, answer, colors);
-			answer.setAttr(
-				"aria-label",
-				revealed ? "点击遮住答案" : "点击显示答案"
-			);
-			answer.addEventListener("click", (ev) => {
-				ev.stopPropagation();
-				if (revealed) this.revealed.delete(quiz.id);
-				else this.revealed.add(quiz.id);
-				answer.toggleClass("is-open", !revealed);
-				answer.setAttr(
-					"aria-label",
-					!revealed ? "点击遮住答案" : "点击显示答案"
-				);
-			});
-		}
+		this.renderQuestion(text, quiz, event, colors);
 
 		const meta = mainCol.createDiv({ cls: "hl-qd-meta" });
 		const decoded = event?.tag ? parseYearTag(event.tag) : null;
@@ -1055,11 +1029,11 @@ export class QuizWorkbench {
 				});
 		}
 		const steps = this.schedule().masterySteps;
-		const dots = meta.createSpan({ cls: "hl-lex-dots" });
+		const dots = meta.createSpan({ cls: "hl-qd-dots" });
 		dots.setAttr("aria-label", `掌握 ${quiz.progress}/${steps}`);
 		for (let i = 0; i < steps; i++)
 			dots.createSpan({
-				cls: `hl-lex-dot${i < quiz.progress ? " is-f" : ""}`,
+				cls: `hl-qd-dot${i < quiz.progress ? " is-on" : ""}`,
 			});
 		if (quiz.cycles.length > 1)
 			meta.createSpan({ text: `第 ${quiz.cycles.length} 轮` });
@@ -1085,10 +1059,10 @@ export class QuizWorkbench {
 				run(ev);
 			});
 		};
+		act("pencil", "编辑", () => this.editRow(quiz, event));
 		if (quiz.status === "mastered")
 			act("rotate-ccw", "重新学习", () => this.reviveRow(quiz));
 		else act("brain", "练习", () => this.practice(quiz));
-		act("pencil", "编辑", () => this.editRow(quiz, event));
 		act("more-horizontal", "更多操作", (ev) =>
 			this.rowMenu(quiz, event, ev)
 		);
@@ -1096,6 +1070,53 @@ export class QuizWorkbench {
 			this.rowMenu(quiz, event, ev)
 		);
 		row.addEventListener("click", () => this.practice(quiz));
+	}
+
+	// The question with its blank masked in place, exactly as in the design
+	// sample: only year/cloze questions carry a `____` blank; the answer sits
+	// blurred at that spot and a click reveals it. Other kinds render the
+	// question as-is, nothing appended.
+	private renderQuestion(
+		host: HTMLElement,
+		quiz: QuizEntry,
+		event: EventEntry | undefined,
+		colors: DbColors
+	): void {
+		const plugin = this.ctx.plugin;
+		const question = quizQuestion(quiz, event);
+		const answer =
+			quiz.kind === "year" || quiz.kind === "cloze"
+				? quizAnswer(quiz, event).trim()
+				: "";
+		const idx = question.indexOf("____");
+		if (!answer || idx < 0) {
+			renderQuizText(plugin, question, host, colors);
+			return;
+		}
+		const before = question.slice(0, idx);
+		const after = question.slice(idx + 4).replace(/____/g, "…");
+		if (before) renderQuizText(plugin, before, host, colors);
+		const revealed = this.revealed.has(quiz.id);
+		const blank = host.createSpan({
+			cls: `hl-qd-blank${revealed ? " is-open" : ""}`,
+		});
+		renderQuizText(plugin, answer, blank, colors);
+		blank.setAttr(
+			"aria-label",
+			revealed ? "点击遮住答案" : "点击显示答案"
+		);
+		blank.addEventListener("click", (ev) => {
+			ev.stopPropagation();
+			const open = !this.revealed.has(quiz.id);
+			if (open) this.revealed.add(quiz.id);
+			else this.revealed.delete(quiz.id);
+			blank.toggleClass("is-open", open);
+			blank.setAttr(
+				"aria-label",
+				open ? "点击遮住答案" : "点击显示答案"
+			);
+		});
+		if (after) renderQuizText(plugin, after, host, colors);
 	}
 
 	private practice(quiz: QuizEntry): void {

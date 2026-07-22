@@ -5312,9 +5312,15 @@ input.hl-tag-chip-input:focus-visible {
 .hl-qd-text {
 	line-height: 1.5;
 }
-.hl-qd-answer {
+/* Markdown renders block paragraphs; the row is a single flowing line, so
+   flatten them (and the split question fragments) back to inline. */
+.hl-qd-text p {
+	display: inline;
+	margin: 0;
+}
+.hl-qd-blank {
 	display: inline-block;
-	margin-left: 6px;
+	min-width: 56px;
 	border-radius: 4px;
 	background: var(--background-modifier-hover);
 	filter: blur(5px);
@@ -5322,11 +5328,14 @@ input.hl-tag-chip-input:focus-visible {
 	cursor: pointer;
 	user-select: none;
 	padding: 0 4px;
+	line-height: 1.35;
+	vertical-align: baseline;
 }
-.hl-qd-answer.is-open {
+.hl-qd-blank.is-open {
 	filter: none;
 	background: transparent;
 	color: var(--text-normal);
+	min-width: 0;
 }
 .hl-qd-meta {
 	display: flex;
@@ -5335,6 +5344,20 @@ input.hl-tag-chip-input:focus-visible {
 	font-size: 0.78em;
 	color: var(--text-faint);
 	align-items: center;
+}
+.hl-qd-dots {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+.hl-qd-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--background-modifier-hover);
+}
+.hl-qd-dot.is-on {
+	background: var(--interactive-accent);
 }
 .hl-qd-meta-year {
 	color: var(--text-muted);
