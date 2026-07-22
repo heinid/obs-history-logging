@@ -1,12 +1,6 @@
 import { App, EventRef, Modal, TFile, setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
-import {
-	QuizEntry,
-	isQuizParked,
-	isQuizReady,
-	isQuizUnlearned,
-	isQuizWaiting,
-} from "./quiz";
+import { QuizEntry, isQuizParked, isQuizWaiting } from "./quiz";
 import { quizQuestion, quizSchedule } from "./quiz-display";
 import { langDisplayName } from "./quiz-render";
 import { toQuizShape } from "./recite-progress";
@@ -266,8 +260,8 @@ export class ReminderAgendaModal extends Modal {
 		}
 	}
 
-	// The workbench row's progress dots and state word, minus the ⏰
-	// countdown — the row's own timer column already covers the wait.
+	// The workbench row's progress dots — no state words here; the group
+	// heading and timer column already tell the story.
 	private renderState(meta: HTMLElement, shape: QuizEntry): void {
 		const schedule = quizSchedule(this.plugin.settings);
 		const steps = Math.max(1, schedule.masterySteps);
@@ -275,16 +269,6 @@ export class ReminderAgendaModal extends Modal {
 		for (let i = 0; i < steps; i++)
 			dots.createSpan({
 				cls: `hl-qd-dot${i < shape.progress ? " is-on" : ""}`,
-			});
-		const now = new Date();
-		if (
-			!isQuizUnlearned(shape) &&
-			!isQuizWaiting(shape, now, schedule) &&
-			isQuizReady(shape, now, schedule)
-		)
-			meta.createSpan({
-				cls: "hl-qd-meta-state is-overdue",
-				text: "待复习",
 			});
 	}
 

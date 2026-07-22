@@ -458,7 +458,7 @@ const forgot = reviewQuiz(
 	new Date("2026-07-10T10:05:00.000Z"),
 	DEFAULT_QUIZ_SCHEDULE
 );
-eq("early forgot regresses", forgot.progress, 0);
+eq("forgot keeps progress", forgot.progress, 1);
 eq("forgot retry interval", forgot.nextReview, "2026-07-10T10:15:00.000Z");
 eq(
 	"forgot card is parked as waiting",
@@ -1197,7 +1197,7 @@ eq(
 		false
 	);
 	const forgot = reviewProgress(learned, "forgot", new Date(Date.parse(learned.nextReview!) + 1000), DEFAULT_QUIZ_SCHEDULE);
-	eq("forgot steps back", forgot.progress, 0);
+	eq("forgot keeps direction progress", forgot.progress, 1);
 	let rec = fresh;
 	for (let i = 0; i < DEFAULT_QUIZ_SCHEDULE.masterySteps; i++) {
 		const at = rec.nextReview

@@ -13,7 +13,7 @@ import {
 	QuizEntry,
 	QuizKind,
 	isQuizReady,
-	isQuizUnlearned,
+	isQuizShortLoop,
 	isQuizWaiting,
 	reviveQuiz,
 } from "./quiz";
@@ -232,30 +232,27 @@ export class QuizWorkbench {
 		return out;
 	}
 
+	// One home per card: mastered → 学过; mid-gate short loop → 稍后;
+	// never answered → 待学习; otherwise due → 待复习 or interval → 在学.
+	private section(
+		q: QuizEntry,
+		now: Date,
+		schedule: ReturnType<typeof quizSchedule>
+	): Exclude<StudyFilter, null> {
+		if (q.status === "mastered") return "mastered";
+		if (isQuizShortLoop(q)) return "waiting";
+		if (!q.attempts.length) return "fresh";
+		return isQuizReady(q, now, schedule) ? "due" : "active";
+	}
+
 	private listed(): QuizEntry[] {
 		const out = this.filtered();
 		if (!this.studyFilter) return out;
 		const now = new Date();
 		const schedule = this.schedule();
 		return out.filter((q) => {
-			switch (this.studyFilter) {
-				case "due":
-					return (
-						!isQuizUnlearned(q) &&
-						q.status === "active" &&
-						isQuizReady(q, now, schedule)
-					);
-				case "fresh":
-					return isQuizUnlearned(q);
-				case "waiting":
-					return isQuizWaiting(q, now, schedule);
-				case "active":
-					return q.status === "active";
-				case "mastered":
-					return q.status === "mastered";
-				default:
-					return true;
-			}
+			if (!this.studyFilter) return true;
+			return this.section(q, now, schedule) === this.studyFilter;
 		});
 	}
 
@@ -839,18 +836,11 @@ export class QuizWorkbench {
 			strip,
 			() => {
 				const pool = this.filtered();
-				const s = quizDeckStats(
-					pool,
-					new Date(),
-					this.schedule()
-				);
-				return [
-					s.due,
-					pool.filter(isQuizUnlearned).length,
-					s.waiting,
-					s.active,
-					s.mastered,
-				].join("|");
+				const now = new Date();
+				const schedule = this.schedule();
+				return pool
+					.map((q) => this.section(q, now, schedule))
+					.join("|");
 			},
 			fill
 		);
@@ -881,29 +871,35 @@ export class QuizWorkbench {
 		};
 		const now = new Date();
 		const schedule = this.schedule();
-		const dueN = quizzes.filter(
-			(q) =>
-				!isQuizUnlearned(q) &&
-				q.status === "active" &&
-				isQuizReady(q, now, schedule)
-		).length;
-		seg("due", "待复习", dueN, " is-due");
-		seg("fresh", "待学习", quizzes.filter(isQuizUnlearned).length);
-		seg("waiting", "稍后", stats.waiting, " is-wait");
-		seg("active", "在学", stats.active);
-		seg("mastered", "学过", stats.mastered);
+		const counts: Record<Exclude<StudyFilter, null>, number> = {
+			due: 0,
+			fresh: 0,
+			waiting: 0,
+			active: 0,
+			mastered: 0,
+		};
+		for (const q of quizzes) counts[this.section(q, now, schedule)]++;
+		seg("due", "待复习", counts.due, " is-due");
+		seg("fresh", "待学习", counts.fresh);
+		seg("waiting", "稍后", counts.waiting, " is-wait");
+		seg("active", "在学", counts.active);
+		seg("mastered", "学过", counts.mastered);
 		strip.createDiv({ cls: "hl-lex-spacer" });
 		const label = this.selected ?? "全部 Quiz";
 		const scopeIds = quizzes.map((q) => q.id);
-		// Reviews first, fresh cards after — the session works through what
-		// is actually due before introducing anything new.
+		// Reviews first, then short-loop retries, fresh cards last — the
+		// session works through what is actually due before anything new.
 		const ready = quizzes.filter(
 			(q) => q.status === "active" && isQuizReady(q, now, schedule)
 		);
-		const dueIds = [
-			...ready.filter((q) => !isQuizUnlearned(q)),
-			...ready.filter((q) => isQuizUnlearned(q)),
-		].map((q) => q.id);
+		const rank = (q: QuizEntry): number => {
+			const s = this.section(q, now, schedule);
+			return s === "due" ? 0 : s === "waiting" ? 1 : 2;
+		};
+		const dueIds = ready
+			.map((q, i) => ({ q, i }))
+			.sort((a, b) => rank(a.q) - rank(b.q) || a.i - b.i)
+			.map((x) => x.q.id);
 		const activeIds = quizzes
 			.filter((q) => q.status === "active")
 			.map((q) => q.id);
@@ -1033,24 +1029,21 @@ export class QuizWorkbench {
 		if (group === "state") {
 			const now = new Date();
 			const schedule = this.schedule();
-			const buckets: { label: string; items: QuizEntry[] }[] = [
-				{ label: "待复习", items: [] },
-				{ label: "待学习", items: [] },
-				{ label: "在学", items: [] },
-				{ label: "学过", items: [] },
+			const order: [Exclude<StudyFilter, null>, string][] = [
+				["due", "待复习"],
+				["fresh", "待学习"],
+				["waiting", "稍后"],
+				["active", "在学"],
+				["mastered", "学过"],
 			];
-			// Short retry/recheck waits never move a card between groups:
-			// a never-passed card stays under 待学习, a passed one under
-			// 待复习 — the ⏰ row label alone marks the wait.
+			const buckets = order.map(([key, label]) => ({
+				key,
+				label,
+				items: [] as QuizEntry[],
+			}));
 			for (const q of sorted) {
-				if (q.status === "mastered") buckets[3].items.push(q);
-				else if (isQuizUnlearned(q)) buckets[1].items.push(q);
-				else if (
-					isQuizReady(q, now, schedule) ||
-					isQuizWaiting(q, now, schedule)
-				)
-					buckets[0].items.push(q);
-				else buckets[2].items.push(q);
+				const s = this.section(q, now, schedule);
+				buckets.find((b) => b.key === s)?.items.push(q);
 			}
 			return buckets.filter((b) => b.items.length);
 		}
@@ -1127,21 +1120,17 @@ export class QuizWorkbench {
 	} {
 		const now = new Date();
 		const schedule = this.schedule();
-		if (quiz.status === "mastered") {
-			return { text: "学过", cls: "" };
-		}
-		const wait = nextReviewLabel(quiz, now, schedule);
-		if (isQuizWaiting(quiz, now, schedule))
+		// Only short-loop cards speak: a countdown while waiting, a quiet
+		// 可练 once the wait is over. Every other state is the section's job.
+		if (!isQuizShortLoop(quiz)) return { text: "", cls: "" };
+		if (isQuizWaiting(quiz, now, schedule)) {
+			const wait = nextReviewLabel(quiz, now, schedule);
 			return {
 				text: wait ? `⏰ ${wait}` : "⏰ 稍后",
 				cls: " is-wait",
 			};
-		// A never-passed card carries no state text — untouched dots say
-		// it all.
-		if (isQuizUnlearned(quiz)) return { text: "", cls: "" };
-		if (isQuizReady(quiz, now, schedule))
-			return { text: "待复习", cls: " is-overdue" };
-		return { text: wait, cls: "" };
+		}
+		return { text: "可练", cls: "" };
 	}
 
 	private renderRow(host: HTMLElement, quiz: QuizEntry): void {

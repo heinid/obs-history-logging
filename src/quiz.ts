@@ -66,15 +66,17 @@ export function isQuizNew(quiz: QuizEntry): boolean {
 	);
 }
 
-// A card that has never been passed: nothing in its history ever raised
-// the progress above zero. Short retry/recheck waits after a failed first
-// learn keep the card here.
-export function isQuizUnlearned(quiz: QuizEntry): boolean {
-	return (
-		quiz.status === "active" &&
-		quiz.progress === 0 &&
-		!quiz.attempts.some((a) => a.progressAfter > 0)
-	);
+// A card sitting in the short retry/recheck pipeline: its last real
+// attempt (early successes change nothing and are skipped) did not clear
+// the current step, so the card stays mid-gate until it passes.
+export function isQuizShortLoop(quiz: QuizEntry): boolean {
+	if (quiz.status !== "active") return false;
+	for (let i = quiz.attempts.length - 1; i >= 0; i--) {
+		const a = quiz.attempts[i];
+		if (a.early && a.result !== "forgot") continue;
+		return a.progressAfter <= a.progressBefore;
+	}
+	return false;
 }
 
 export function isQuizReady(
@@ -179,7 +181,6 @@ export function reviewQuiz(
 		}
 	} else if (result === "forgot") {
 		next.pendingRecheck = false;
-		next.progress = Math.max(0, before - 1);
 		next.status = "active";
 		next.nextReview = addMinutes(now, Math.max(0, schedule.retryMinutes));
 	} else if (!early) {
