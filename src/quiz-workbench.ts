@@ -259,6 +259,7 @@ export class QuizWorkbench {
 		this.renderSidebar(shell.createDiv({ cls: "hl-lex-side" }));
 		const main = shell.createDiv({ cls: "hl-lex-main" });
 		this.renderMain(main);
+		this.renderSwitchFab(shell);
 	}
 
 	// ── sidebar ──
@@ -658,10 +659,22 @@ export class QuizWorkbench {
 
 	private renderMain(main: HTMLElement): void {
 		const items = this.listed();
-		this.renderToolrow(main, this.filtered().length);
-		this.renderChips(main);
-		this.renderStrip(main);
+		const head = main.createDiv({ cls: "hl-lex-headbar" });
+		this.renderToolrow(head, this.filtered().length);
+		this.renderChips(head);
+		this.renderStrip(head);
 		this.renderRows(main, items);
+	}
+
+	// Floating bottom-right switch to the vocab workbench; it stays put
+	// while the list scrolls.
+	private renderSwitchFab(shell: HTMLElement): void {
+		const fab = shell.createEl("button", { cls: "hl-lex-fab" });
+		setIcon(fab, "book-a");
+		fab.setAttr("aria-label", "切换到 Vocab");
+		fab.addEventListener("click", () =>
+			void this.ctx.plugin.openLexicon(false)
+		);
 	}
 
 	// The current filter spelled out as removable chips, timeline style —
@@ -790,15 +803,6 @@ export class QuizWorkbench {
 			this.overview = true;
 			this.ctx.rerender();
 		});
-		const vocab = row.createEl("button", {
-			cls: "hl-lex-save hl-qd-wallbtn",
-		});
-		setIcon(vocab.createSpan(), "book-a");
-		vocab.createSpan({ text: "Vocab" });
-		vocab.setAttr("aria-label", "切换到 Vocab 工作台");
-		vocab.addEventListener("click", () =>
-			void this.ctx.plugin.openLexicon(false)
-		);
 	}
 
 	// ── study strip ──

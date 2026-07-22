@@ -474,6 +474,7 @@ export class LexiconView extends ItemView {
 		this.renderSidebar(shell.createDiv({ cls: "hl-lex-side" }));
 		const main = shell.createDiv({ cls: "hl-lex-main" });
 		this.renderMain(main);
+		this.renderSwitchFab(shell);
 		if (prevScroll) main.scrollTop = prevScroll;
 	}
 
@@ -829,10 +830,22 @@ export class LexiconView extends ItemView {
 
 	private renderMain(main: HTMLElement): void {
 		const items = this.filtered();
-		this.renderToolrow(main, items.length);
-		this.renderStudyStrip(main);
+		const head = main.createDiv({ cls: "hl-lex-headbar" });
+		this.renderToolrow(head, items.length);
+		this.renderStudyStrip(head);
 		this.renderEntries(main, items);
 		if (this.selectMode) this.renderSelectBar(main);
+	}
+
+	// Floating bottom-right switch to the quiz workbench; it stays put
+	// while the list scrolls.
+	private renderSwitchFab(shell: HTMLElement): void {
+		const fab = shell.createEl("button", { cls: "hl-lex-fab" });
+		setIcon(fab, "brain-circuit");
+		fab.setAttr("aria-label", "切换到 Quiz");
+		fab.addEventListener("click", () =>
+			void this.plugin.openRecitation(false)
+		);
 	}
 
 	private renderToolrow(main: HTMLElement, count: number): void {
@@ -992,15 +1005,6 @@ export class LexiconView extends ItemView {
 				}).open();
 			});
 		}
-		const quiz = row.createEl("button", {
-			cls: "hl-lex-save hl-qd-wallbtn",
-		});
-		setIcon(quiz.createSpan(), "brain-circuit");
-		quiz.createSpan({ text: "Quiz" });
-		quiz.setAttr("aria-label", "切换到 Quiz 工作台");
-		quiz.addEventListener("click", () =>
-			void this.plugin.openRecitation(false)
-		);
 	}
 
 	private directionMenu(ev: MouseEvent): void {

@@ -4225,6 +4225,43 @@ input.hl-tag-chip-input:focus-visible {
 .hl-lex {
 	display: flex;
 	height: 100%;
+	position: relative;
+}
+/* Toolrow + filter chips + study strip pinned above the scrolling list. */
+.hl-lex-headbar {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	background: var(--background-primary);
+	padding: 18px 0 4px;
+	margin: -18px 0 0;
+}
+/* Bottom-right floating switch between the vocab and quiz workbenches. */
+.hl-lex-fab {
+	position: absolute;
+	right: 22px;
+	bottom: 20px;
+	z-index: 20;
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-muted);
+	box-shadow: var(--shadow-s);
+	cursor: pointer;
+}
+.hl-lex-fab:hover {
+	color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+.hl-lex-fab svg {
+	width: 18px;
+	height: 18px;
 }
 .hl-lex-side {
 	flex: 0 0 224px;
@@ -5308,7 +5345,8 @@ input.hl-tag-chip-input:focus-visible {
 	color: var(--text-faint);
 }
 /* Keep the list column at the sample's measured width even in wide panes. */
-.hl-qd .hl-lex-main > * {
+.hl-qd .hl-lex-main > *,
+.hl-qd .hl-lex-headbar > * {
 	max-width: 920px;
 }
 .hl-qd-ghead-year {
