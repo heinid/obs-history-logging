@@ -42,6 +42,11 @@ import {
 	parseReciteProgressFile,
 	serializeReciteProgressFile,
 } from "./recite-progress";
+import {
+	QuizView,
+	parseQuizViewsFile,
+	serializeQuizViewsFile,
+} from "./quiz-views";
 
 // Reads / writes the markdown data files that live in the vault data folder.
 export class DataStore {
@@ -328,6 +333,27 @@ export class DataStore {
 		await this.ensureFolder();
 		const content = serializeReciteViewsFile(views);
 		const path = this.reciteViewsPath();
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (file instanceof TFile) await this.app.vault.modify(file, content);
+		else await this.app.vault.create(path, content);
+	}
+
+	private quizViewsPath(): string {
+		return normalizePath(`${this.getFolder()}/quiz-views.md`);
+	}
+
+	async readQuizViews(): Promise<QuizView[]> {
+		const file = this.app.vault.getAbstractFileByPath(
+			this.quizViewsPath()
+		);
+		if (!(file instanceof TFile)) return [];
+		return parseQuizViewsFile(await this.app.vault.read(file));
+	}
+
+	async writeQuizViews(views: QuizView[]): Promise<void> {
+		await this.ensureFolder();
+		const content = serializeQuizViewsFile(views);
+		const path = this.quizViewsPath();
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (file instanceof TFile) await this.app.vault.modify(file, content);
 		else await this.app.vault.create(path, content);

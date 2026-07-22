@@ -2,29 +2,16 @@ import { ItemView, TFile, WorkspaceLeaf, debounce } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
 import { scanVault } from "./scan";
 import { eventIdsForQuery } from "./profile-events";
-import { Profile } from "./profiles";
-import { QuizEntry, isQuizReady, isQuizWaiting } from "./quiz";
-import { nextClockDelay, nextReviewLabel, quizSchedule } from "./quiz-display";
-import {
-	DeckStats,
-	quizDeckStats,
-	quizOverviewStats,
-} from "./deck-stats";
+import { QuizEntry } from "./quiz";
+import { nextClockDelay, quizSchedule } from "./quiz-display";
 import { QuizPlayerPage } from "./quiz-player";
-import {
-	renderEventDeckDetail,
-	renderMasteryBar,
-} from "./deck-detail";
+import { QuizWorkbench, WorkbenchDeck } from "./quiz-workbench";
+import { QuizView } from "./quiz-views";
+import { EventEntry } from "./types";
+import { MapEntry } from "./maps-format";
+import { DbColors, loadDbColors } from "./quiz-render";
 
 export const RECITATION_VIEW_TYPE = "history-logging-recitation";
-
-interface EventDeck {
-	profile: Profile;
-	dueIds: string[];
-	activeIds: string[];
-	allIds: string[];
-	stats: DeckStats;
-}
 
 interface DynamicPart {
 	el: HTMLElement;
@@ -33,26 +20,27 @@ interface DynamicPart {
 	update(el: HTMLElement): void;
 }
 
-type Page =
-	| { kind: "list" }
-	| { kind: "event-detail"; profile: string }
-	| { kind: "player" };
+type Page = { kind: "list" } | { kind: "player" };
 
-// The recitation hub: deck wall → deck detail → in-view player. State
+// The recitation hub: a lexicon-style quiz workbench (views = decks, rows =
+// management, deck overview one click away) with an in-view player. State
 // refreshes on data-file changes (debounced); wall-clock changes (a short
 // wait expiring, a countdown label ticking down) repaint only the affected
-// fragments via precisely scheduled timers, so nothing flashes. A quiz of
-// the deck coming off its short wait while the hub is the active view is
-// consumed here (interjected into the running session or badged on the
-// wall) instead of raising the alarm modal.
+// fragments via precisely scheduled timers, so nothing flashes. A quiz
+// coming off its short wait while the hub is the active view is consumed
+// here (interjected into the running session or badged on the list)
+// instead of raising the alarm modal.
 export class RecitationView extends ItemView {
-	private eventDecks: EventDeck[] = [];
-
+	private eventDecks: WorkbenchDeck[] = [];
 	private quizzes = new Map<string, QuizEntry>();
+	private events = new Map<string, EventEntry>();
+	private maps = new Map<string, MapEntry>();
+	private views: QuizView[] = [];
+	private colors: DbColors = new Map();
 	private byEvent = new Map<string, QuizEntry[]>();
 	private page: Page = { kind: "list" };
-	private player: QuizPlayerPage | null =
-		null;
+	private player: QuizPlayerPage | null = null;
+	private workbench: QuizWorkbench;
 	private loading = false;
 	private queueReload = debounce(() => void this.reload(), 1500, true);
 	private clockTimer: number | null = null;
@@ -62,6 +50,35 @@ export class RecitationView extends ItemView {
 
 	constructor(leaf: WorkspaceLeaf, private plugin: HistoryLoggingPlugin) {
 		super(leaf);
+		this.workbench = new QuizWorkbench({
+			plugin,
+			decks: () => this.eventDecks,
+			quizzes: () => this.quizzes,
+			events: () => this.events,
+			maps: () => this.maps,
+			colors: () => this.colors,
+			views: () => this.views,
+			saveViews: async (views) => {
+				await this.plugin.store.writeQuizViews(views);
+				this.views = views;
+				this.needsRender = true;
+				await this.reload();
+			},
+			startSession: (label, sessionIds, scopeIds, profileName) =>
+				this.startQuizSession(
+					label,
+					sessionIds,
+					scopeIds,
+					profileName
+				),
+			onChanged: () => this.queueReload(),
+			registerDynamic: (el, signature, update) =>
+				this.registerDynamic(el, signature, update),
+			rerender: () => {
+				this.needsRender = false;
+				this.render();
+			},
+		});
 	}
 
 	getViewType(): string {
@@ -157,9 +174,9 @@ export class RecitationView extends ItemView {
 		) {
 			if (this.player.handleDueQuiz(quiz)) return true;
 		}
-		// On the wall or detail pages the refreshed numbers and alarm badges
-		// are the notification; no popup while the user is already here. No
-		// file changed, so patch the clock-dependent fragments in place.
+		// On the workbench the refreshed numbers and alarm badges are the
+		// notification; no popup while the user is already here. No file
+		// changed, so patch the clock-dependent fragments in place.
 		this.applyClockTick();
 		return this.page.kind !== "player";
 	}
@@ -168,17 +185,25 @@ export class RecitationView extends ItemView {
 		if (this.loading) return;
 		this.loading = true;
 		try {
-			const [entries, profiles, quizzes, maps] = await Promise.all([
-				scanVault(
-					this.app,
-					this.plugin.store,
-					this.plugin.settings.dataFolder
-				),
-				this.plugin.store.readProfiles(),
-				this.plugin.store.readQuizzes(),
-				this.plugin.store.readMaps(),
-			]);
+			const [entries, profiles, quizzes, maps, events, views, colors] =
+				await Promise.all([
+					scanVault(
+						this.app,
+						this.plugin.store,
+						this.plugin.settings.dataFolder
+					),
+					this.plugin.store.readProfiles(),
+					this.plugin.store.readQuizzes(),
+					this.plugin.store.readMaps(),
+					this.plugin.store.readEvents(),
+					this.plugin.store.readQuizViews(),
+					loadDbColors(this.plugin),
+				]);
 			this.quizzes = quizzes;
+			this.events = events;
+			this.maps = maps;
+			this.views = views;
+			this.colors = colors;
 
 			this.byEvent = new Map();
 			for (const q of quizzes.values()) {
@@ -196,36 +221,23 @@ export class RecitationView extends ItemView {
 						this.byEvent.set(evId, list);
 					}
 
-			const schedule = quizSchedule(this.plugin.settings);
-			const now = new Date();
 			this.eventDecks = profiles.map((profile) => {
 				const eventIds = eventIdsForQuery(
 					this.app,
 					entries,
 					profile.match
 				);
-				const deckQuizzes: QuizEntry[] = [];
 				const seen = new Set<string>();
+				const allIds: string[] = [];
 				for (const id of eventIds)
 					for (const q of this.byEvent.get(id) ?? [])
 						if (!seen.has(q.id)) {
 							seen.add(q.id);
-							deckQuizzes.push(q);
+							allIds.push(q.id);
 						}
-				const active = deckQuizzes.filter(
-					(q) => q.status === "active"
-				);
-				return {
-					profile,
-					stats: quizDeckStats(deckQuizzes, now, schedule),
-					dueIds: active
-						.filter((q) => isQuizReady(q, now, schedule))
-						.map((q) => q.id),
-					activeIds: active.map((q) => q.id),
-					allIds: deckQuizzes.map((q) => q.id),
-				};
+				return { profile, allIds };
 			});
-
+			this.workbench.revalidateSelection();
 		} finally {
 			this.loading = false;
 		}
@@ -234,6 +246,7 @@ export class RecitationView extends ItemView {
 		// used to make the view flash. Skip the render when nothing changed.
 		const sig = JSON.stringify({
 			q: [...this.quizzes.entries()],
+			v: this.views,
 			d: this.eventDecks.map((d) => [
 				d.profile.name,
 				d.profile.match,
@@ -257,72 +270,27 @@ export class RecitationView extends ItemView {
 		this.dynamicParts = [];
 		root.empty();
 		root.addClass("hl-recitation-view");
-		if (this.page.kind === "event-detail") {
-			const deck = this.eventDecks.find(
-				(d) =>
-					this.page.kind === "event-detail" &&
-					d.profile.name === this.page.profile
-			);
-			if (deck) {
-				void renderEventDeckDetail(
-					root,
-					{
-						name: deck.profile.name,
-						match: deck.profile.match,
-						quizzes: deck.allIds
-							.map((id) => this.quizzes.get(id))
-							.filter((q): q is QuizEntry => !!q),
-						stats: deck.stats,
-						dueIds: deck.dueIds,
-						activeIds: deck.activeIds,
-						onStart: (label, ids) =>
-							this.startQuizSession(
-								label,
-								ids,
-								deck.allIds,
-								deck.profile.name
-							),
-						profileName: deck.profile.name,
-					},
-					{
-						plugin: this.plugin,
-						onBack: () => this.showList(),
-						onChanged: () => this.queueReload(),
-						registerDynamic: (el, signature, update) =>
-							this.registerDynamic(el, signature, update),
-					}
-				).then(() => {
-					this.restoreScroll(scroller, prevScroll);
-					this.scheduleClockTick();
-				});
-				return;
-			}
-			this.page = { kind: "list" };
-		}
-		this.renderList(root);
+		this.workbench.render(root);
 		this.restoreScroll(scroller, prevScroll);
 		this.scheduleClockTick();
 	}
 
-	// The recitation view rebuilds its content wholesale on refresh; keep the
-	// user where they were instead of snapping back to the top.
+	// The workbench's main column is the scroller; keep the user where they
+	// were instead of snapping back to the top on refresh.
 	private scrollEl(): HTMLElement | null {
-		let el: HTMLElement | null = this.contentEl;
-		while (el) {
-			if (el.scrollHeight > el.clientHeight + 1) {
-				const oy = getComputedStyle(el).overflowY;
-				if (oy === "auto" || oy === "scroll") return el;
-			}
-			el = el.parentElement;
-		}
-		return this.contentEl;
+		return (
+			this.contentEl.querySelector<HTMLElement>(".hl-lex-main") ??
+			this.contentEl
+		);
 	}
 
 	private restoreScroll(el: HTMLElement | null, top: number): void {
 		if (!el || top <= 0) return;
-		el.scrollTop = top;
+		const again = this.scrollEl();
+		if (!again) return;
+		again.scrollTop = top;
 		window.requestAnimationFrame(() => {
-			el.scrollTop = top;
+			again.scrollTop = top;
 		});
 	}
 
@@ -375,301 +343,4 @@ export class RecitationView extends ItemView {
 		super.onload();
 		this.registerDomEvent(window, "keydown", this.onKeyDown);
 	}
-
-	private renderList(root: HTMLElement): void {
-		const toolbar = root.createDiv({ cls: "hl-recite-toolbar" });
-		toolbar.createEl("h2", { text: "背诵" });
-		const display = toolbar.createEl("select", {
-			cls: "dropdown hl-recite-display",
-		});
-		display.setAttr("aria-label", "deck 显示方式");
-		display.createEl("option", { value: "wall", text: "卡片墙" });
-		display.createEl("option", { value: "list", text: "列表" });
-		display.value = this.plugin.settings.reciteDeckDisplay;
-		display.addEventListener("change", () => {
-			this.plugin.settings.reciteDeckDisplay =
-				display.value === "list" ? "list" : "wall";
-			void this.plugin.saveSettings();
-			this.render();
-		});
-
-		this.renderOverview(root);
-		this.renderEventDecks(root);
-	}
-
-	private overviewModel(now: Date): {
-		dueNow: number;
-		waiting: number;
-		waitLabel: string;
-		reviewedToday: number;
-		upcoming: number;
-		allDue: string[];
-	} {
-		const schedule = quizSchedule(this.plugin.settings);
-		const overview = quizOverviewStats(
-			[...this.quizzes.values()],
-			now,
-			schedule
-		);
-		let waitLabel = "短等待中";
-		if (overview.nextWaitDue) {
-			const probe: QuizEntry = {
-				...[...this.quizzes.values()][0],
-				status: "active",
-				nextReview: overview.nextWaitDue,
-			};
-			const when = nextReviewLabel(probe, now, schedule);
-			if (when) waitLabel = `短等待 · 最近 ${when}`;
-		}
-		const allDue = [...this.quizzes.values()]
-			.filter(
-				(q) =>
-					q.status === "active" && isQuizReady(q, now, schedule)
-			)
-			.map((q) => q.id);
-		return {
-			dueNow: overview.dueNow,
-			waiting: overview.waiting,
-			waitLabel,
-			reviewedToday: overview.reviewedToday,
-			upcoming: overview.upcoming,
-			allDue,
-		};
-	}
-
-	private renderOverview(root: HTMLElement): void {
-		const bar = root.createDiv({ cls: "hl-recite-overview" });
-		const fill = (el: HTMLElement): void => this.fillOverview(el);
-		fill(bar);
-		this.registerDynamic(
-			bar,
-			() => {
-				const m = this.overviewModel(new Date());
-				return [
-					m.dueNow,
-					m.waiting,
-					m.waitLabel,
-					m.reviewedToday,
-					m.upcoming,
-					m.allDue.length,
-				].join("|");
-			},
-			fill
-		);
-	}
-
-	private fillOverview(bar: HTMLElement): void {
-		const m = this.overviewModel(new Date());
-		const item = (
-			num: string,
-			label: string,
-			cls = ""
-		): HTMLElement => {
-			const box = bar.createDiv({ cls: `hl-overview-item ${cls}` });
-			box.createDiv({ cls: "hl-overview-num", text: num });
-			box.createDiv({ cls: "hl-overview-label", text: label });
-			return box;
-		};
-		item(String(m.dueNow), "现在可练", "is-due");
-		item(String(m.waiting), m.waitLabel, "is-wait");
-		item(String(m.reviewedToday), "今天已背");
-		item(String(m.upcoming), "未来到期");
-		bar.createDiv({ cls: "hl-overview-spacer" });
-		const start = bar.createEl("button", {
-			cls: "mod-cta hl-overview-start",
-			text: `开始今日背诵 · ${m.allDue.length}`,
-		});
-		if (m.allDue.length)
-			start.addEventListener("click", () =>
-				this.startQuizSession(
-					"全部",
-					m.allDue,
-					[...this.quizzes.keys()],
-					""
-				)
-			);
-		else start.disabled = true;
-	}
-
-	private renderEventDecks(root: HTMLElement): void {
-		const section = root.createDiv({ cls: "hl-recite-section" });
-		section.createEl("h3", { text: "事件背诵" });
-		const wall = section.createDiv({ cls: this.wallCls() });
-		if (!this.eventDecks.length) {
-			wall.createDiv({ cls: "hl-deck-empty", text: "还没有 profile。" });
-			return;
-		}
-		for (const deck of this.eventDecks) this.renderEventDeck(wall, deck);
-	}
-
-	// The deck's due/waiting numbers drift with the wall clock; recompute
-	// them from the live quiz map so clock-tick refills stay accurate.
-	private deckNow(deck: EventDeck, now: Date): EventDeck {
-		const schedule = quizSchedule(this.plugin.settings);
-		const quizzes = deck.allIds
-			.map((id) => this.quizzes.get(id))
-			.filter((q): q is QuizEntry => !!q);
-		const active = quizzes.filter((q) => q.status === "active");
-		return {
-			profile: deck.profile,
-			stats: quizDeckStats(quizzes, now, schedule),
-			dueIds: active
-				.filter((q) => isQuizReady(q, now, schedule))
-				.map((q) => q.id),
-			activeIds: active.map((q) => q.id),
-			allIds: deck.allIds,
-		};
-	}
-
-	private deckSignature(deck: EventDeck): string {
-		return [
-			deck.stats.due,
-			deck.stats.waiting,
-			this.deckWaitingDue(deck),
-			deck.stats.active,
-			deck.stats.mastered,
-			deck.stats.lastReviewedAt
-				? relativeDay(deck.stats.lastReviewedAt)
-				: "",
-		].join("|");
-	}
-
-	private renderEventDeck(wall: HTMLElement, deck: EventDeck): void {
-		const total = deck.stats.active + deck.stats.mastered;
-		const card = wall.createDiv({ cls: "hl-deck-card hl-deck-clickable" });
-		if (!total) card.addClass("hl-deck-empty-card");
-		card.addEventListener("click", () => {
-			this.page = { kind: "event-detail", profile: deck.profile.name };
-			this.render();
-		});
-		const fill = (el: HTMLElement): void =>
-			this.fillEventDeck(el, this.deckNow(deck, new Date()));
-		fill(card);
-		if (total)
-			this.registerDynamic(
-				card,
-				() => this.deckSignature(this.deckNow(deck, new Date())),
-				fill
-			);
-	}
-
-	private fillEventDeck(card: HTMLElement, deck: EventDeck): void {
-		const total = deck.stats.active + deck.stats.mastered;
-		const head = card.createDiv({ cls: "hl-deck-head" });
-		head.createDiv({ cls: "hl-deck-name", text: deck.profile.name });
-		if (deck.stats.due > 0)
-			head.createSpan({
-				cls: "hl-deck-badge",
-				text: String(deck.stats.due),
-			});
-		else if (total && !deck.stats.waiting)
-			head.createSpan({ cls: "hl-deck-check", text: "✓" });
-		if (deck.stats.waiting > 0) {
-			const waitingDue = this.deckWaitingDue(deck);
-			head.createSpan({
-				cls: waitingDue
-					? "hl-deck-badge hl-deck-badge-alarm"
-					: "hl-deck-badge hl-deck-badge-wait",
-				text: `⏰ ${deck.stats.waiting}`,
-			});
-		}
-		if (deck.profile.match)
-			card.createDiv({
-				cls: "hl-deck-match",
-				text: deck.profile.match,
-			});
-
-		if (!total) {
-			card.createDiv({
-				cls: "hl-deck-meta",
-				text: "0 道 Quiz · 去 Timeline 创建",
-			});
-			return;
-		}
-
-		renderMasteryBar(card, deck.stats);
-
-		const meta = card.createDiv({ cls: "hl-deck-meta" });
-		meta.createSpan({
-			text: `在学 ${deck.stats.active} · 学过 ${deck.stats.mastered}`,
-		});
-		if (deck.stats.lastReviewedAt) {
-			const last = deck.stats.lastResults;
-			meta.createSpan({
-				cls: "hl-deck-last",
-				text: `上次 ${relativeDay(deck.stats.lastReviewedAt)} · ${
-					last.remembered
-				}✓ ${last.forgot}✗`,
-			});
-		}
-
-		const actions = card.createDiv({ cls: "hl-deck-actions" });
-		const start = actions.createEl("button", {
-			cls: "mod-cta",
-			text:
-				deck.stats.due > 0 ? `背诵到期 ${deck.stats.due}` : "无到期",
-		});
-		if (deck.stats.due > 0)
-			start.addEventListener("click", (ev) => {
-				ev.stopPropagation();
-				this.startQuizSession(
-					deck.profile.name,
-					deck.dueIds,
-					deck.allIds,
-					deck.profile.name
-				);
-			});
-		else start.disabled = true;
-		if (deck.activeIds.length) {
-			const all = actions.createEl("button", {
-				text: `全部在学 ${deck.activeIds.length}`,
-			});
-			all.addEventListener("click", (ev) => {
-				ev.stopPropagation();
-				this.startQuizSession(
-					deck.profile.name,
-					deck.activeIds,
-					deck.allIds,
-					deck.profile.name
-				);
-			});
-		}
-	}
-
-	// Whether some short-wait card of the deck is already past due (a missed
-	// alarm) rather than still counting down.
-	private deckWaitingDue(deck: EventDeck): boolean {
-		const now = Date.now();
-		return deck.activeIds.some((id) => {
-			const quiz = this.quizzes.get(id);
-			if (!quiz?.nextReview) return false;
-			return (
-				isQuizWaiting(
-					quiz,
-					new Date(),
-					quizSchedule(this.plugin.settings)
-				) && Date.parse(quiz.nextReview) <= now
-			);
-		});
-	}
-
-	private wallCls(): string {
-		return this.plugin.settings.reciteDeckDisplay === "list"
-			? "hl-deck-wall is-list"
-			: "hl-deck-wall";
-	}
-
-}
-
-function relativeDay(iso: string): string {
-	const then = new Date(iso);
-	const today = new Date();
-	const days = Math.round(
-		(today.setHours(0, 0, 0, 0) - new Date(then).setHours(0, 0, 0, 0)) /
-			86400000
-	);
-	if (days <= 0) return "今天";
-	if (days === 1) return "昨天";
-	if (days < 7) return `${days} 天前`;
-	return then.toLocaleDateString();
 }

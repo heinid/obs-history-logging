@@ -369,6 +369,19 @@ export class EntityBrowserView extends ItemView {
 		else if (cur.kind === "types") this.renderTypes(this.bodyEl, cur);
 		else if (cur.kind === "maps") this.renderMaps(this.bodyEl, cur);
 		else if (cur.kind === "quizzes") {
+			// The quiz workbench (recitation hub) is the primary quiz
+			// surface now; this section stays as the raw management table.
+			const hint = this.bodyEl.createDiv({ cls: "hl-eb-quiz-hint" });
+			hint.createSpan({
+				text: "背诵、按视图筛选和 deck 管理已搬到 Quiz 工作台。",
+			});
+			const open = hint.createEl("button", {
+				cls: "hl-eb-quiz-hint-btn",
+				text: "打开 Quiz 工作台",
+			});
+			open.addEventListener("click", () =>
+				void this.plugin.openRecitation()
+			);
 			renderQuizBackstage(
 				this.bodyEl,
 				this.plugin,
