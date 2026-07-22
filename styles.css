@@ -5281,7 +5281,6 @@ input.hl-tag-chip-input:focus-visible {
 	gap: 10px;
 	padding: 9px 10px;
 	border-radius: 8px;
-	cursor: pointer;
 }
 .hl-qd-row:hover {
 	background: var(--background-secondary);
@@ -5351,8 +5350,8 @@ input.hl-tag-chip-input:focus-visible {
 	gap: 3px;
 }
 .hl-qd-dot {
-	width: 6px;
-	height: 6px;
+	width: 5px;
+	height: 5px;
 	border-radius: 50%;
 	background: var(--background-modifier-hover);
 }
@@ -5373,6 +5372,28 @@ input.hl-tag-chip-input:focus-visible {
 }
 .hl-qd-acts {
 	margin-top: 2px;
+}
+.hl-qd-row:hover .hl-qd-acts {
+	opacity: 1;
+}
+.hl-qd-mapic {
+	display: inline-flex;
+	vertical-align: -2px;
+	margin-right: 5px;
+	color: var(--text-faint);
+}
+.hl-qd-mapic svg {
+	width: 14px;
+	height: 14px;
+}
+.hl-qd-side-empty {
+	padding: 2px 8px 4px;
+	font-size: 0.76em;
+	color: var(--text-faint);
+}
+/* Keep the list column at the sample's measured width even in wide panes. */
+.hl-qd .hl-lex-main > * {
+	max-width: 920px;
 }
 .hl-qd-ghead-year {
 	font-variant-numeric: tabular-nums;

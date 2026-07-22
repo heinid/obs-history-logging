@@ -354,8 +354,13 @@ export class QuizWorkbench {
 
 		// saved custom views
 		const views = this.ctx.views();
-		if (views.length) {
-			side.createDiv({ cls: "hl-lex-side-label", text: "我的视图" });
+		side.createDiv({ cls: "hl-lex-side-label", text: "我的视图" });
+		if (!views.length)
+			side.createDiv({
+				cls: "hl-qd-side-empty",
+				text: "叠加筛选后点「保存为视图」",
+			});
+		else {
 			for (const view of views) {
 				const quizzes = this.quizzesForView(view);
 				sideItem(
@@ -700,15 +705,11 @@ export class QuizWorkbench {
 
 		row.createDiv({ cls: "hl-lex-spacer" });
 
-		if (this.dirty()) {
-			const save = row.createEl("button", {
-				cls: "hl-lex-save",
-				text: "存为视图",
-			});
-			save.addEventListener("click", () =>
-				this.saveAsView(this.draft)
-			);
-		}
+		const save = row.createEl("button", {
+			cls: "hl-lex-save",
+			text: "保存为视图",
+		});
+		save.addEventListener("click", () => this.saveAsView(this.draft));
 		const wall = row.createEl("button", {
 			cls: "hl-lex-save hl-qd-wallbtn",
 		});
@@ -1012,7 +1013,19 @@ export class QuizWorkbench {
 		const event = this.eventOf(quiz);
 		const colors = this.ctx.colors();
 		const text = mainCol.createDiv({ cls: "hl-qd-text" });
-		this.renderQuestion(text, quiz, event, colors);
+		if (quiz.kind === "map") {
+			const ic = text.createSpan({ cls: "hl-qd-mapic" });
+			setIcon(ic, "map");
+			const custom = quiz.question.trim().startsWith("🗺")
+				? ""
+				: quiz.question.trim();
+			renderQuizText(
+				this.ctx.plugin,
+				custom || "这处遮罩对应地图上的哪里？",
+				text,
+				colors
+			);
+		} else this.renderQuestion(text, quiz, event, colors);
 
 		const meta = mainCol.createDiv({ cls: "hl-qd-meta" });
 		const decoded = event?.tag ? parseYearTag(event.tag) : null;
@@ -1023,10 +1036,16 @@ export class QuizWorkbench {
 			});
 		if (quiz.kind === "map" && quiz.sourceMapId) {
 			const map = this.ctx.maps().get(quiz.sourceMapId);
-			if (map)
+			if (map) {
+				const idx = map.occlusions.findIndex(
+					(o) => o.id === quiz.occlusionId
+				);
 				meta.createSpan({
-					text: `🗺 ${map.title || map.image}`,
+					text:
+						(map.title || map.image) +
+						(idx >= 0 ? ` · 遮罩 ${idx + 1}` : ""),
 				});
+			}
 		}
 		const steps = this.schedule().masterySteps;
 		const dots = meta.createSpan({ cls: "hl-qd-dots" });
@@ -1069,7 +1088,6 @@ export class QuizWorkbench {
 		row.addEventListener("contextmenu", (ev) =>
 			this.rowMenu(quiz, event, ev)
 		);
-		row.addEventListener("click", () => this.practice(quiz));
 	}
 
 	// The question with its blank masked in place, exactly as in the design
