@@ -1,6 +1,12 @@
 import { App, EventRef, Modal, TFile, setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
-import { QuizEntry, isQuizParked, isQuizWaiting } from "./quiz";
+import {
+	QuizEntry,
+	isQuizParked,
+	isQuizReady,
+	isQuizUnlearned,
+	isQuizWaiting,
+} from "./quiz";
 import { quizQuestion, quizSchedule } from "./quiz-display";
 import { langDisplayName } from "./quiz-render";
 import { toQuizShape } from "./recite-progress";
@@ -17,6 +23,7 @@ interface AgendaItem {
 	tag: string; // small descriptor: quiz kind or direction
 	due: number; // epoch ms
 	ephemeral: boolean;
+	shape?: QuizEntry; // quiz-shaped record backing the dots/state
 }
 
 const QUIZ_KIND_LABELS: Record<string, string> = {
@@ -116,6 +123,7 @@ export class ReminderAgendaModal extends Modal {
 				tag: QUIZ_KIND_LABELS[quiz.kind] ?? "Quiz",
 				due,
 				ephemeral: false,
+				shape: quiz,
 			});
 		}
 		const reciteItem = (
@@ -151,10 +159,10 @@ export class ReminderAgendaModal extends Modal {
 			if (rec.status !== "active") continue;
 			const item = reciteItem(rec, key, false);
 			if (!item) continue;
-			if (
-				!inShortPipeline(toQuizShape(rec), now, item.due, schedule)
-			)
+			const shape = toQuizShape(rec);
+			if (!inShortPipeline(shape, now, item.due, schedule))
 				continue;
+			item.shape = shape;
 			items.push(item);
 		}
 		for (const [key, rec] of plugin.reciteEphemeral) {
@@ -193,7 +201,7 @@ export class ReminderAgendaModal extends Modal {
 		const waiting = items
 			.filter((i) => i.due > now)
 			.sort((a, b) => a.due - b.due);
-		if (due.length) this.renderGroup(host, "待复习", due, now, true);
+		if (due.length) this.renderGroup(host, "到期", due, now, true);
 		if (waiting.length)
 			this.renderGroup(host, "稍后", waiting, now, false);
 	}
@@ -233,6 +241,7 @@ export class ReminderAgendaModal extends Modal {
 			body.createDiv({ cls: "hl-agenda-item-title", text: item.title });
 			const meta = body.createDiv({ cls: "hl-agenda-meta" });
 			meta.createSpan({ cls: "hl-agenda-tag", text: item.tag });
+			if (item.shape) this.renderState(meta, item.shape);
 			if (item.ephemeral)
 				meta.createSpan({
 					cls: "hl-agenda-tag is-oneshot",
@@ -255,6 +264,28 @@ export class ReminderAgendaModal extends Modal {
 				else this.plugin.openReciteReminder(item.id);
 			});
 		}
+	}
+
+	// The workbench row's progress dots and state word, minus the ⏰
+	// countdown — the row's own timer column already covers the wait.
+	private renderState(meta: HTMLElement, shape: QuizEntry): void {
+		const schedule = quizSchedule(this.plugin.settings);
+		const steps = Math.max(1, schedule.masterySteps);
+		const dots = meta.createSpan({ cls: "hl-qd-dots" });
+		for (let i = 0; i < steps; i++)
+			dots.createSpan({
+				cls: `hl-qd-dot${i < shape.progress ? " is-on" : ""}`,
+			});
+		const now = new Date();
+		if (
+			!isQuizUnlearned(shape) &&
+			!isQuizWaiting(shape, now, schedule) &&
+			isQuizReady(shape, now, schedule)
+		)
+			meta.createSpan({
+				cls: "hl-qd-meta-state is-overdue",
+				text: "待复习",
+			});
 	}
 
 	onClose(): void {
