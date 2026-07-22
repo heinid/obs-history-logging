@@ -1121,18 +1121,32 @@ export class QuizWorkbench {
 	} {
 		const now = new Date();
 		const schedule = this.schedule();
-		// Only short-loop cards speak: a countdown while waiting, a quiet
-		// 可练 once the wait is over. Every other state is the section's job.
-		if (!isQuizShortLoop(quiz, now, schedule))
-			return { text: "", cls: "" };
-		if (isQuizWaiting(quiz, now, schedule)) {
-			const wait = nextReviewLabel(quiz, now, schedule);
-			return {
-				text: wait ? `⏰ ${wait}` : "⏰ 稍后",
-				cls: " is-wait",
-			};
+		// The row echoes the card's section, so the state stays readable
+		// under any grouping. Fresh cards carry no text — untouched dots
+		// say it all.
+		switch (this.section(quiz, now, schedule)) {
+			case "mastered":
+				return { text: "学过", cls: "" };
+			case "waiting": {
+				if (isQuizWaiting(quiz, now, schedule)) {
+					const wait = nextReviewLabel(quiz, now, schedule);
+					return {
+						text: wait ? `⏰ ${wait}` : "⏰ 稍后",
+						cls: " is-wait",
+					};
+				}
+				return { text: "可练", cls: "" };
+			}
+			case "due":
+				return { text: "待复习", cls: " is-overdue" };
+			case "active":
+				return {
+					text: nextReviewLabel(quiz, now, schedule),
+					cls: "",
+				};
+			default:
+				return { text: "", cls: "" };
 		}
-		return { text: "可练", cls: "" };
 	}
 
 	private renderRow(host: HTMLElement, quiz: QuizEntry): void {
