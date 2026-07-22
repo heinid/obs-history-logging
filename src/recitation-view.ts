@@ -86,7 +86,7 @@ export class RecitationView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "背诵";
+		return "Quiz";
 	}
 
 	getIcon(): string {

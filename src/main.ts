@@ -143,10 +143,10 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.addRibbonIcon("library", "Open entity browser", () =>
 			void this.browseEntities()
 		);
-		this.addRibbonIcon("brain-circuit", "打开背诵", () =>
+		this.addRibbonIcon("brain-circuit", "打开 Quiz", () =>
 			void this.openRecitation()
 		);
-		this.addRibbonIcon("book-a", "打开词汇", () =>
+		this.addRibbonIcon("book-a", "打开 Vocab", () =>
 			void this.openLexicon()
 		);
 
@@ -209,16 +209,16 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.addCommand({
 			id: "browse-quizzes",
 			name: "Browse quizzes",
-			callback: () => void this.browseEntities("quizzes"),
+			callback: () => void this.openRecitation(),
 		});
 		this.addCommand({
 			id: "open-recitation",
-			name: "打开背诵",
+			name: "打开 Quiz",
 			callback: () => void this.openRecitation(),
 		});
 		this.addCommand({
 			id: "open-lexicon",
-			name: "打开词汇",
+			name: "打开 Vocab",
 			callback: () => void this.openLexicon(),
 		});
 		this.addCommand({
@@ -277,12 +277,12 @@ export default class HistoryLoggingPlugin extends Plugin {
 	}
 
 	// Open (or focus) the recitation hub tab.
-	async openRecitation(): Promise<void> {
+	async openRecitation(reload = true): Promise<void> {
 		const { workspace } = this.app;
 		const existing = workspace.getLeavesOfType(RECITATION_VIEW_TYPE)[0];
 		if (existing) {
 			workspace.revealLeaf(existing);
-			if (existing.view instanceof RecitationView)
+			if (reload && existing.view instanceof RecitationView)
 				await existing.view.reload();
 			return;
 		}
@@ -292,12 +292,12 @@ export default class HistoryLoggingPlugin extends Plugin {
 	}
 
 	// Open (or focus) the lexicon workbench tab.
-	async openLexicon(): Promise<void> {
+	async openLexicon(reload = true): Promise<void> {
 		const { workspace } = this.app;
 		const existing = workspace.getLeavesOfType(LEXICON_VIEW_TYPE)[0];
 		if (existing) {
 			workspace.revealLeaf(existing);
-			if (existing.view instanceof LexiconView)
+			if (reload && existing.view instanceof LexiconView)
 				await existing.view.reload();
 			return;
 		}
@@ -568,7 +568,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 
 	// Open (or focus) the backstage tab, optionally landing on a section.
 	async browseEntities(
-		section?: "entities" | "types" | "quizzes" | "maps"
+		section?: "entities" | "types" | "maps"
 	): Promise<void> {
 		const { workspace } = this.app;
 		const existing = workspace.getLeavesOfType(ENTITY_BROWSER_VIEW_TYPE)[0];

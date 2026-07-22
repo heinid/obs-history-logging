@@ -18,10 +18,6 @@ import { describeYear, parseYearTag } from "./year-tag";
 import { QuizEntry, isQuizReady } from "./quiz";
 import { quizSchedule } from "./quiz-display";
 import { QuizSessionModal } from "./quiz-session-modal";
-import {
-	QuizBackstageStatus,
-	renderQuizBackstage,
-} from "./quiz-backstage";
 import { EventEntry } from "./types";
 import { MapEntry } from "./maps-format";
 import { MapModal, newMapEntry } from "./map-modal";
@@ -62,12 +58,6 @@ type NavFrame =
 	  }
 	| { kind: "types"; scroll: number }
 	| { kind: "maps"; scroll: number }
-	| {
-			kind: "quizzes";
-			query: string;
-			status: QuizBackstageStatus;
-			scroll: number;
-	  }
 	| { kind: "entity"; id: string; scroll: number };
 
 const ROW_H = 32;
@@ -257,16 +247,7 @@ export class EntityBrowserView extends ItemView {
 	private bodyScroll(): number {
 		const kind = this.current().kind;
 		if (kind === "entities") return this.scrollEl?.scrollTop ?? 0;
-		if (kind === "quizzes") return this.quizScrollEl()?.scrollTop ?? 0;
 		return this.bodyEl?.scrollTop ?? 0;
-	}
-
-	// The quiz backstage scrolls in its own inner list, not in the body.
-	private quizScrollEl(): HTMLElement | null {
-		return (
-			this.bodyEl?.querySelector<HTMLElement>(".hl-quiz-backstage-list") ??
-			null
-		);
 	}
 
 	private push(frame: NavFrame): void {
@@ -314,7 +295,7 @@ export class EntityBrowserView extends ItemView {
 		const tabs = nav.createDiv({ cls: "hl-eb-tabs" });
 		this.tabEls.clear();
 		const mkTab = (
-			key: "entities" | "types" | "quizzes" | "maps",
+			key: "entities" | "types" | "maps",
 			label: string
 		): void => {
 			const el = tabs.createSpan({ cls: "hl-eb-tab", text: label });
@@ -333,27 +314,16 @@ export class EntityBrowserView extends ItemView {
 					});
 				else if (key === "types")
 					this.replace({ kind: "types", scroll: 0 });
-				else if (key === "maps")
-					this.replace({ kind: "maps", scroll: 0 });
-				else
-					this.replace({
-						kind: "quizzes",
-						query: "",
-						status: "active",
-						scroll: 0,
-					});
+				else this.replace({ kind: "maps", scroll: 0 });
 			});
 		};
 		mkTab("entities", "词条");
 		mkTab("types", "范畴");
 		mkTab("maps", "地图");
-		mkTab("quizzes", "Quiz");
 		const cur = this.current();
 		const activeTab =
 			cur.kind === "types"
 				? "types"
-				: cur.kind === "quizzes"
-				? "quizzes"
 				: cur.kind === "maps"
 				? "maps"
 				: "entities";
@@ -368,33 +338,6 @@ export class EntityBrowserView extends ItemView {
 		if (cur.kind === "entities") this.renderEntities(this.bodyEl, cur);
 		else if (cur.kind === "types") this.renderTypes(this.bodyEl, cur);
 		else if (cur.kind === "maps") this.renderMaps(this.bodyEl, cur);
-		else if (cur.kind === "quizzes") {
-			// The quiz workbench (recitation hub) is the primary quiz
-			// surface now; this section stays as the raw management table.
-			const hint = this.bodyEl.createDiv({ cls: "hl-eb-quiz-hint" });
-			hint.createSpan({
-				text: "背诵、按视图筛选和 deck 管理已搬到 Quiz 工作台。",
-			});
-			const open = hint.createEl("button", {
-				cls: "hl-eb-quiz-hint-btn",
-				text: "打开 Quiz 工作台",
-			});
-			open.addEventListener("click", () =>
-				void this.plugin.openRecitation()
-			);
-			renderQuizBackstage(
-				this.bodyEl,
-				this.plugin,
-				this.quizzes,
-				this.events,
-				this.dbColors,
-				cur,
-				() => this.reload(),
-				new Map(this.maps.map((m) => [m.id, m]))
-			);
-			const scroller = this.quizScrollEl();
-			if (scroller) this.restoreBodyScroll(scroller, cur.scroll);
-		}
 		else void this.renderEntity(this.bodyEl, cur);
 		// Refresh the tab title (Obsidian re-reads getDisplayText on layout
 		// change; trigger it via the leaf's internal header update if present).
@@ -1484,18 +1427,11 @@ export class EntityBrowserView extends ItemView {
 	}
 
 	// External entry points (commands) land on a specific section.
-	showSection(section: "entities" | "types" | "quizzes" | "maps"): void {
+	showSection(section: "entities" | "types" | "maps"): void {
 		if (this.current().kind === section) return;
 		if (section === "types") this.replace({ kind: "types", scroll: 0 });
 		else if (section === "maps")
 			this.replace({ kind: "maps", scroll: 0 });
-		else if (section === "quizzes")
-			this.replace({
-				kind: "quizzes",
-				query: "",
-				status: "active",
-				scroll: 0,
-			});
 		else
 			this.replace({
 				kind: "entities",

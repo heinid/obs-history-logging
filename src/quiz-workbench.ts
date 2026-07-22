@@ -790,6 +790,15 @@ export class QuizWorkbench {
 			this.overview = true;
 			this.ctx.rerender();
 		});
+		const vocab = row.createEl("button", {
+			cls: "hl-lex-save hl-qd-wallbtn",
+		});
+		setIcon(vocab.createSpan(), "book-a");
+		vocab.createSpan({ text: "Vocab" });
+		vocab.setAttr("aria-label", "切换到 Vocab 工作台");
+		vocab.addEventListener("click", () =>
+			void this.ctx.plugin.openLexicon(false)
+		);
 	}
 
 	// ── study strip ──

@@ -197,7 +197,7 @@ export class LexiconView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "词汇";
+		return "Vocab";
 	}
 
 	getIcon(): string {
@@ -992,6 +992,15 @@ export class LexiconView extends ItemView {
 				}).open();
 			});
 		}
+		const quiz = row.createEl("button", {
+			cls: "hl-lex-save hl-qd-wallbtn",
+		});
+		setIcon(quiz.createSpan(), "brain-circuit");
+		quiz.createSpan({ text: "Quiz" });
+		quiz.setAttr("aria-label", "切换到 Quiz 工作台");
+		quiz.addEventListener("click", () =>
+			void this.plugin.openRecitation(false)
+		);
 	}
 
 	private directionMenu(ev: MouseEvent): void {
