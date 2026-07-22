@@ -12,6 +12,7 @@ import { Profile } from "./profiles";
 import {
 	QuizEntry,
 	QuizKind,
+	isQuizNew,
 	isQuizReady,
 	isQuizWaiting,
 	reviveQuiz,
@@ -67,7 +68,13 @@ export interface QuizWorkbenchCtx {
 	rerender(): void;
 }
 
-type StudyFilter = null | "due" | "waiting" | "active" | "mastered";
+type StudyFilter =
+	| null
+	| "due"
+	| "fresh"
+	| "waiting"
+	| "active"
+	| "mastered";
 
 const KIND_LABEL: Record<QuizKind, string> = {
 	year: "YEAR",
@@ -96,6 +103,7 @@ export class QuizWorkbench {
 	private draft: QuizView = emptyQuizView();
 	private search = "";
 	private studyFilter: StudyFilter = null;
+	private sortDesc = false;
 	private overview = false;
 	private revealed = new Set<string>();
 
@@ -233,9 +241,12 @@ export class QuizWorkbench {
 			switch (this.studyFilter) {
 				case "due":
 					return (
+						!isQuizNew(q) &&
 						q.status === "active" &&
 						isQuizReady(q, now, schedule)
 					);
+				case "fresh":
+					return isQuizNew(q);
 				case "waiting":
 					return isQuizWaiting(q, now, schedule);
 				case "active":
@@ -770,17 +781,30 @@ export class QuizWorkbench {
 		const sort = row.createSpan({ cls: "hl-lex-tctl" });
 		sort.createSpan({
 			cls: "hl-lex-strong",
-			text: SORT_NAMES[this.draft.sort],
+			text: `${SORT_NAMES[this.draft.sort]} ${
+				this.sortDesc ? "↓" : "↑"
+			}`,
 		});
 		sort.addEventListener("click", (ev) => {
 			const menu = new Menu();
 			for (const [v, t] of Object.entries(SORT_NAMES))
 				menu.addItem((i) =>
 					i
-						.setTitle(t)
+						.setTitle(
+							this.draft.sort === v
+								? `${t} ${this.sortDesc ? "↓" : "↑"}`
+								: t
+						)
 						.setChecked(this.draft.sort === v)
 						.onClick(() => {
-							this.draft.sort = v as QuizViewSort;
+							// Picking the current sort again flips its
+							// direction.
+							if (this.draft.sort === v)
+								this.sortDesc = !this.sortDesc;
+							else {
+								this.draft.sort = v as QuizViewSort;
+								this.sortDesc = false;
+							}
 							this.ctx.rerender();
 						})
 				);
@@ -814,12 +838,19 @@ export class QuizWorkbench {
 		this.ctx.registerDynamic(
 			strip,
 			() => {
+				const pool = this.filtered();
 				const s = quizDeckStats(
-					this.filtered(),
+					pool,
 					new Date(),
 					this.schedule()
 				);
-				return [s.due, s.waiting, s.active, s.mastered].join("|");
+				return [
+					s.due,
+					pool.filter(isQuizNew).length,
+					s.waiting,
+					s.active,
+					s.mastered,
+				].join("|");
 			},
 			fill
 		);
@@ -848,8 +879,10 @@ export class QuizWorkbench {
 				this.ctx.rerender();
 			});
 		};
-		seg("due", "到期", stats.due, " is-due");
-		seg("waiting", "等待中", stats.waiting, " is-wait");
+		const fresh = quizzes.filter(isQuizNew).length;
+		seg("due", "待复习", stats.due - fresh, " is-due");
+		seg("fresh", "待学习", fresh);
+		seg("waiting", "稍后", stats.waiting, " is-wait");
 		seg("active", "在学", stats.active);
 		seg("mastered", "学过", stats.mastered);
 		strip.createDiv({ cls: "hl-lex-spacer" });
@@ -857,12 +890,15 @@ export class QuizWorkbench {
 		const scopeIds = quizzes.map((q) => q.id);
 		const now = new Date();
 		const schedule = this.schedule();
-		const dueIds = quizzes
-			.filter(
-				(q) =>
-					q.status === "active" && isQuizReady(q, now, schedule)
-			)
-			.map((q) => q.id);
+		// Reviews first, fresh cards after — the session works through what
+		// is actually due before introducing anything new.
+		const ready = quizzes.filter(
+			(q) => q.status === "active" && isQuizReady(q, now, schedule)
+		);
+		const dueIds = [
+			...ready.filter((q) => !isQuizNew(q)),
+			...ready.filter((q) => isQuizNew(q)),
+		].map((q) => q.id);
 		const activeIds = quizzes
 			.filter((q) => q.status === "active")
 			.map((q) => q.id);
@@ -955,10 +991,14 @@ export class QuizWorkbench {
 		const now = new Date();
 		const schedule = this.schedule();
 		const sort = this.draft.sort;
+		const dir = this.sortDesc ? -1 : 1;
 		return [...items].sort((a, b) => {
-			if (sort === "year") return this.yearKey(a) - this.yearKey(b);
+			if (sort === "year")
+				return dir * (this.yearKey(a) - this.yearKey(b));
 			if (sort === "created")
-				return (b.created ?? "").localeCompare(a.created ?? "");
+				return (
+					dir * (b.created ?? "").localeCompare(a.created ?? "")
+				);
 			// due first, then by next review time, then newest first
 			const rank = (q: QuizEntry): number =>
 				q.status === "mastered"
@@ -969,11 +1009,11 @@ export class QuizWorkbench {
 					? 1
 					: 2;
 			const d = rank(a) - rank(b);
-			if (d) return d;
+			if (d) return dir * d;
 			const ra = a.nextReview ?? "";
 			const rb = b.nextReview ?? "";
-			if (ra !== rb) return ra.localeCompare(rb);
-			return (b.created ?? "").localeCompare(a.created ?? "");
+			if (ra !== rb) return dir * ra.localeCompare(rb);
+			return dir * (b.created ?? "").localeCompare(a.created ?? "");
 		});
 	}
 
@@ -989,17 +1029,16 @@ export class QuizWorkbench {
 			const now = new Date();
 			const schedule = this.schedule();
 			const buckets: { label: string; items: QuizEntry[] }[] = [
-				{ label: "到期", items: [] },
-				{ label: "短等待", items: [] },
+				{ label: "待复习", items: [] },
+				{ label: "待学习", items: [] },
 				{ label: "在学", items: [] },
 				{ label: "学过", items: [] },
 			];
 			for (const q of sorted) {
 				if (q.status === "mastered") buckets[3].items.push(q);
+				else if (isQuizNew(q)) buckets[1].items.push(q);
 				else if (isQuizReady(q, now, schedule))
 					buckets[0].items.push(q);
-				else if (isQuizWaiting(q, now, schedule))
-					buckets[1].items.push(q);
 				else buckets[2].items.push(q);
 			}
 			return buckets.filter((b) => b.items.length);
@@ -1080,12 +1119,14 @@ export class QuizWorkbench {
 		if (quiz.status === "mastered") {
 			return { text: "学过", cls: "" };
 		}
+		// A fresh card carries no state text — untouched dots say it all.
+		if (isQuizNew(quiz)) return { text: "", cls: "" };
 		if (isQuizReady(quiz, now, schedule))
-			return { text: "已到期", cls: " is-overdue" };
+			return { text: "待复习", cls: " is-overdue" };
 		const wait = nextReviewLabel(quiz, now, schedule);
 		if (isQuizWaiting(quiz, now, schedule))
 			return {
-				text: wait ? `⏰ ${wait}` : "⏰ 等待中",
+				text: wait ? `⏰ ${wait}` : "⏰ 稍后",
 				cls: " is-wait",
 			};
 		return { text: wait, cls: "" };
@@ -1536,8 +1577,8 @@ export class QuizWorkbench {
 			el.createSpan({ cls: "hl-lex-strip-num", text: String(num) });
 			el.createSpan({ text: label });
 		};
-		stat(stats.due, "到期", " is-due");
-		stat(stats.waiting, "等待中", " is-wait");
+		stat(stats.due, "待复习", " is-due");
+		stat(stats.waiting, "稍后", " is-wait");
 		stat(stats.active, "在学");
 		stat(stats.mastered, "学过");
 		if (!quizzes.length)

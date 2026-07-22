@@ -561,12 +561,12 @@ eq("mastered not parked", isQuizParked(mastered, t0), false);
 eq(
 	"recheck wait label",
 	shortWaitLabel(recheckPending, t0, recheckSchedule),
-	"⏰ 重温确认 · 10 分钟后可练"
+	"⏰ 重温确认 · 10 分钟后"
 );
 eq(
 	"retry wait label",
 	shortWaitLabel(forgot, new Date("2026-07-10T10:05:00.000Z")),
-	"⏰ 重试 · 10 分钟后可练"
+	"⏰ 重试 · 10 分钟后"
 );
 eq(
 	"wait label empty when ready",

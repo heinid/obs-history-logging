@@ -56,6 +56,16 @@ export const DEFAULT_QUIZ_SCHEDULE: QuizSchedule = {
 	parkMinutes: 24 * 60,
 };
 
+// A freshly minted card that was never studied: nothing attempted and
+// nothing scheduled yet.
+export function isQuizNew(quiz: QuizEntry): boolean {
+	return (
+		quiz.status === "active" &&
+		!quiz.attempts.length &&
+		!quiz.nextReview
+	);
+}
+
 export function isQuizReady(
 	quiz: QuizEntry,
 	now = new Date(),

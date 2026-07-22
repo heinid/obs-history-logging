@@ -113,7 +113,7 @@ export function renderTimelineQuizCard(
 			});
 			badge.setAttr(
 				"aria-label",
-				"短等待中的题，通过后回到原卡位"
+				"稍后队列中的题，通过后回到原卡位"
 			);
 		}
 		const navigation = head.createDiv({ cls: "hl-quiz-navigation" });

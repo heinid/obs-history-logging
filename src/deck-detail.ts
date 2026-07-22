@@ -80,7 +80,7 @@ export function renderMasteryBar(
 		seg(`is-step-${Math.min(step, 3)}`, stats.progressDist[step]);
 }
 
-// Event deck: summary card + quizzes grouped 到期 / 短等待 / 在学 / 学过.
+// Event deck: summary card + quizzes grouped 待复习 / 稍后 / 在学 / 学过.
 export async function renderEventDeckDetail(
 	root: HTMLElement,
 	data: EventDeckDetailData,
@@ -122,7 +122,7 @@ export async function renderEventDeckDetail(
 		renderMasteryBar(el, stats);
 		el.createDiv({
 			cls: "hl-deck-meta",
-			text: `到期 ${stats.due} · 短等待 ${stats.waiting} · 在学 ${stats.active} · 学过 ${stats.mastered}`,
+			text: `待复习 ${stats.due} · 稍后 ${stats.waiting} · 在学 ${stats.active} · 学过 ${stats.mastered}`,
 		});
 		const actions = el.createDiv({ cls: "hl-deck-actions" });
 		const start = actions.createEl("button", {
@@ -167,8 +167,8 @@ export async function renderEventDeckDetail(
 		now: Date
 	): { label: string; items: QuizEntry[] }[] => {
 		const groups: { label: string; items: QuizEntry[] }[] = [
-			{ label: "到期", items: [] },
-			{ label: "短等待", items: [] },
+			{ label: "待复习", items: [] },
+			{ label: "稍后", items: [] },
 			{ label: "在学", items: [] },
 			{ label: "学过", items: [] },
 		];

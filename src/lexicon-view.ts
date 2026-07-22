@@ -172,6 +172,7 @@ export class LexiconView extends ItemView {
 	private draft: ReciteView = emptyView();
 	private search = "";
 	private studyFilter: StudyFilter = null;
+	private sortDesc = false;
 	private revealed = new Set<string>(); // `${id}:${lang}`
 	private ctxOpen = new Set<string>(); // entity ids with expanded context
 	private ctxIndex = new Map<string, number>();
@@ -910,17 +911,30 @@ export class LexiconView extends ItemView {
 		sort.createSpan({ text: "按" });
 		sort.createSpan({
 			cls: "hl-lex-strong",
-			text: sortNames[this.draft.sort],
+			text: `${sortNames[this.draft.sort]} ${
+				this.sortDesc ? "↓" : "↑"
+			}`,
 		});
 		sort.addEventListener("click", (ev) => {
 			const menu = new Menu();
 			for (const [v, t] of Object.entries(sortNames))
 				menu.addItem((i) =>
 					i
-						.setTitle(t)
+						.setTitle(
+							this.draft.sort === v
+								? `${t} ${this.sortDesc ? "↓" : "↑"}`
+								: t
+						)
 						.setChecked(this.draft.sort === v)
 						.onClick(() => {
-							this.draft.sort = v as ViewSort;
+							// Picking the current sort again flips its
+							// direction.
+							if (this.draft.sort === v)
+								this.sortDesc = !this.sortDesc;
+							else {
+								this.draft.sort = v as ViewSort;
+								this.sortDesc = false;
+							}
 							this.render();
 						})
 				);
@@ -1111,7 +1125,7 @@ export class LexiconView extends ItemView {
 			});
 		};
 		seg("due", "到期", stats.words.due, stats.due);
-		seg("waiting", "短等待", stats.words.waiting, stats.waiting);
+		seg("waiting", "稍后", stats.words.waiting, stats.waiting);
 		seg("active", "在学", stats.words.active, stats.active);
 		seg("mastered", "学过", stats.words.mastered, stats.mastered);
 		if (enrolled) {
@@ -1184,12 +1198,18 @@ export class LexiconView extends ItemView {
 		items: EntityEntry[]
 	): { label: string; items: EntityEntry[] }[] {
 		const sort = this.draft.sort;
+		const dir = this.sortDesc ? -1 : 1;
 		const sorted = [...items].sort((a, b) => {
 			if (sort === "name")
-				return displayName(a).localeCompare(displayName(b), "zh");
+				return (
+					dir *
+					displayName(a).localeCompare(displayName(b), "zh")
+				);
 			if (sort === "updated")
-				return (b.updated ?? "").localeCompare(a.updated ?? "");
-			return entityStamp(b).localeCompare(entityStamp(a));
+				return (
+					dir * (b.updated ?? "").localeCompare(a.updated ?? "")
+				);
+			return dir * entityStamp(b).localeCompare(entityStamp(a));
 		});
 		const group = this.draft.group;
 		if (group === "none") return [{ label: "", items: sorted }];

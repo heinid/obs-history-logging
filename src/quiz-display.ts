@@ -86,11 +86,11 @@ export function nextReviewLabel(
 	if (!quiz.nextReview || isQuizReady(quiz, now, schedule)) return "";
 	const time = Date.parse(quiz.nextReview);
 	const minutes = Math.ceil((time - now.getTime()) / 60_000);
-	if (minutes < 60) return `${minutes} 分钟后可练`;
+	if (minutes < 60) return `${minutes} 分钟后`;
 	const hours = Math.ceil(minutes / 60);
-	if (hours < 24) return `${hours} 小时后可练`;
+	if (hours < 24) return `${hours} 小时后`;
 	const days = Math.ceil(hours / 24);
-	return days <= 1 ? "明天可练" : `${days} 天后可练`;
+	return days <= 1 ? "明天" : `${days} 天后`;
 }
 
 // Countdown line for a card sitting in the short retry/recheck loop; empty

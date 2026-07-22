@@ -193,9 +193,9 @@ export class ReminderAgendaModal extends Modal {
 		const waiting = items
 			.filter((i) => i.due > now)
 			.sort((a, b) => a.due - b.due);
-		if (due.length) this.renderGroup(host, "已到期", due, now, true);
+		if (due.length) this.renderGroup(host, "待复习", due, now, true);
 		if (waiting.length)
-			this.renderGroup(host, "等待中", waiting, now, false);
+			this.renderGroup(host, "稍后", waiting, now, false);
 	}
 
 	private renderGroup(
