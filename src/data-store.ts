@@ -2,7 +2,6 @@ import { App, Notice, TFile, normalizePath } from "obsidian";
 import { EventEntry } from "./types";
 import { parseEventsFile, serializeEventsFile } from "./events-format";
 import {
-	DEFAULT_PROFILE,
 	Profile,
 	parseProfilesFile,
 	serializeProfilesFile,
@@ -144,7 +143,7 @@ export class DataStore {
 
 	async readProfiles(): Promise<Profile[]> {
 		const file = this.app.vault.getAbstractFileByPath(this.profilesPath());
-		if (!(file instanceof TFile)) return [DEFAULT_PROFILE];
+		if (!(file instanceof TFile)) return [];
 		return parseProfilesFile(await this.app.vault.read(file));
 	}
 

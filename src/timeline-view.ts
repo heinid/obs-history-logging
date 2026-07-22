@@ -11,7 +11,7 @@ import {
 import type HistoryLoggingPlugin from "./main";
 import { TimelineEntry, scanVault } from "./scan";
 import { describeYear, parseYearTag } from "./year-tag";
-import { Profile } from "./profiles";
+import { ALL_VIEW, Profile } from "./profiles";
 import { EraSystem, eraAt } from "./eras";
 import { QueryContext, matchesQuery, parseQuery } from "./query";
 import { FilterBar } from "./filter-bar";
@@ -186,8 +186,8 @@ export class TimelineView extends ItemView {
 		await this.loadDbColors();
 		if (!this.initialised) {
 			this.initialised = true;
-			if (!this.restored && this.profiles.length) {
-				this.bar.loadProfile(this.profiles[0]);
+			if (!this.restored) {
+				this.bar.loadProfile(ALL_VIEW);
 				this.tracks[this.active] = this.bar.getTrack();
 			}
 		}

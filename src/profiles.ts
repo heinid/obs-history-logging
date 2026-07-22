@@ -19,12 +19,20 @@ export interface Profile {
 
 export const PROFILES_HEADER = "# History Logging — profiles";
 
-export const DEFAULT_PROFILE: Profile = {
+// The fixed "All" view: everything, no filter. It is not a stored profile —
+// the timeline always offers it and it cannot be renamed or deleted.
+export const ALL_VIEW: Profile = {
 	name: "All",
 	match: "",
 	groupBy: "century",
 	eraSystem: "",
 };
+
+// Legacy files carried All as a stored profile; it is now built in, so a
+// stored filterless "All" is dropped on read.
+export function isLegacyAll(p: Profile): boolean {
+	return p.name === ALL_VIEW.name && !p.match;
+}
 
 function isGroupBy(v: string): v is GroupBy {
 	return v === "century" || v === "decade" || v === "none";
@@ -59,7 +67,7 @@ export function parseProfilesFile(content: string): Profile[] {
 		}
 		profiles.push(profile);
 	}
-	return profiles.length ? profiles : [DEFAULT_PROFILE];
+	return profiles.filter((p) => !isLegacyAll(p));
 }
 
 export function serializeProfilesFile(profiles: Profile[]): string {

@@ -1,6 +1,6 @@
-import { Menu, setIcon } from "obsidian";
+import { Menu, Notice, setIcon } from "obsidian";
 import type HistoryLoggingPlugin from "./main";
-import { GroupBy, Profile } from "./profiles";
+import { ALL_VIEW, GroupBy, Profile } from "./profiles";
 import { EraSystem } from "./eras";
 import { tokenise } from "./query";
 import { NameModal } from "./name-modal";
@@ -270,6 +270,7 @@ export class FilterBar {
 
 	private currentProfile(): Profile | undefined {
 		if (!this.profileName) return undefined;
+		if (this.profileName === ALL_VIEW.name) return ALL_VIEW;
 		return this.host.getProfiles().find((p) => p.name === this.profileName);
 	}
 
@@ -300,6 +301,19 @@ export class FilterBar {
 	private openViewMenu(e: MouseEvent): void {
 		const menu = new Menu();
 		const profiles = this.host.getProfiles();
+		// The fixed "All" view heads the list: everything, no filter.
+		menu.addItem((i) =>
+			i
+				.setTitle(ALL_VIEW.name)
+				.setIcon(
+					this.profileName === ALL_VIEW.name ? "check" : "globe"
+				)
+				.onClick(() => {
+					this.loadProfile(ALL_VIEW);
+					this.render(this.barEl);
+					this.host.onChange();
+				})
+		);
 		for (const p of profiles) {
 			menu.addItem((i) =>
 				i
@@ -314,7 +328,7 @@ export class FilterBar {
 		}
 		menu.addSeparator();
 		const cur = this.currentProfile();
-		if (cur && this.isDirty()) {
+		if (cur && cur.name !== ALL_VIEW.name && this.isDirty()) {
 			menu.addItem((i) =>
 				i
 					.setTitle(`Update "${cur.name}"`)
@@ -334,6 +348,10 @@ export class FilterBar {
 				.setIcon("plus")
 				.onClick(() => {
 					new NameModal(this.plugin.app, "Save view as", "", (name) => {
+						if (name === ALL_VIEW.name) {
+							new Notice("“All” is the built-in view");
+							return;
+						}
 						const rest = profiles.filter((p) => p.name !== name);
 						this.host.setProfiles([...rest, this.snapshot(name)]);
 						this.profileName = name;
@@ -341,7 +359,7 @@ export class FilterBar {
 					}).open();
 				})
 		);
-		if (cur) {
+		if (cur && cur.name !== ALL_VIEW.name) {
 			menu.addItem((i) =>
 				i
 					.setTitle(`Delete "${cur.name}"`)
