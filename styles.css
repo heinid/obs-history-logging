@@ -5374,7 +5374,15 @@ input.hl-tag-chip-input:focus-visible {
 	margin-top: 2px;
 }
 .hl-qd-row:hover .hl-qd-acts {
-	opacity: 1;
+	display: inline-flex;
+}
+.hl-qd-chiprow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 5px;
+	margin: 0 0 8px;
+	color: var(--text-faint);
 }
 .hl-qd-mapic {
 	display: inline-flex;

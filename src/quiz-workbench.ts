@@ -134,7 +134,11 @@ export class QuizWorkbench {
 	private selectCustom(view: QuizView): void {
 		this.selected = view.name;
 		this.selectedCustom = true;
-		this.draft = { ...view, kinds: [...view.kinds] };
+		this.draft = {
+			...view,
+			kinds: [...view.kinds],
+			terms: [...view.terms],
+		};
 		this.studyFilter = null;
 		this.overview = false;
 		this.ctx.rerender();
@@ -169,6 +173,7 @@ export class QuizWorkbench {
 		return (
 			this.draft.kinds.length > 0 ||
 			this.draft.status !== "" ||
+			this.draft.terms.length > 0 ||
 			this.search !== ""
 		);
 	}
@@ -210,8 +215,10 @@ export class QuizWorkbench {
 	// study-strip segment filter.
 	private filtered(): QuizEntry[] {
 		let out = this.quizzesForView(this.draft);
-		const query = this.search.trim().toLowerCase();
-		if (query)
+		const queries = [...this.draft.terms, this.search.trim()]
+			.map((t) => t.toLowerCase())
+			.filter(Boolean);
+		for (const query of queries)
 			out = out.filter((q) => this.searchText(q).includes(query));
 		return out;
 	}
@@ -265,6 +272,17 @@ export class QuizWorkbench {
 			attr: { type: "search", placeholder: "搜索题面 / 答案…" },
 		});
 		search.value = this.search;
+		search.addEventListener("keydown", (ev) => {
+			if (ev.key !== "Enter") return;
+			const term = search.value.trim();
+			if (!term) return;
+			ev.preventDefault();
+			if (!this.draft.terms.includes(term))
+				this.draft.terms.push(term);
+			this.search = "";
+			search.value = "";
+			this.ctx.rerender();
+		});
 		let timer = 0;
 		search.addEventListener("input", () => {
 			window.clearTimeout(timer);
@@ -621,7 +639,12 @@ export class QuizWorkbench {
 			void this.ctx
 				.saveViews([
 					...this.ctx.views(),
-					{ ...template, kinds: [...template.kinds], name },
+					{
+					...template,
+					kinds: [...template.kinds],
+					terms: [...template.terms],
+					name,
+				},
 				])
 				.then(() => {
 					this.selectCustom({ ...template, name });
@@ -635,8 +658,55 @@ export class QuizWorkbench {
 	private renderMain(main: HTMLElement): void {
 		const items = this.listed();
 		this.renderToolrow(main, this.filtered().length);
+		this.renderChips(main);
 		this.renderStrip(main);
 		this.renderRows(main, items);
+	}
+
+	// The current filter spelled out as removable chips, timeline style —
+	// whether it came from a saved view, the facets, or the search box.
+	private renderChips(main: HTMLElement): void {
+		const d = this.draft;
+		if (
+			!d.profile &&
+			!d.kinds.length &&
+			!d.status &&
+			!d.terms.length
+		)
+			return;
+		const row = main.createDiv({ cls: "hl-qd-chiprow" });
+		const icon = row.createSpan({ cls: "hl-filter-icon" });
+		setIcon(icon, "filter");
+		const chip = (label: string, remove: () => void): void => {
+			const el = row.createSpan({ cls: "hl-chip" });
+			el.createSpan({ text: label });
+			const x = el.createSpan({ cls: "hl-chip-x" });
+			setIcon(x, "x");
+			x.addEventListener("click", () => {
+				remove();
+				this.ctx.rerender();
+			});
+		};
+		if (d.profile)
+			chip(d.profile, () => {
+				d.profile = "";
+				if (!this.selectedCustom) {
+					this.selected = null;
+					this.selectedCustom = false;
+				}
+			});
+		for (const kind of d.kinds)
+			chip(KIND_LABEL[kind], () => {
+				d.kinds = d.kinds.filter((k) => k !== kind);
+			});
+		if (d.status)
+			chip(d.status === "active" ? "在学" : "学过", () => {
+				d.status = "";
+			});
+		for (const term of d.terms)
+			chip(`“${term}”`, () => {
+				d.terms = d.terms.filter((t) => t !== term);
+			});
 	}
 
 	private renderToolrow(main: HTMLElement, count: number): void {

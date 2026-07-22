@@ -25,6 +25,8 @@ export interface QuizView {
 	status: "" | QuizStatus;
 	group: QuizViewGroup;
 	sort: QuizViewSort;
+	// Committed search-term chips (AND-combined substring matches).
+	terms: string[];
 }
 
 export const QUIZ_VIEWS_HEADER = "# History Logging — quiz views";
@@ -41,6 +43,7 @@ export function emptyQuizView(name = ""): QuizView {
 		status: "",
 		group: "state",
 		sort: "due",
+		terms: [],
 	};
 }
 
@@ -81,6 +84,11 @@ export function parseQuizViewsFile(content: string): QuizView[] {
 				view.group = value as QuizViewGroup;
 			else if (kv[1] === "sort" && SORTS.has(value as QuizViewSort))
 				view.sort = value as QuizViewSort;
+			else if (kv[1] === "terms")
+				view.terms = value
+					.split(",")
+					.map((t) => t.trim())
+					.filter(Boolean);
 		}
 		views.push(view);
 	}
@@ -96,6 +104,7 @@ export function serializeQuizViewsFile(views: QuizView[]): string {
 		if (v.status) parts.push(`status: ${v.status}`);
 		if (v.group !== "state") parts.push(`group: ${v.group}`);
 		if (v.sort !== "due") parts.push(`sort: ${v.sort}`);
+		if (v.terms.length) parts.push(`terms: ${v.terms.join(", ")}`);
 		parts.push("");
 	}
 	return parts.join("\n").replace(/\n+$/, "\n");
