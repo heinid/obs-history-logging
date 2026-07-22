@@ -246,7 +246,7 @@ export async function openMapCandidate(
 	}
 	const file = plugin.app.metadataCache.getFirstLinkpathDest(c.link, "");
 	const entry = newMapEntry((id) => maps.has(id), {
-		title: file?.basename ?? "",
+		title: "",
 		image: file?.path ?? c.link,
 		events: evId ? [evId] : [],
 	});

@@ -27,7 +27,8 @@ import { QuizPracticeModal } from "./quiz-modal";
 import { ConfirmModal, NameModal } from "./name-modal";
 import { DbColors, renderQuizText } from "./quiz-render";
 import { EventEntry } from "./types";
-import { MapEntry } from "./maps-format";
+import { MapEntry, mapDisplayTitle } from "./maps-format";
+import { MapModal } from "./map-modal";
 import { describeYear, parseYearTag } from "./year-tag";
 import { renderMasteryBar } from "./deck-detail";
 import {
@@ -1016,7 +1017,11 @@ export class QuizWorkbench {
 			if (q.kind === "map" && q.sourceMapId) {
 				const map = this.ctx.maps().get(q.sourceMapId);
 				key = `map:${q.sourceMapId}`;
-				label = `🗺 ${map ? map.title || map.image : "来源地图已不存在"}`;
+				label = `🗺 ${
+					map
+						? mapDisplayTitle(map) || "未命名地图"
+						: "来源地图已不存在"
+				}`;
 			} else {
 				const event = this.eventOf(q);
 				key = q.sourceEvId;
@@ -1085,7 +1090,7 @@ export class QuizWorkbench {
 		const text = mainCol.createDiv({ cls: "hl-qd-text" });
 		if (quiz.kind === "map") {
 			const ic = text.createSpan({ cls: "hl-qd-mapic" });
-			setIcon(ic, "map");
+			this.renderMapIcon(ic, quiz);
 			const custom = quiz.question.trim().startsWith("🗺")
 				? ""
 				: quiz.question.trim();
@@ -1123,11 +1128,12 @@ export class QuizWorkbench {
 				const idx = map.occlusions.findIndex(
 					(o) => o.id === quiz.occlusionId
 				);
-				meta.createSpan({
-					text:
-						(map.title || map.image) +
-						(idx >= 0 ? ` · 遮罩 ${idx + 1}` : ""),
-				});
+				const parts = [
+					mapDisplayTitle(map),
+					idx >= 0 ? `遮罩 ${idx + 1}` : "",
+				].filter(Boolean);
+				if (parts.length)
+					meta.createSpan({ text: parts.join(" · ") });
 			}
 		}
 		const steps = this.schedule().masterySteps;
@@ -1171,6 +1177,28 @@ export class QuizWorkbench {
 		row.addEventListener("contextmenu", (ev) =>
 			this.rowMenu(quiz, event, ev)
 		);
+	}
+
+	// A tiny thumbnail of the source map stands in for the generic map
+	// icon; missing images fall back to it.
+	private renderMapIcon(host: HTMLElement, quiz: QuizEntry): void {
+		const map = quiz.sourceMapId
+			? this.ctx.maps().get(quiz.sourceMapId)
+			: undefined;
+		const app = this.ctx.plugin.app;
+		const file = map
+			? app.metadataCache.getFirstLinkpathDest(map.image, "")
+			: null;
+		if (!file) {
+			setIcon(host, "map");
+			return;
+		}
+		const img = host.createEl("img", { cls: "hl-qd-mapthumb" });
+		img.src = app.vault.getResourcePath(file);
+		img.addEventListener("error", () => {
+			host.empty();
+			setIcon(host, "map");
+		});
 	}
 
 	// The question with its blank masked in place, exactly as in the design
@@ -1325,6 +1353,22 @@ export class QuizWorkbench {
 						)
 					)
 			);
+			const map = this.ctx.maps().get(mapId);
+			if (map)
+				menu.addItem((i) =>
+					i
+						.setTitle("编辑地图")
+						.setIcon("image")
+						.onClick(() =>
+							new MapModal(
+								plugin.app,
+								plugin,
+								map,
+								false,
+								() => this.ctx.onChanged()
+							).open()
+						)
+				);
 		}
 		if (quiz.status === "mastered")
 			menu.addItem((i) =>

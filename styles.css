@@ -5404,6 +5404,13 @@ input.hl-tag-chip-input:focus-visible {
 	width: 14px;
 	height: 14px;
 }
+.hl-qd-mapthumb {
+	width: 16px;
+	height: 16px;
+	border-radius: 3px;
+	object-fit: cover;
+	display: block;
+}
 .hl-qd-side-empty {
 	padding: 2px 8px 4px;
 	font-size: 0.76em;

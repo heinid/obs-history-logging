@@ -90,7 +90,6 @@ export class MapModal extends Modal {
 			await blob.arrayBuffer()
 		);
 		this.entry.image = file.path;
-		if (!this.entry.title) this.entry.title = file.basename;
 		new Notice(`图片已存入：${file.path}`);
 		await this.render();
 	}
@@ -295,10 +294,6 @@ export class MapModal extends Modal {
 					new Notice("请先粘贴或选择图片");
 					return;
 				}
-				if (!this.entry.title.trim()) {
-					const f = this.imageFile();
-					this.entry.title = f?.basename ?? this.entry.image;
-				}
 				await this.plugin.store.upsertMap(this.entry);
 				new Notice(this.isNew ? "地图已联入" : "地图已保存");
 				this.close();
@@ -450,7 +445,6 @@ export class MapModal extends Modal {
 	private pickFromVault(): void {
 		new ImageSuggestModal(this.app, (f) => {
 			this.entry.image = f.path;
-			if (!this.entry.title) this.entry.title = f.basename;
 			void this.render();
 		}).open();
 	}

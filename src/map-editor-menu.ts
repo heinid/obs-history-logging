@@ -71,7 +71,7 @@ async function openManualMapLink(
 	}
 	const file = plugin.app.metadataCache.getFirstLinkpathDest(link, "");
 	const entry = newMapEntry((id) => maps.has(id), {
-		title: file?.basename ?? "",
+		title: "",
 		image: file?.path ?? link,
 		events,
 	});

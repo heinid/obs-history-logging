@@ -54,6 +54,19 @@ export interface MapEntry {
 	occlusions: MapOcclusion[];
 }
 
+// A title that merely repeats the image file name (or path) is treated as
+// unnamed — pasting used to prefill it with the basename.
+export function mapDisplayTitle(map: MapEntry): string {
+	const t = map.title.trim();
+	if (!t) return "";
+	const base =
+		map.image
+			.split(/[\\/]/)
+			.pop()
+			?.replace(/\.[^.]+$/, "") ?? "";
+	return t === base || t === map.image ? "" : t;
+}
+
 const listOf = (val: string): string[] =>
 	val
 		.split(",")
