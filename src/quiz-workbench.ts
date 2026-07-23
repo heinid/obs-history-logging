@@ -103,7 +103,8 @@ export class QuizWorkbench {
 	private draft: QuizView = emptyQuizView();
 	private search = "";
 	private studyFilter: StudyFilter = null;
-	private sortDesc = false;
+	// Created sort defaults to newest first; other sorts start ascending.
+	private sortDesc = true;
 	private overview = false;
 	private revealed = new Set<string>();
 
@@ -128,6 +129,7 @@ export class QuizWorkbench {
 		this.selectedCustom = false;
 		this.draft = emptyQuizView();
 		this.studyFilter = null;
+		this.sortDesc = this.draft.sort === "created";
 		this.overview = false;
 		this.ctx.rerender();
 	}
@@ -138,6 +140,7 @@ export class QuizWorkbench {
 		this.selectedCustom = false;
 		this.draft = { ...emptyQuizView(), profile: name };
 		this.studyFilter = null;
+		this.sortDesc = this.draft.sort === "created";
 		this.overview = false;
 		this.ctx.rerender();
 	}
@@ -152,6 +155,7 @@ export class QuizWorkbench {
 			terms: [...view.terms],
 		};
 		this.studyFilter = null;
+		this.sortDesc = this.draft.sort === "created";
 		this.overview = false;
 		this.ctx.rerender();
 	}
@@ -1009,7 +1013,7 @@ export class QuizWorkbench {
 				return dir * (this.yearKey(a) - this.yearKey(b));
 			if (sort === "created")
 				return (
-					dir * (b.created ?? "").localeCompare(a.created ?? "")
+					dir * (a.created ?? "").localeCompare(b.created ?? "")
 				);
 			// due first, then by next review time, then newest first
 			const rank = (q: QuizEntry): number =>

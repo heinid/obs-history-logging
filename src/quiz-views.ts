@@ -42,7 +42,7 @@ export function emptyQuizView(name = ""): QuizView {
 		kinds: [],
 		status: "",
 		group: "none",
-		sort: "due",
+		sort: "created",
 		terms: [],
 	};
 }
@@ -103,7 +103,7 @@ export function serializeQuizViewsFile(views: QuizView[]): string {
 		if (v.kinds.length) parts.push(`kinds: ${v.kinds.join(", ")}`);
 		if (v.status) parts.push(`status: ${v.status}`);
 		if (v.group !== "none") parts.push(`group: ${v.group}`);
-		if (v.sort !== "due") parts.push(`sort: ${v.sort}`);
+		if (v.sort !== "created") parts.push(`sort: ${v.sort}`);
 		if (v.terms.length) parts.push(`terms: ${v.terms.join(", ")}`);
 		parts.push("");
 	}
