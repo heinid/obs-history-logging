@@ -11,7 +11,9 @@ import {
 	QuizEntry,
 	QuizResult,
 	QuizSchedule,
+	QuizSectionKey,
 	isQuizReady,
+	isQuizShortLoop,
 	isQuizWaiting,
 	reviewQuiz,
 } from "./quiz";
@@ -139,7 +141,15 @@ export function toQuizShape(p: ReciteProgress): QuizEntry {
 						at: p.updated,
 						result: p.lastResult,
 						early: false,
-						progressBefore: p.progress,
+						// A remembered pass that raised the score is the
+						// only step-clearing shape the short-loop and
+						// section checks look for.
+						progressBefore:
+							p.lastResult === "remembered" &&
+							p.progress > 0 &&
+							!p.pendingRecheck
+								? p.progress - 1
+								: p.progress,
 						progressAfter: p.progress,
 					},
 			  ]
@@ -167,6 +177,20 @@ export function reviewProgress(
 				: p.lastResult,
 		updated: next.updated,
 	};
+}
+
+// Exclusive study section for a direction, mirroring the quiz model but
+// judging «passed» by the stored score (only the last attempt survives).
+export function progressSection(
+	p: ReciteProgress,
+	now: Date,
+	schedule: QuizSchedule
+): QuizSectionKey {
+	if (p.status === "mastered") return "mastered";
+	const shape = toQuizShape(p);
+	if (isQuizShortLoop(shape, now, schedule)) return "waiting";
+	if (p.progress === 0) return "fresh";
+	return isQuizReady(shape, now, schedule) ? "due" : "active";
 }
 
 // A direction is due when it was never studied or its record is ready.

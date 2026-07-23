@@ -5298,6 +5298,9 @@ input.hl-tag-chip-input:focus-visible {
 	color: var(--color-yellow);
 	font-variant-numeric: tabular-nums;
 }
+.hl-qd-meta-state.is-fresh {
+	color: var(--color-green);
+}
 .hl-qd-acts {
 	margin-top: 2px;
 }

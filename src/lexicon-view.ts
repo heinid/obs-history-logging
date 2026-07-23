@@ -26,7 +26,7 @@ import {
 } from "./quiz-render";
 import { EntityModal } from "./entity-modal";
 import { NameModal, ConfirmModal, ChoiceModal } from "./name-modal";
-import { QuizSchedule } from "./quiz";
+import { QuizSchedule, QuizSectionKey } from "./quiz";
 import { quizSchedule } from "./quiz-display";
 import { quizDeckStats, DeckStats } from "./deck-stats";
 import { jumpToLocation } from "./jump";
@@ -52,19 +52,23 @@ import {
 	isProgressWaiting,
 	newProgress,
 	progressKey,
+	progressSection,
 	toQuizShape,
 } from "./recite-progress";
 import { StudyPlayerPage, StudyItem } from "./recite-study-player";
 
 export const LEXICON_VIEW_TYPE = "history-logging-lexicon";
 
+// "fresh" = minted but never passed (待记忆); "rest" = library words with
+// no minted card at all (未开始).
 type StudyFilter =
 	| null
 	| "due"
 	| "waiting"
 	| "active"
 	| "mastered"
-	| "fresh";
+	| "fresh"
+	| "rest";
 
 function normTag(t: string): string {
 	return t.replace(/^#+/, "").trim();
@@ -180,6 +184,8 @@ export class LexiconView extends ItemView {
 	private studyFilter: StudyFilter = null;
 	// List scroll offset stashed while the study player owns the pane.
 	private savedScroll = 0;
+	// The next render starts at the top (set when a filter changes).
+	private resetScrollNext = false;
 	private sortDesc = false;
 	private revealed = new Set<string>(); // `${id}:${lang}`
 	private ctxOpen = new Set<string>(); // entity ids with expanded context
@@ -400,6 +406,7 @@ export class LexiconView extends ItemView {
 			: emptyView();
 		if (!view) this.applyLibraryParams();
 		this.studyFilter = null;
+		this.resetScrollNext = true;
 		this.render();
 	}
 
@@ -427,7 +434,7 @@ export class LexiconView extends ItemView {
 		);
 		if (this.draft.requireFrom && this.draft.from)
 			out = out.filter((e) => hasLang(e, this.draft.from));
-		if (this.studyFilter === "fresh") {
+		if (this.studyFilter === "rest") {
 			// Library words that could be studied but have no minted card.
 			const enrolled = this.enrolledIds();
 			return out.filter(
@@ -459,18 +466,10 @@ export class LexiconView extends ItemView {
 						progressKey(e.id, this.draft.from, lang)
 					);
 					if (!rec && !pinned.has(e.id)) return false;
-					switch (this.studyFilter) {
-						case "due":
-							return isProgressDue(rec, now, schedule);
-						case "waiting":
-							return isProgressWaiting(rec, now, schedule);
-						case "active":
-							return !rec || rec.status === "active";
-						case "mastered":
-							return rec?.status === "mastered";
-						default:
-							return true;
-					}
+					const sec = rec
+						? progressSection(rec, now, schedule)
+						: "fresh";
+					return sec === this.studyFilter;
 				})
 			);
 		}
@@ -483,7 +482,12 @@ export class LexiconView extends ItemView {
 		this.persistLibraryParams();
 		const root = this.contentEl;
 		const scroller = root.querySelector(".hl-lex-main");
-		const prevScroll = scroller ? scroller.scrollTop : this.savedScroll;
+		const prevScroll = this.resetScrollNext
+			? 0
+			: scroller
+			? scroller.scrollTop
+			: this.savedScroll;
+		this.resetScrollNext = false;
 		this.savedScroll = 0;
 		root.empty();
 		root.addClass("hl-lex-view");
@@ -1095,19 +1099,55 @@ export class LexiconView extends ItemView {
 		// direction included — so the counts and the session always match
 		// what's listed below.
 		const deck: ReciteView = { ...this.draft, to: [...this.draft.to] };
-		const stats = lexStudyStats(
-			deck,
+		// Exclusive per-direction sections (quiz model, vocab names); a word
+		// takes its most urgent direction's section.
+		const now = new Date();
+		const schedule = this.schedule();
+		const pinned = new Set(deck.members);
+		const zero = (): Record<QuizSectionKey, number> => ({
+			due: 0,
+			fresh: 0,
+			waiting: 0,
+			active: 0,
+			mastered: 0,
+		});
+		const dirN = zero();
+		const wordN = zero();
+		const prio: QuizSectionKey[] = [
+			"due",
+			"waiting",
+			"fresh",
+			"active",
+			"mastered",
+		];
+		for (const e of studyMembers(
 			this.entities.values(),
-			this.progress,
-			this.schedule()
-		);
-		const hasCards =
-			stats.words.due +
-				stats.words.waiting +
-				stats.words.active +
-				stats.words.mastered >
-			0;
-		if (!hasCards) {
+			deck,
+			this.progress
+		)) {
+			const secs: QuizSectionKey[] = [];
+			for (const lang of deck.to) {
+				if (lang === deck.from || !hasLang(e, lang)) continue;
+				const rec = this.progress.get(
+					progressKey(e.id, deck.from, lang)
+				);
+				if (!rec && !pinned.has(e.id)) continue;
+				const sec = rec
+					? progressSection(rec, now, schedule)
+					: "fresh";
+				dirN[sec]++;
+				secs.push(sec);
+			}
+			if (!secs.length) continue;
+			wordN[prio.find((p) => secs.includes(p)) ?? "mastered"]++;
+		}
+		const totalWords =
+			wordN.due +
+			wordN.fresh +
+			wordN.waiting +
+			wordN.active +
+			wordN.mastered;
+		if (!totalWords) {
 			const strip = main.createDiv({ cls: "hl-lex-strip is-idle" });
 			strip.createSpan({
 				cls: "hl-lex-strip-invite",
@@ -1142,16 +1182,18 @@ export class LexiconView extends ItemView {
 				});
 			el.addEventListener("click", () => {
 				this.studyFilter = this.studyFilter === key ? null : key;
+				this.resetScrollNext = true;
 				this.render();
 			});
 		};
-		seg("due", "到期", stats.words.due, stats.due);
-		seg("waiting", "稍后", stats.words.waiting, stats.waiting);
-		seg("active", "在学", stats.words.active, stats.active);
-		seg("mastered", "学过", stats.words.mastered, stats.mastered);
+		seg("due", "待复习", wordN.due, dirN.due);
+		seg("fresh", "待记忆", wordN.fresh, dirN.fresh);
+		seg("waiting", "稍后", wordN.waiting, dirN.waiting);
+		seg("active", "在学", wordN.active, dirN.active);
+		seg("mastered", "学过", wordN.mastered, dirN.mastered);
 		if (enrolled) {
 			// Words in the library with no minted card: grey, not due.
-			const fresh = [...this.entities.values()].filter(
+			const rest = [...this.entities.values()].filter(
 				(e) =>
 					!enrolled.has(e.id) &&
 					entityMatchesView(e, deck) &&
@@ -1160,33 +1202,35 @@ export class LexiconView extends ItemView {
 						(l) => l !== deck.from && hasLang(e, l)
 					)
 			).length;
-			if (fresh > 0) {
+			if (rest > 0) {
 				const el = strip.createSpan({
 					cls: `hl-lex-strip-seg is-rest${
-						this.studyFilter === "fresh" ? " is-on" : ""
+						this.studyFilter === "rest" ? " is-on" : ""
 					}`,
 				});
 				el.createSpan({
 					cls: "hl-lex-strip-num",
-					text: String(fresh),
+					text: String(rest),
 				});
 				el.createSpan({ text: "未开始" });
 				el.setAttr("aria-label", "还没加入任何学习视图的词条");
 				el.addEventListener("click", () => {
 					this.studyFilter =
-						this.studyFilter === "fresh" ? null : "fresh";
+						this.studyFilter === "rest" ? null : "rest";
+					this.resetScrollNext = true;
 					this.render();
 				});
 			}
 		}
 		strip.createDiv({ cls: "hl-lex-spacer" });
-		if (stats.words.due > 0) {
+		const startable = wordN.due + wordN.fresh;
+		if (startable > 0) {
 			const go = strip.createEl("button", {
 				cls: "mod-cta",
-				text: `开始复习 ${stats.words.due}`,
+				text: `开始复习 ${startable}`,
 			});
 			go.addEventListener("click", () => this.startStudy(deck, true));
-		} else if (stats.active > 0) {
+		} else if (dirN.waiting + dirN.active > 0) {
 			const go = strip.createEl("button", {
 				cls: "hl-lex-ghost",
 				text: "提前复习",

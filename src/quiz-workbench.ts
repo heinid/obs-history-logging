@@ -13,8 +13,8 @@ import {
 	QuizEntry,
 	QuizKind,
 	isQuizReady,
-	isQuizShortLoop,
 	isQuizWaiting,
+	quizSection,
 	reviveQuiz,
 } from "./quiz";
 import {
@@ -123,6 +123,7 @@ export class QuizWorkbench {
 	}
 
 	private selectPool(): void {
+		this.scrollResetNext = true;
 		this.selected = null;
 		this.selectedCustom = false;
 		this.draft = emptyQuizView();
@@ -132,6 +133,7 @@ export class QuizWorkbench {
 	}
 
 	private selectProfile(name: string): void {
+		this.scrollResetNext = true;
 		this.selected = name;
 		this.selectedCustom = false;
 		this.draft = { ...emptyQuizView(), profile: name };
@@ -141,6 +143,7 @@ export class QuizWorkbench {
 	}
 
 	private selectCustom(view: QuizView): void {
+		this.scrollResetNext = true;
 		this.selected = view.name;
 		this.selectedCustom = true;
 		this.draft = {
@@ -232,18 +235,22 @@ export class QuizWorkbench {
 		return out;
 	}
 
-	// One home per card: mastered → 学过; live short loop → 稍后; never
-	// passed a step → 待学习; otherwise due → 待复习 or interval → 在学.
+	// The next render starts at the top of the list (set when the study
+	// filter changes, consumed by the hosting view's scroll restore).
+	scrollResetNext = false;
+
+	takeScrollReset(): boolean {
+		const v = this.scrollResetNext;
+		this.scrollResetNext = false;
+		return v;
+	}
+
 	private section(
 		q: QuizEntry,
 		now: Date,
 		schedule: ReturnType<typeof quizSchedule>
 	): Exclude<StudyFilter, null> {
-		if (q.status === "mastered") return "mastered";
-		if (isQuizShortLoop(q, now, schedule)) return "waiting";
-		if (!q.attempts.some((a) => a.progressAfter > a.progressBefore))
-			return "fresh";
-		return isQuizReady(q, now, schedule) ? "due" : "active";
+		return quizSection(q, now, schedule);
 	}
 
 	private listed(): QuizEntry[] {
@@ -867,6 +874,7 @@ export class QuizWorkbench {
 			el.createSpan({ text: label });
 			el.addEventListener("click", () => {
 				this.studyFilter = this.studyFilter === key ? null : key;
+				this.scrollResetNext = true;
 				this.ctx.rerender();
 			});
 		};
@@ -1135,7 +1143,20 @@ export class QuizWorkbench {
 						cls: " is-wait",
 					};
 				}
-				return { text: "可练", cls: "" };
+				// Wait elapsed unanswered: the alarm turns red and counts
+				// how long it's been ringing.
+				const due = Date.parse(quiz.nextReview ?? "");
+				const mins = Number.isNaN(due)
+					? 0
+					: Math.max(
+							1,
+							Math.round((now.getTime() - due) / 60_000)
+					  );
+				const span =
+					mins >= 60
+						? `${Math.round(mins / 60)} 小时`
+						: `${mins} 分钟`;
+				return { text: `⏰ 超时 ${span}`, cls: " is-overdue" };
 			}
 			case "due":
 				return { text: "待复习", cls: " is-overdue" };
@@ -1145,7 +1166,7 @@ export class QuizWorkbench {
 					cls: "",
 				};
 			default:
-				return { text: "", cls: "" };
+				return { text: "待学习", cls: " is-fresh" };
 		}
 	}
 

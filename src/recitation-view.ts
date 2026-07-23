@@ -174,11 +174,10 @@ export class RecitationView extends ItemView {
 		) {
 			if (this.player.handleDueQuiz(quiz)) return true;
 		}
-		// On the workbench the refreshed numbers and alarm badges are the
-		// notification; no popup while the user is already here. No file
-		// changed, so patch the clock-dependent fragments in place.
+		// Refresh the workbench numbers in place, but let the alarm modal
+		// pop as well — a due short wait should interrupt browsing too.
 		this.applyClockTick();
-		return this.page.kind !== "player";
+		return false;
 	}
 
 	async reload(): Promise<void> {
@@ -266,7 +265,9 @@ export class RecitationView extends ItemView {
 		const root = this.contentEl;
 		if (this.page.kind === "player" && this.player) return;
 		const scroller = this.scrollEl();
-		const prevScroll = scroller?.scrollTop ?? 0;
+		const prevScroll = this.workbench.takeScrollReset()
+			? 0
+			: scroller?.scrollTop ?? 0;
 		this.dynamicParts = [];
 		root.empty();
 		root.addClass("hl-recitation-view");

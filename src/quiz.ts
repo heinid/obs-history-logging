@@ -66,6 +66,27 @@ export function isQuizNew(quiz: QuizEntry): boolean {
 	);
 }
 
+// One home per card: mastered → 学过; live short loop → 稍后; never
+// passed a step → 待学习; otherwise due → 待复习 or interval → 在学.
+export type QuizSectionKey =
+	| "due"
+	| "fresh"
+	| "waiting"
+	| "active"
+	| "mastered";
+
+export function quizSection(
+	quiz: QuizEntry,
+	now = new Date(),
+	schedule = DEFAULT_QUIZ_SCHEDULE
+): QuizSectionKey {
+	if (quiz.status === "mastered") return "mastered";
+	if (isQuizShortLoop(quiz, now, schedule)) return "waiting";
+	if (!quiz.attempts.some((a) => a.progressAfter > a.progressBefore))
+		return "fresh";
+	return isQuizReady(quiz, now, schedule) ? "due" : "active";
+}
+
 // A card sitting in the short retry/recheck pipeline: its last real
 // attempt (early successes change nothing and are skipped) did not clear
 // the current step. The episode lapses once the wait is `parkMinutes`
