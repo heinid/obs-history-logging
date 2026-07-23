@@ -498,10 +498,13 @@ export class LexiconView extends ItemView {
 		}
 		const shell = root.createDiv({ cls: "hl-lex" });
 		this.renderSidebar(shell.createDiv({ cls: "hl-lex-side" }));
-		const main = shell.createDiv({ cls: "hl-lex-main" });
-		this.renderMain(main);
+		const col = shell.createDiv({ cls: "hl-lex-col" });
+		this.renderMain(col);
 		this.renderSwitchFab(shell);
-		if (prevScroll) main.scrollTop = prevScroll;
+		if (prevScroll) {
+			const main = col.querySelector(".hl-lex-main");
+			if (main) main.scrollTop = prevScroll;
+		}
 	}
 
 	// ── sidebar ──
@@ -854,11 +857,14 @@ export class LexiconView extends ItemView {
 
 	// ── main column ──
 
-	private renderMain(main: HTMLElement): void {
+	// The controls live in a fixed headbar above the scroller, so they can
+	// never cover the first entry.
+	private renderMain(col: HTMLElement): void {
 		const items = this.filtered();
-		const head = main.createDiv({ cls: "hl-lex-headbar" });
+		const head = col.createDiv({ cls: "hl-lex-headbar" });
 		this.renderToolrow(head, items.length);
 		this.renderStudyStrip(head);
+		const main = col.createDiv({ cls: "hl-lex-main" });
 		this.renderEntries(main, items);
 		if (this.selectMode) this.renderSelectBar(main);
 	}

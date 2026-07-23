@@ -277,8 +277,7 @@ export class QuizWorkbench {
 			return;
 		}
 		this.renderSidebar(shell.createDiv({ cls: "hl-lex-side" }));
-		const main = shell.createDiv({ cls: "hl-lex-main" });
-		this.renderMain(main);
+		this.renderMain(shell.createDiv({ cls: "hl-lex-col" }));
 		this.renderSwitchFab(shell);
 	}
 
@@ -677,12 +676,15 @@ export class QuizWorkbench {
 
 	// ── main column ──
 
-	private renderMain(main: HTMLElement): void {
+	// The controls live in a fixed headbar above the scroller, so they can
+	// never cover the first card.
+	private renderMain(col: HTMLElement): void {
 		const items = this.listed();
-		const head = main.createDiv({ cls: "hl-lex-headbar" });
+		const head = col.createDiv({ cls: "hl-lex-headbar" });
 		this.renderToolrow(head, this.filtered().length);
 		this.renderChips(head);
 		this.renderStrip(head);
+		const main = col.createDiv({ cls: "hl-lex-main" });
 		this.renderRows(main, items);
 	}
 

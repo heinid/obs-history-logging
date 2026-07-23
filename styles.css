@@ -4227,14 +4227,18 @@ input.hl-tag-chip-input:focus-visible {
 	height: 100%;
 	position: relative;
 }
-/* Toolrow + filter chips + study strip pinned above the scrolling list. */
+/* Fixed column: toolrow + filter chips + study strip sit above the
+   scrolling list, outside the scroller, so they never cover a row. */
+.hl-lex-col {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
 .hl-lex-headbar {
-	position: sticky;
-	top: 0;
-	z-index: 10;
+	flex: none;
 	background: var(--background-primary);
-	padding: 18px 0 4px;
-	margin: -18px 0 0;
+	padding: 18px 32px 4px;
 }
 /* Bottom-right floating switch between the vocab and quiz workbenches. */
 .hl-lex-fab {
@@ -4350,8 +4354,9 @@ input.hl-tag-chip-input:focus-visible {
 
 .hl-lex-main {
 	flex: 1;
+	min-height: 0;
 	overflow-y: auto;
-	padding: 18px 32px 48px;
+	padding: 8px 32px 48px;
 }
 .hl-lex-toolrow {
 	display: flex;
