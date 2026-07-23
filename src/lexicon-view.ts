@@ -960,6 +960,7 @@ export class LexiconView extends ItemView {
 								this.draft.sort = v as ViewSort;
 								this.sortDesc = false;
 							}
+							this.resetScrollNext = true;
 							this.render();
 						})
 				);
@@ -986,6 +987,7 @@ export class LexiconView extends ItemView {
 						.setChecked(this.draft.group === v)
 						.onClick(() => {
 							this.draft.group = v as ViewGroup;
+							this.resetScrollNext = true;
 							this.render();
 						})
 				);

@@ -777,6 +777,7 @@ export class QuizWorkbench {
 						.setChecked(this.draft.group === v)
 						.onClick(() => {
 							this.draft.group = v as QuizViewGroup;
+							this.scrollResetNext = true;
 							this.ctx.rerender();
 						})
 				);
@@ -810,6 +811,7 @@ export class QuizWorkbench {
 								this.draft.sort = v as QuizViewSort;
 								this.sortDesc = false;
 							}
+							this.scrollResetNext = true;
 							this.ctx.rerender();
 						})
 				);
