@@ -4358,6 +4358,12 @@ input.hl-tag-chip-input:focus-visible {
 	overflow-y: auto;
 	padding: 8px 32px 48px;
 }
+/* Entry and quiz-row text can be selected and copied. */
+.hl-lex-entry,
+.hl-qd-row .hl-qd-main {
+	user-select: text;
+	-webkit-user-select: text;
+}
 .hl-lex-toolrow {
 	display: flex;
 	align-items: baseline;

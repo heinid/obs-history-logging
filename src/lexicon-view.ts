@@ -27,6 +27,7 @@ import {
 import { EntityModal } from "./entity-modal";
 import { NameModal, ConfirmModal, ChoiceModal } from "./name-modal";
 import { QuizSchedule, QuizSectionKey } from "./quiz";
+import { addSelectionItems, currentSelection } from "./selection-menu";
 import { quizSchedule } from "./quiz-display";
 import { quizDeckStats, DeckStats } from "./deck-stats";
 import { jumpToLocation } from "./jump";
@@ -1344,6 +1345,16 @@ export class LexiconView extends ItemView {
 				this.render();
 			});
 		}
+
+		// Selected text gets a copy / web-search context menu.
+		entry.addEventListener("contextmenu", (ev) => {
+			const sel = currentSelection();
+			if (!sel) return;
+			ev.preventDefault();
+			const menu = new Menu();
+			addSelectionItems(menu, sel);
+			menu.showAtMouseEvent(ev);
+		});
 
 		// head: word + reading + type + hover actions
 		const head = entry.createDiv({ cls: "hl-lex-ehead" });

@@ -31,6 +31,7 @@ import { EventEntry } from "./types";
 import { MapEntry, mapDisplayTitle } from "./maps-format";
 import { MapModal } from "./map-modal";
 import { describeYear, parseYearTag } from "./year-tag";
+import { addSelectionItems, currentSelection } from "./selection-menu";
 import { renderMasteryBar } from "./deck-detail";
 import {
 	QuizView,
@@ -1402,6 +1403,8 @@ export class QuizWorkbench {
 		ev.preventDefault();
 		const plugin = this.ctx.plugin;
 		const menu = new Menu();
+		const sel = currentSelection();
+		if (sel) addSelectionItems(menu, sel);
 		menu.addItem((i) =>
 			i
 				.setTitle("练习")
