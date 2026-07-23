@@ -63,13 +63,23 @@ export class ReminderAgendaModal extends Modal {
 	private ticker: number | null = null;
 	private modifyRef: EventRef | null = null;
 
-	constructor(app: App, private plugin: HistoryLoggingPlugin) {
+	constructor(
+		app: App,
+		private plugin: HistoryLoggingPlugin,
+		// Scroll offset carried across the detour into a reminder card, so
+		// coming back lands on the same spot in the list.
+		private initialScroll = 0
+	) {
 		super(app);
 	}
 
 	async onOpen(): Promise<void> {
 		this.modalEl.addClass("hl-agenda-modal");
 		await this.render();
+		if (this.initialScroll > 0) {
+			this.contentEl.scrollTop = this.initialScroll;
+			this.initialScroll = 0;
+		}
 		this.ticker = window.setInterval(() => this.tick(), 1000);
 		// Every status change lands in a dataFolder file sooner or later;
 		// re-collect on write so answers, snoozes and removals made in other
@@ -169,6 +179,7 @@ export class ReminderAgendaModal extends Modal {
 
 	private async render(): Promise<void> {
 		const host = this.contentEl;
+		const prevScroll = host.scrollTop;
 		host.empty();
 		host.addClass("hl-agenda");
 		this.tickers = [];
@@ -198,6 +209,7 @@ export class ReminderAgendaModal extends Modal {
 		if (due.length) this.renderGroup(host, "到期", due, now, true);
 		if (waiting.length)
 			this.renderGroup(host, "稍后", waiting, now, false);
+		if (prevScroll > 0) host.scrollTop = prevScroll;
 	}
 
 	private renderGroup(
@@ -252,10 +264,17 @@ export class ReminderAgendaModal extends Modal {
 				text: clockLabel(item.due),
 			});
 			row.addEventListener("click", () => {
+				const top = this.contentEl.scrollTop;
+				const back = (): void =>
+					new ReminderAgendaModal(
+						this.app,
+						this.plugin,
+						top
+					).open();
 				this.close();
 				if (item.kind === "quiz")
-					this.plugin.openQuizReminder(item.id);
-				else this.plugin.openReciteReminder(item.id);
+					this.plugin.openQuizReminder(item.id, back);
+				else this.plugin.openReciteReminder(item.id, back);
 			});
 		}
 	}

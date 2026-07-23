@@ -646,12 +646,12 @@ export default class HistoryLoggingPlugin extends Plugin {
 
 	// Entry point for the reminder agenda: open (or queue into) the quiz
 	// reminder window directly, skipping the active-view routing.
-	openQuizReminder(quizId: string): void {
-		this.popQuizReminder(quizId);
+	openQuizReminder(quizId: string, onClosed?: () => void): void {
+		this.popQuizReminder(quizId, onClosed);
 	}
 
-	openReciteReminder(key: string): void {
-		this.popReciteReminder(key);
+	openReciteReminder(key: string, onClosed?: () => void): void {
+		this.popReciteReminder(key, onClosed);
 	}
 
 	// When the recitation hub is the active view the user is already inside
@@ -667,7 +667,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.popQuizReminder(quizId);
 	}
 
-	private popQuizReminder(quizId: string): void {
+	private popQuizReminder(quizId: string, onClosed?: () => void): void {
 		if (this.reminderModal) {
 			this.reminderModal.enqueue(quizId);
 			return;
@@ -679,6 +679,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 			}
 			const modal = new QuizReminderModal(this.app, this, quizId, () => {
 				if (this.reminderModal === modal) this.reminderModal = null;
+				onClosed?.();
 			});
 			this.reminderModal = modal;
 			modal.open();
@@ -788,7 +789,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 		this.popReciteReminder(key);
 	}
 
-	private popReciteReminder(key: string): void {
+	private popReciteReminder(key: string, onClosed?: () => void): void {
 		if (this.reciteReminderModal) {
 			this.reciteReminderModal.enqueue(key);
 			return;
@@ -801,6 +802,7 @@ export default class HistoryLoggingPlugin extends Plugin {
 			const modal = new ReciteReminderModal(this.app, this, key, () => {
 				if (this.reciteReminderModal === modal)
 					this.reciteReminderModal = null;
+				onClosed?.();
 			});
 			this.reciteReminderModal = modal;
 			modal.open();
