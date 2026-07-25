@@ -347,8 +347,7 @@ export function createVaultDbExtension(plugin: HistoryLoggingPlugin) {
 
 type DbSuggestion =
 	| { kind: "cand"; cand: AliasCandidate }
-	| { kind: "new" }
-	| { kind: "new-annotated" };
+	| { kind: "new" };
 
 export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 	private cands: AliasCandidate[] = [];
@@ -411,7 +410,6 @@ export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 				(cand): DbSuggestion => ({ kind: "cand", cand })
 			),
 			{ kind: "new" },
-			{ kind: "new-annotated" },
 		];
 	}
 
@@ -420,11 +418,6 @@ export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 		if (s.kind === "new") {
 			el.addClass("hl-le-suggest-new");
 			el.createSpan({ text: `＋ 新建词条 "${this.fragment}"` });
-			return;
-		}
-		if (s.kind === "new-annotated") {
-			el.addClass("hl-le-suggest-new");
-			el.createSpan({ text: `＋✎ 新建并标注 "${this.fragment}"` });
 			return;
 		}
 		const c = s.cand;
@@ -458,18 +451,8 @@ export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 			return;
 		}
 		const word = this.fragment;
-		const annotate = s.kind === "new-annotated";
 		createEntityForWord(this.plugin, word, (saved) =>
-			annotate
-				? insertVaultMarkerAnnotated(
-						this.plugin,
-						editor,
-						from,
-						end,
-						saved,
-						word
-				  )
-				: insertVaultMarker(editor, from, end, saved, word)
+			insertVaultMarker(editor, from, end, saved, word)
 		);
 	}
 }
@@ -664,23 +647,6 @@ export function openDbSelectionMenu(
 				insertVaultMarker(editor, from, to, saved, raw)
 			);
 		});
-		mk("＋✎", `新建并标注 "${raw}"`, "含高亮嵌套").addEventListener(
-			"mousedown",
-			(ev) => {
-				ev.preventDefault();
-				close();
-				createEntityForWord(plugin, raw, (saved) =>
-					insertVaultMarkerAnnotated(
-						plugin,
-						editor,
-						from,
-						to,
-						saved,
-						raw
-					)
-				);
-			}
-		);
 		mk("⧉", "链接到已有词条…").addEventListener("mousedown", (ev) => {
 			ev.preventDefault();
 			close();
