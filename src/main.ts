@@ -60,6 +60,7 @@ import {
 	VaultDbSuggest,
 	createVaultDbExtension,
 	createVaultDbProcessor,
+	createEntityFromSelection,
 	openDbSelectionMenu,
 } from "./vault-db";
 
@@ -160,6 +161,18 @@ export default class HistoryLoggingPlugin extends Plugin {
 			name: "词条：标注选中文本（选区菜单）",
 			editorCallback: (editor: Editor, ctx) =>
 				openDbSelectionMenu(this, editor, ctx.file?.path),
+		});
+		this.addCommand({
+			id: "db-create-entity",
+			name: "词条：新建词条（不包裹）",
+			editorCallback: (editor: Editor, ctx) =>
+				createEntityFromSelection(this, editor, ctx.file?.path, false),
+		});
+		this.addCommand({
+			id: "db-create-entity-annotated",
+			name: "词条：新建并标注（含高亮嵌套）",
+			editorCallback: (editor: Editor, ctx) =>
+				createEntityFromSelection(this, editor, ctx.file?.path, true),
 		});
 		this.addCommand({
 			id: "open-timeline",

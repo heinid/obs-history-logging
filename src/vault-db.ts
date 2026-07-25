@@ -347,7 +347,8 @@ export function createVaultDbExtension(plugin: HistoryLoggingPlugin) {
 
 type DbSuggestion =
 	| { kind: "cand"; cand: AliasCandidate }
-	| { kind: "new" };
+	| { kind: "new" }
+	| { kind: "new-annotated" };
 
 export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 	private cands: AliasCandidate[] = [];
@@ -410,6 +411,7 @@ export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 				(cand): DbSuggestion => ({ kind: "cand", cand })
 			),
 			{ kind: "new" },
+			{ kind: "new-annotated" },
 		];
 	}
 
@@ -418,6 +420,11 @@ export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 		if (s.kind === "new") {
 			el.addClass("hl-le-suggest-new");
 			el.createSpan({ text: `＋ 新建词条 "${this.fragment}"` });
+			return;
+		}
+		if (s.kind === "new-annotated") {
+			el.addClass("hl-le-suggest-new");
+			el.createSpan({ text: `＋✎ 新建并标注 "${this.fragment}"` });
 			return;
 		}
 		const c = s.cand;
@@ -451,8 +458,18 @@ export class VaultDbSuggest extends EditorSuggest<DbSuggestion> {
 			return;
 		}
 		const word = this.fragment;
+		const annotate = s.kind === "new-annotated";
 		createEntityForWord(this.plugin, word, (saved) =>
-			insertVaultMarkerAnnotated(this.plugin, editor, from, end, saved, word)
+			annotate
+				? insertVaultMarkerAnnotated(
+						this.plugin,
+						editor,
+						from,
+						end,
+						saved,
+						word
+				  )
+				: insertVaultMarker(editor, from, end, saved, word)
 		);
 	}
 }
@@ -551,17 +568,17 @@ function selectionRect(
 	return { left: cx, right: cx, top: cy, bottom: cy };
 }
 
-// The command-invoked selection menu: annotate a plain-text selection (or
-// the word under the caret) as an entity, or clean up markers inside a
-// larger selection. Mirrors the LiveEditor right-click menu minus quiz.
-export function openDbSelectionMenu(
+// The selection (or the word under the caret), whitespace-trimmed, ready
+// for annotation. Null (with a Notice) when the note is not entity-enabled
+// or nothing is selected.
+function annotationTarget(
 	plugin: HistoryLoggingPlugin,
 	editor: Editor,
 	path: string | undefined
-): void {
+): { from: EditorPosition; to: EditorPosition; raw: string } | null {
 	if (!path || !dbEnabledFor(plugin, path)) {
 		new Notice("当前笔记未启用词条功能（需带启用标签）。");
-		return;
+		return null;
 	}
 	let from = editor.getCursor("from");
 	let to = editor.getCursor("to");
@@ -569,7 +586,7 @@ export function openDbSelectionMenu(
 		const word = editor.wordAt(from);
 		if (!word) {
 			new Notice("请先选中要标注的文字。");
-			return;
+			return null;
 		}
 		from = word.from;
 		to = word.to;
@@ -585,8 +602,44 @@ export function openDbSelectionMenu(
 	}
 	if (!raw) {
 		new Notice("请先选中要标注的文字。");
+		return null;
+	}
+	return { from, to, raw };
+}
+
+// Command-invoked direct creation: turn the selection (or the word under
+// the caret) into a new entity, bare marker or highlight-annotated.
+export function createEntityFromSelection(
+	plugin: HistoryLoggingPlugin,
+	editor: Editor,
+	path: string | undefined,
+	annotate: boolean
+): void {
+	const target = annotationTarget(plugin, editor, path);
+	if (!target) return;
+	const { from, to, raw } = target;
+	if (raw.includes("\n") || parseDbMarks(raw).length) {
+		new Notice("请选中不含标注的单行文字。");
 		return;
 	}
+	createEntityForWord(plugin, raw, (saved) =>
+		annotate
+			? insertVaultMarkerAnnotated(plugin, editor, from, to, saved, raw)
+			: insertVaultMarker(editor, from, to, saved, raw)
+	);
+}
+
+// The command-invoked selection menu: annotate a plain-text selection (or
+// the word under the caret) as an entity, or clean up markers inside a
+// larger selection. Mirrors the LiveEditor right-click menu minus quiz.
+export function openDbSelectionMenu(
+	plugin: HistoryLoggingPlugin,
+	editor: Editor,
+	path: string | undefined
+): void {
+	const target = annotationTarget(plugin, editor, path);
+	if (!target) return;
+	const { from, to, raw } = target;
 	const marks = parseDbMarks(raw);
 	const clean = stripDbMarkers(raw);
 	const { mk, close } = popAt(selectionRect(plugin, editor, from, to));
@@ -608,9 +661,26 @@ export function openDbSelectionMenu(
 			ev.preventDefault();
 			close();
 			createEntityForWord(plugin, raw, (saved) =>
-				insertVaultMarkerAnnotated(plugin, editor, from, to, saved, raw)
+				insertVaultMarker(editor, from, to, saved, raw)
 			);
 		});
+		mk("＋✎", `新建并标注 "${raw}"`, "含高亮嵌套").addEventListener(
+			"mousedown",
+			(ev) => {
+				ev.preventDefault();
+				close();
+				createEntityForWord(plugin, raw, (saved) =>
+					insertVaultMarkerAnnotated(
+						plugin,
+						editor,
+						from,
+						to,
+						saved,
+						raw
+					)
+				);
+			}
+		);
 		mk("⧉", "链接到已有词条…").addEventListener("mousedown", (ev) => {
 			ev.preventDefault();
 			close();
@@ -685,10 +755,11 @@ function insertVaultMarker(
 }
 
 // --- highlight annotation after inline entity creation --------------------
-// Companion-plugin integration: wrap the fresh marker in `~={color|fn:id}…=~`,
-// append `{;; id #tag }` at the line end and log `id.date <ISO>` under the
-// `<!-- annotations -->` block at the bottom of the file. All three writes go
-// out as one editor transaction (one undo step, incremental redraw).
+// Companion-plugin integration, invoked through the 「新建并标注」 entries:
+// wrap the fresh marker in `~={color|fn:id}…=~`, append `{;; id #tag }` at
+// the line end and log `id.date <ISO>` under the `<!-- annotations -->` block
+// at the bottom of the file. All three writes go out as one editor
+// transaction (one undo step, incremental redraw).
 
 const ANNOTATIONS_MARKER = "<!-- annotations -->";
 
@@ -733,10 +804,6 @@ function insertVaultMarkerAnnotated(
 	entity: EntityEntry,
 	word: string
 ): void {
-	if (!plugin.settings.annotOnCreate) {
-		insertVaultMarker(editor, from, to, entity, word);
-		return;
-	}
 	const fnid = generateFnId(editor.getValue());
 	const color = plugin.settings.annotColor || "green";
 	const tag = plugin.settings.annotTag.replace(/^#+/, "");
