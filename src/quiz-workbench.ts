@@ -1129,7 +1129,18 @@ export class QuizWorkbench {
 			bucket.items.push(q);
 			buckets.set(key, bucket);
 		}
-		return [...buckets.values()].sort((a, b) => a.order - b.order);
+		// Group headers follow the sort direction (year ascending /
+		// descending); yearless buckets (maps, missing events) always sink
+		// to the end regardless of direction.
+		const dir = this.sortDesc ? -1 : 1;
+		const NO_YEAR = Number.MAX_SAFE_INTEGER;
+		return [...buckets.values()].sort((a, b) => {
+			const aNone = a.order === NO_YEAR;
+			const bNone = b.order === NO_YEAR;
+			if (aNone !== bNone) return aNone ? 1 : -1;
+			if (aNone && bNone) return 0;
+			return dir * (a.order - b.order);
+		});
 	}
 
 	private rowStateLabel(quiz: QuizEntry): {
