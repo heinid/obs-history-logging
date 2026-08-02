@@ -106,6 +106,8 @@ export class QuizWorkbench {
 	private studyFilter: StudyFilter = null;
 	// Created sort defaults to newest first; other sorts start ascending.
 	private sortDesc = true;
+	// By-event group header order: false = year ascending (early→late).
+	private eventGroupDesc = false;
 	private overview = false;
 	private revealed = new Set<string>();
 
@@ -791,6 +793,23 @@ export class QuizWorkbench {
 			menu.showAtMouseEvent(ev);
 		});
 
+		if (this.draft.group === "event") {
+			const gdir = group.createSpan({
+				cls: "hl-lex-gdir",
+				text: this.eventGroupDesc ? "↓" : "↑",
+			});
+			gdir.setAttr(
+				"aria-label",
+				this.eventGroupDesc ? "组顺序：年份晚→早" : "组顺序：年份早→晚"
+			);
+			gdir.addEventListener("click", (ev) => {
+				ev.stopPropagation();
+				this.eventGroupDesc = !this.eventGroupDesc;
+				this.scrollResetNext = true;
+				this.ctx.rerender();
+			});
+		}
+
 		const sort = row.createSpan({ cls: "hl-lex-tctl" });
 		sort.createSpan({
 			cls: "hl-lex-strong",
@@ -1129,10 +1148,10 @@ export class QuizWorkbench {
 			bucket.items.push(q);
 			buckets.set(key, bucket);
 		}
-		// Group headers follow the sort direction (year ascending /
+		// Group headers follow their own direction toggle (year ascending /
 		// descending); yearless buckets (maps, missing events) always sink
 		// to the end regardless of direction.
-		const dir = this.sortDesc ? -1 : 1;
+		const dir = this.eventGroupDesc ? -1 : 1;
 		const NO_YEAR = Number.MAX_SAFE_INTEGER;
 		return [...buckets.values()].sort((a, b) => {
 			const aNone = a.order === NO_YEAR;

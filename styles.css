@@ -4402,6 +4402,16 @@ input.hl-tag-chip-input:focus-visible {
 .hl-lex-strong {
 	color: var(--text-normal);
 }
+.hl-lex-gdir {
+	margin-left: 3px;
+	padding: 0 3px;
+	border-radius: 4px;
+	color: var(--text-muted);
+}
+.hl-lex-gdir:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
 .hl-lex-arrow {
 	color: var(--text-faint);
 }
